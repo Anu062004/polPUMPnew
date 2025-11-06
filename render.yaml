@@ -3,15 +3,15 @@ services:
     name: pol-pump
     env: node
     plan: free
+    nodeVersion: 20
     buildCommand: npm install --legacy-peer-deps && npm run build
-    startCommand: npm run start
+    startCommand: npm start
+    autoDeploy: true
     envVars:
-      - key: NODE_VERSION
-        value: 18
-      - key: NEXT_PUBLIC_EVM_RPC
-        sync: false
-      - key: NEXT_PUBLIC_FACTORY_ADDRESS
-        sync: false
+      - key: NODE_ENV
+        value: production
       - key: NEXT_PUBLIC_BACKEND_URL
-        sync: false
+        value: http://localhost:4000
+      - key: NEXT_PUBLIC_EVM_RPC
+        value: https://polygon-amoy.infura.io/v3/b4f237515b084d4bad4e5de070b0452f
 
