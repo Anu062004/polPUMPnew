@@ -4,49 +4,49 @@
 
 @layer base {
   :root {
-    /* Funky Futuristic Palette - Vibrant Cyberpunk Theme */
-    --background: 270 100% 5%; /* Deep purple-black */
+    /* Funky Neon Green Theme - Vibrant Cyberpunk */
+    --background: 150 100% 5%; /* Deep green-black */
     --foreground: 0 0% 100%; /* White text */
-    --card: 270 50% 15%; /* Dark purple card */
+    --card: 150 50% 15%; /* Dark teal card */
     --card-foreground: 0 0% 100%;
-    --popover: 270 50% 12%;
+    --popover: 150 50% 12%;
     --popover-foreground: 0 0% 100%;
-    --primary: 280 100% 70%; /* Vibrant purple */
+    --primary: 150 100% 60%; /* Vibrant green */
     --primary-foreground: 0 0% 0%;
-    --secondary: 320 100% 60%; /* Hot pink */
+    --secondary: 180 100% 50%; /* Bright cyan */
     --secondary-foreground: 0 0% 0%;
-    --muted: 270 40% 20%;
-    --muted-foreground: 270 30% 70%;
-    --accent: 200 100% 60%; /* Cyan blue */
+    --muted: 150 40% 20%;
+    --muted-foreground: 150 30% 70%;
+    --accent: 120 100% 50%; /* Neon lime */
     --accent-foreground: 0 0% 0%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 0%;
-    --border: 280 100% 60%; /* Neon purple border */
-    --input: 270 50% 10%;
-    --ring: 280 100% 70%;
+    --border: 150 100% 50%; /* Neon green border */
+    --input: 150 50% 10%;
+    --ring: 150 100% 60%;
     --radius: 1rem;
   }
 
   .dark {
-    --background: 270 100% 5%;
+    --background: 150 100% 5%;
     --foreground: 0 0% 100%;
-    --card: 270 50% 15%;
+    --card: 150 50% 15%;
     --card-foreground: 0 0% 100%;
-    --popover: 270 50% 12%;
+    --popover: 150 50% 12%;
     --popover-foreground: 0 0% 100%;
-    --primary: 280 100% 70%;
+    --primary: 150 100% 60%;
     --primary-foreground: 0 0% 0%;
-    --secondary: 320 100% 60%;
+    --secondary: 180 100% 50%;
     --secondary-foreground: 0 0% 0%;
-    --muted: 270 40% 20%;
-    --muted-foreground: 270 30% 70%;
-    --accent: 200 100% 60%;
+    --muted: 150 40% 20%;
+    --muted-foreground: 150 30% 70%;
+    --accent: 120 100% 50%;
     --accent-foreground: 0 0% 0%;
     --destructive: 0 62% 40%;
     --destructive-foreground: 0 0% 100%;
-    --border: 280 100% 60%;
-    --input: 270 50% 10%;
-    --ring: 280 100% 70%;
+    --border: 150 100% 50%;
+    --input: 150 50% 10%;
+    --ring: 150 100% 60%;
   }
 }
 
@@ -55,7 +55,7 @@
     @apply border-border;
   }
   body {
-    @apply bg-gradient-to-br from-purple-950 via-indigo-950 to-pink-950 text-foreground min-h-screen;
+    @apply bg-gradient-to-br from-emerald-950 via-teal-950 to-cyan-950 text-foreground min-h-screen;
     background-attachment: fixed;
   }
   
@@ -68,9 +68,9 @@
     width: 100%;
     height: 100%;
     background: 
-      radial-gradient(circle at 20% 50%, rgba(168, 85, 247, 0.15) 0%, transparent 50%),
-      radial-gradient(circle at 80% 80%, rgba(236, 72, 153, 0.15) 0%, transparent 50%),
-      radial-gradient(circle at 40% 20%, rgba(59, 130, 246, 0.1) 0%, transparent 50%);
+      radial-gradient(circle at 20% 50%, rgba(16, 185, 129, 0.15) 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(34, 211, 238, 0.15) 0%, transparent 50%),
+      radial-gradient(circle at 40% 20%, rgba(132, 204, 22, 0.1) 0%, transparent 50%);
     animation: pulse 8s ease-in-out infinite;
     pointer-events: none;
     z-index: -1;
@@ -87,85 +87,85 @@
 }
 
 @layer components {
-  /* Funky Neon Styles */
+  /* Funky Neon Green Styles */
   .funky-box {
-    @apply backdrop-blur-xl bg-gradient-to-br from-purple-900/40 via-pink-900/30 to-indigo-900/40 border-2 border-purple-400/50 rounded-2xl p-6 transition-all duration-300;
+    @apply backdrop-blur-xl bg-gradient-to-br from-emerald-900/40 via-teal-900/30 to-cyan-900/40 border-2 border-emerald-400/50 rounded-2xl p-6 transition-all duration-300;
     box-shadow: 
-      0 0 20px rgba(168, 85, 247, 0.3),
-      0 0 40px rgba(236, 72, 153, 0.2),
-      inset 0 0 20px rgba(168, 85, 247, 0.1);
+      0 0 20px rgba(16, 185, 129, 0.3),
+      0 0 40px rgba(34, 211, 238, 0.2),
+      inset 0 0 20px rgba(16, 185, 129, 0.1);
   }
   
   .funky-box:hover {
-    border-color: rgba(236, 72, 153, 0.8);
+    border-color: rgba(34, 211, 238, 0.8);
     box-shadow: 
-      0 0 30px rgba(168, 85, 247, 0.5),
-      0 0 60px rgba(236, 72, 153, 0.4),
-      inset 0 0 30px rgba(168, 85, 247, 0.2);
+      0 0 30px rgba(16, 185, 129, 0.5),
+      0 0 60px rgba(34, 211, 238, 0.4),
+      inset 0 0 30px rgba(16, 185, 129, 0.2);
     transform: translateY(-2px);
   }
   
   .funky-button {
     @apply px-6 py-3 rounded-xl font-black transition-all duration-300 transform hover:scale-110 active:scale-95 border-2;
-    background: linear-gradient(135deg, #a855f7 0%, #ec4899 50%, #3b82f6 100%);
+    background: linear-gradient(135deg, #10b981 0%, #22d3ee 50%, #84cc16 100%);
     background-size: 200% 200%;
     animation: gradient-shift 3s ease infinite;
     box-shadow: 
-      0 0 20px rgba(168, 85, 247, 0.5),
+      0 0 20px rgba(16, 185, 129, 0.5),
       0 4px 15px rgba(0, 0, 0, 0.3);
   }
   
   .funky-button:hover {
     box-shadow: 
-      0 0 30px rgba(236, 72, 153, 0.7),
+      0 0 30px rgba(34, 211, 238, 0.7),
       0 6px 20px rgba(0, 0, 0, 0.4);
   }
   
   .funky-input {
-    @apply bg-purple-950/50 border-2 border-purple-400/50 rounded-xl px-4 py-3 text-white font-semibold placeholder-pink-300/50 transition-all;
+    @apply bg-emerald-950/50 border-2 border-emerald-400/50 rounded-xl px-4 py-3 text-white font-semibold placeholder-cyan-300/50 transition-all;
     box-shadow: 
-      0 0 10px rgba(168, 85, 247, 0.2),
-      inset 0 0 10px rgba(168, 85, 247, 0.1);
+      0 0 10px rgba(16, 185, 129, 0.2),
+      inset 0 0 10px rgba(16, 185, 129, 0.1);
   }
   
   .funky-input:focus {
-    border-color: rgba(236, 72, 153, 0.8);
+    border-color: rgba(34, 211, 238, 0.8);
     box-shadow: 
-      0 0 20px rgba(236, 72, 153, 0.5),
-      inset 0 0 15px rgba(236, 72, 153, 0.2);
+      0 0 20px rgba(34, 211, 238, 0.5),
+      inset 0 0 15px rgba(34, 211, 238, 0.2);
     outline: none;
   }
   
   .funky-text {
     @apply font-black;
-    background: linear-gradient(135deg, #a855f7 0%, #ec4899 50%, #3b82f6 100%);
+    background: linear-gradient(135deg, #10b981 0%, #22d3ee 50%, #84cc16 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    text-shadow: 0 0 30px rgba(168, 85, 247, 0.5);
+    text-shadow: 0 0 30px rgba(16, 185, 129, 0.5);
     animation: gradient-shift 3s ease infinite;
     background-size: 200% 200%;
   }
   
   .funky-glow {
     text-shadow: 
-      0 0 10px rgba(168, 85, 247, 0.8),
-      0 0 20px rgba(236, 72, 153, 0.6),
-      0 0 30px rgba(59, 130, 246, 0.4);
+      0 0 10px rgba(16, 185, 129, 0.8),
+      0 0 20px rgba(34, 211, 238, 0.6),
+      0 0 30px rgba(132, 204, 22, 0.4);
   }
   
   .funky-card {
-    @apply backdrop-blur-xl bg-gradient-to-br from-purple-900/30 via-pink-900/20 to-indigo-900/30 border-2 border-purple-400/30 rounded-xl p-4 transition-all duration-300;
+    @apply backdrop-blur-xl bg-gradient-to-br from-emerald-900/30 via-teal-900/20 to-cyan-900/30 border-2 border-emerald-400/30 rounded-xl p-4 transition-all duration-300;
     box-shadow: 
       0 4px 15px rgba(0, 0, 0, 0.3),
-      0 0 15px rgba(168, 85, 247, 0.2);
+      0 0 15px rgba(16, 185, 129, 0.2);
   }
   
   .funky-card:hover {
-    border-color: rgba(236, 72, 153, 0.6);
+    border-color: rgba(34, 211, 238, 0.6);
     box-shadow: 
       0 8px 25px rgba(0, 0, 0, 0.4),
-      0 0 25px rgba(236, 72, 153, 0.4);
+      0 0 25px rgba(34, 211, 238, 0.4);
     transform: translateY(-4px) scale(1.02);
   }
 }
@@ -185,13 +185,13 @@
   @keyframes pulse-glow {
     0%, 100% {
       box-shadow: 
-        0 0 20px rgba(168, 85, 247, 0.5),
-        0 0 40px rgba(236, 72, 153, 0.3);
+        0 0 20px rgba(16, 185, 129, 0.5),
+        0 0 40px rgba(34, 211, 238, 0.3);
     }
     50% {
       box-shadow: 
-        0 0 30px rgba(168, 85, 247, 0.8),
-        0 0 60px rgba(236, 72, 153, 0.6);
+        0 0 30px rgba(16, 185, 129, 0.8),
+        0 0 60px rgba(34, 211, 238, 0.6);
     }
   }
   

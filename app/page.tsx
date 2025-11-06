@@ -323,7 +323,7 @@ export default function App() {
       <div className="fixed inset-0 -z-10" />
       
       {/* Left Sidebar */}
-      <div className="w-64 funky-box border-r border-purple-400/30 p-6 flex flex-col">
+        <div className="w-64 funky-box border-r border-emerald-400/30 p-6 flex flex-col">
         {/* Logo */}
         <div className="flex items-center gap-3 mb-8">
           {logoFailed ? (
@@ -343,12 +343,12 @@ export default function App() {
         {/* Navigation */}
         <nav className="flex-1 space-y-3">
           <a href="#" className="funky-card flex items-center gap-3 px-4 py-3 mb-2 hover:scale-105">
-            <Home className="w-5 h-5 text-purple-300" />
+            <Home className="w-5 h-5 text-emerald-300" />
             <span className="text-white font-semibold">Home</span>
           </a>
 
           <Link href="/livestreams" className="funky-card flex items-center gap-3 px-4 py-3 mb-2 hover:scale-105">
-            <Video className="w-5 h-5 text-pink-300" />
+            <Video className="w-5 h-5 text-teal-300" />
             <span className="text-white font-semibold">Livestreams</span>
           </Link>
           <Link href="/ai-suggestions" className="funky-card flex items-center gap-3 px-4 py-3 mb-2 hover:scale-105">
@@ -356,11 +356,11 @@ export default function App() {
             <span className="text-white font-semibold">Advanced</span>
           </Link>
           <Link href="/ai-chat" className="funky-card flex items-center gap-3 px-4 py-3 mb-2 hover:scale-105">
-            <MessageCircle className="w-5 h-5 text-purple-300" />
+            <MessageCircle className="w-5 h-5 text-emerald-300" />
             <span className="text-white font-semibold">Ask PumpAI</span>
           </Link>
           <Link href="/gaming" className="funky-card flex items-center gap-3 px-4 py-3 mb-2 hover:scale-105">
-            <Zap className="w-5 h-5 text-pink-300" />
+            <Zap className="w-5 h-5 text-teal-300" />
             <span className="text-white font-semibold">Gaming</span>
           </Link>
           <Link href="/profile" className="funky-card flex items-center gap-3 px-4 py-3 mb-2 hover:scale-105">
@@ -368,11 +368,11 @@ export default function App() {
             <span className="text-white font-semibold">Profile</span>
           </Link>
           <a href="#" className="funky-card flex items-center gap-3 px-4 py-3 mb-2 hover:scale-105">
-            <HelpCircle className="w-5 h-5 text-purple-300" />
+            <HelpCircle className="w-5 h-5 text-emerald-300" />
             <span className="text-white font-semibold">Support</span>
           </a>
           <a href="#" className="funky-card flex items-center gap-3 px-4 py-3 mb-2 hover:scale-105">
-            <MoreHorizontal className="w-5 h-5 text-pink-300" />
+            <MoreHorizontal className="w-5 h-5 text-teal-300" />
             <span className="text-white font-semibold">More</span>
           </a>
         </nav>
@@ -419,17 +419,17 @@ export default function App() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
         {/* Top Bar */}
-        <div className="funky-box border-b border-purple-400/30 p-6">
+        <div className="funky-box border-b border-emerald-400/30 p-6">
           <div className="flex items-center justify-between">
             {/* Alert Banner */}
-            <div className="px-4 py-2 rounded-xl funky-card border-purple-400/50 animate-pulse-glow">
+            <div className="px-4 py-2 rounded-xl funky-card border-emerald-400/50 animate-pulse-glow">
               <span className="text-sm text-white font-bold funky-glow">(DEMO-ALERT)Live bought 1.4703 MATIC of DINO ~ 1 min(s): $25.7K</span>
             </div>
 
             {/* Search and Actions */}
             <div className="flex items-center gap-4">
               <div className="relative">
-                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-purple-300" />
+                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-emerald-300" />
                 <Input 
                   placeholder="Search coins by name, symbol, or description..." 
                   className="funky-input pl-12 w-64"
@@ -437,7 +437,7 @@ export default function App() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
                 {searchQuery && (
-                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-pink-300 font-bold">
+                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-cyan-300 font-bold">
                     {trendingCoins.length} result{trendingCoins.length !== 1 ? 's' : ''}
                   </div>
                 )}
@@ -454,7 +454,7 @@ export default function App() {
         <div className="flex-1 p-6 overflow-y-auto">
           {/* Status Banner */}
           {mounted && (
-            <div className="mb-4 px-4 py-3 funky-card border-purple-400/50">
+            <div className="mb-4 px-4 py-3 funky-card border-emerald-400/50">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse-glow"></div>
@@ -462,7 +462,7 @@ export default function App() {
                     {searchQuery ? `Search results for "${searchQuery}"` : 'Real Trading Platform • Polygon Amoy Integration'}
                   </span>
                 </div>
-                <span className="text-xs px-2 py-1 rounded funky-card border-purple-400/50 text-white font-bold">
+                <span className="text-xs px-2 py-1 rounded funky-card border-emerald-400/50 text-white font-bold">
                   {searchQuery ? `${trendingCoins.length} search result${trendingCoins.length !== 1 ? 's' : ''}` : `${allCoins.length} real tokens`}
                 </span>
               </div>
@@ -473,17 +473,17 @@ export default function App() {
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mb-6 funky-box border-purple-400/50 animate-float"
+            className="mb-6 funky-box border-emerald-400/50 animate-float"
           >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-purple-500/30 to-pink-500/30 rounded-full flex items-center justify-center border-2 border-purple-400/50">
-                <svg className="w-5 h-5 text-purple-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="w-10 h-10 bg-gradient-to-br from-emerald-500/30 to-teal-500/30 rounded-full flex items-center justify-center border-2 border-emerald-400/50">
+                <svg className="w-5 h-5 text-emerald-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
                 </svg>
               </div>
               <div className="flex-1">
-                <h3 className="text-sm font-bold text-purple-300 funky-glow">Powered by Polygon Amoy</h3>
-                <p className="text-xs text-pink-200">
+                <h3 className="text-sm font-bold text-emerald-300 funky-glow">Powered by Polygon Amoy</h3>
+                <p className="text-xs text-cyan-200">
                   All coins are permanently stored on Polygon Amoy testnet. Fast, secure, and scalable trading platform! 🚀
                 </p>
               </div>
@@ -502,13 +502,13 @@ export default function App() {
                 </Badge>
               </div>
               
-              <div className="funky-box border-purple-400/50 animate-float">
+              <div className="funky-box border-emerald-400/50 animate-float">
                 <div className="text-center py-6">
-                  <div className="w-16 h-16 bg-gradient-to-br from-purple-500/30 to-pink-500/30 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-purple-400/50 animate-pulse-glow">
+                  <div className="w-16 h-16 bg-gradient-to-br from-emerald-500/30 to-teal-500/30 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-emerald-400/50 animate-pulse-glow">
                     <TrendingUp className="w-8 h-8 text-cyan-300" />
                   </div>
                   <h4 className="text-lg font-bold text-white mb-2 funky-glow">Ready to Trade!</h4>
-                  <p className="text-pink-200 mb-4">
+                  <p className="text-cyan-200 mb-4">
                     Connect your wallet and start trading tokens. All data shown is real and user-generated.
                   </p>
                   <Button
@@ -589,7 +589,7 @@ export default function App() {
                   <Button
                     key={index}
                     onClick={() => toggleCategory(category.name)}
-                    className={`funky-button text-sm px-4 py-2 ${isActive ? 'border-pink-400' : 'border-purple-400/30'} ${isActive ? 'animate-pulse-glow' : ''}`}
+                    className={`funky-button text-sm px-4 py-2 ${isActive ? 'border-cyan-400' : 'border-emerald-400/30'} ${isActive ? 'animate-pulse-glow' : ''}`}
                   >
                     {category.name}
                   </Button>
@@ -631,12 +631,12 @@ export default function App() {
               ) : trendingCoins.length === 0 ? (
                 // No results message
                 <div className="col-span-full text-center py-12">
-                  <div className="funky-box border-purple-400/50">
-                    <Search className="w-16 h-16 text-purple-300 mx-auto mb-4 animate-float" />
+                  <div className="funky-box border-emerald-400/50">
+                    <Search className="w-16 h-16 text-emerald-300 mx-auto mb-4 animate-float" />
                     <h3 className="text-xl font-bold text-white mb-2 funky-glow">
                       {searchQuery ? 'No coins found' : 'No tokens created yet'}
                     </h3>
-                    <p className="text-pink-200 mb-4">
+                    <p className="text-cyan-200 mb-4">
                       {searchQuery 
                         ? `No coins match your search for "${searchQuery}". Try different keywords.`
                         : 'Be the first to create a token! Connect your wallet and click "Create coin" to get started.'
