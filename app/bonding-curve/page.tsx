@@ -5,6 +5,7 @@ import { useAccount, usePublicClient } from 'wagmi'
 import { ethers } from 'ethers'
 import { tokenFactoryService } from '../../lib/tokenFactoryService'
 import { bondingCurveTradingService } from '../../lib/bondingCurveTradingService'
+import { ogStorageSDK } from '@/lib/0gStorageSDK'
 import EnhancedTradingCard from '../components/EnhancedTradingCard'
 
 interface TokenInfo {
@@ -45,7 +46,7 @@ export default function BondingCurvePage() {
       // Convert publicClient to provider for compatibility
       const provider = {
         getSigner: () => null,
-        getBalance: (address: string) => publicClient.getBalance({ address: address as any }),
+        getBalance: (address: string) => publicClient!.getBalance({ address: address as any }),
         // Add other provider methods as needed
       } as any
       
@@ -69,7 +70,7 @@ export default function BondingCurvePage() {
       setError(null)
       
       // Load tokens from local storage
-      const localTokens = await tokenFactoryService['ogStorageSDK'].getAllCoins()
+      const localTokens = await ogStorageSDK.getAllCoins()
       
       // For each token, try to get curve information
       const tokensWithCurves = await Promise.all(

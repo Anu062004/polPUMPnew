@@ -1,4 +1,3 @@
-export const runtime = 'nodejs'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Create a new coin with metadata
@@ -62,7 +61,7 @@ export async function POST(request: NextRequest) {
       creator,
       imageRootHash: imageRootHash || null,
       createdAt: new Date().toISOString(),
-      metadataRootHash: null // Will be generated
+      metadataRootHash: null as string | null // Will be generated
     }
 
     // Generate metadata hash

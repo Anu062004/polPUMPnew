@@ -1,4 +1,3 @@
-export const runtime = 'nodejs'
 import { NextRequest, NextResponse } from 'next/server'
 import { ethers } from 'ethers'
 import { promises as fs } from 'fs'
@@ -175,27 +174,27 @@ export async function GET(
 
     // Also try to load from storage SDK as fallback
     try {
-      const { polStorageSDK } = await import('../../../../../lib/polStorageSDK')
-      const storedCoins = await polStorageSDK.getAllCoins()
+      const { ogStorageSDK } = await import('@/lib/0gStorageSDK')
+      const storedCoins = await ogStorageSDK.getAllCoins()
       
       // Merge stored coins that aren't already in database
       for (const coin of storedCoins) {
-        if (!coin.tokenAddress) continue
+        if (!(coin as any).tokenAddress) continue
         
         const exists = coinsWithData.find(c => 
-          c.tokenAddress?.toLowerCase() === coin.tokenAddress?.toLowerCase()
+          c.tokenAddress?.toLowerCase() === (coin as any).tokenAddress?.toLowerCase()
         )
         
         if (!exists) {
           try {
-            const balance = await getTokenBalance(provider, coin.tokenAddress, userAddress)
+            const balance = await getTokenBalance(provider, (coin as any).tokenAddress, userAddress)
             const hasBalance = parseFloat(balance) > 0
 
             const coinData = {
               id: coin.id,
               name: coin.name,
               symbol: coin.symbol,
-              tokenAddress: coin.tokenAddress,
+              tokenAddress: (coin as any).tokenAddress,
               curveAddress: (coin as any).curveAddress || null,
               imageHash: coin.imageRootHash || coin.imageUrl,
               description: coin.description,
