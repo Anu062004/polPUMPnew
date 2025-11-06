@@ -331,7 +331,7 @@ export default function App() {
           ) : (
             // Provide your image at /og-logo.png or via NEXT_PUBLIC_LOGO_URL (e.g., /download/<rootHash>)
             <img
-              src={(process.env.NEXT_PUBLIC_LOGO_URL as string) || '/og-logo.jpg'}
+              src={(process.env.NEXT_PUBLIC_LOGO_URL as string) || '/pump-logo.jpg'}
               alt="App logo"
               className="w-14 h-14 rounded-2xl nb-border nb-shadow-sm object-cover"
               onError={() => setLogoFailed(true)}
