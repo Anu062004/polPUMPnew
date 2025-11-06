@@ -318,12 +318,12 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900/20 to-slate-900 text-white flex">
-      {/* Glassmorphism background overlay */}
-      <div className="fixed inset-0 bg-gradient-to-br from-blue-500/5 via-purple-500/5 to-cyan-500/5 backdrop-blur-3xl -z-10" />
+    <div className="min-h-screen text-white flex">
+      {/* Animated background overlay */}
+      <div className="fixed inset-0 -z-10" />
       
       {/* Left Sidebar */}
-      <div className="w-64 bg-slate-800/40 backdrop-blur-xl border-r border-slate-700/50 p-6 flex flex-col">
+      <div className="w-64 funky-box border-r border-purple-400/30 p-6 flex flex-col">
         {/* Logo */}
         <div className="flex items-center gap-3 mb-8">
           {logoFailed ? (
@@ -337,52 +337,52 @@ export default function App() {
               onError={() => setLogoFailed(true)}
             />
           )}
-          <span className="text-4xl   text-white" style={{ fontFamily: 'fantasy' }}>POL Pump</span>
+          <span className="text-4xl funky-text funky-glow" style={{ fontFamily: 'fantasy' }}>POL Pump</span>
         </div>
 
         {/* Navigation */}
         <nav className="flex-1 space-y-3">
-          <a href="#" className="flex items-center gap-3 px-4 py-3 rounded-md nb-border nb-shadow-sm bg-[hsl(var(--card))] text-[hsl(var(--foreground))] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5">
-            <Home className="w-5 h-5" />
-            <span>Home</span>
+          <a href="#" className="funky-card flex items-center gap-3 px-4 py-3 mb-2 hover:scale-105">
+            <Home className="w-5 h-5 text-purple-300" />
+            <span className="text-white font-semibold">Home</span>
           </a>
 
-          <Link href="/livestreams" className="flex items-center gap-3 px-4 py-3 rounded-md nb-border nb-shadow-sm bg-[hsl(var(--card))] text-[hsl(var(--foreground))] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5">
-            <Video className="w-5 h-5" />
-            <span>Livestreams</span>
+          <Link href="/livestreams" className="funky-card flex items-center gap-3 px-4 py-3 mb-2 hover:scale-105">
+            <Video className="w-5 h-5 text-pink-300" />
+            <span className="text-white font-semibold">Livestreams</span>
           </Link>
-          <Link href="/ai-suggestions" className="flex items-center gap-3 px-4 py-3 rounded-md nb-border nb-shadow-sm bg-[hsl(var(--card))] text-[hsl(var(--foreground))] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5">
-            <Zap className="w-5 h-5" />
-            <span>Advanced</span>
+          <Link href="/ai-suggestions" className="funky-card flex items-center gap-3 px-4 py-3 mb-2 hover:scale-105">
+            <Zap className="w-5 h-5 text-cyan-300" />
+            <span className="text-white font-semibold">Advanced</span>
           </Link>
-          <Link href="/ai-chat" className="flex items-center gap-3 px-4 py-3 rounded-md nb-border nb-shadow-sm bg-[hsl(var(--card))] text-[hsl(var(--foreground))] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5">
-            <MessageCircle className="w-5 h-5" />
-            <span>Ask PumpAI</span>
+          <Link href="/ai-chat" className="funky-card flex items-center gap-3 px-4 py-3 mb-2 hover:scale-105">
+            <MessageCircle className="w-5 h-5 text-purple-300" />
+            <span className="text-white font-semibold">Ask PumpAI</span>
           </Link>
-          <Link href="/gaming" className="flex items-center gap-3 px-4 py-3 rounded-md nb-border nb-shadow-sm bg-[hsl(var(--card))] text-[hsl(var(--foreground))] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5">
-            <Zap className="w-5 h-5" />
-            <span>Gaming</span>
+          <Link href="/gaming" className="funky-card flex items-center gap-3 px-4 py-3 mb-2 hover:scale-105">
+            <Zap className="w-5 h-5 text-pink-300" />
+            <span className="text-white font-semibold">Gaming</span>
           </Link>
-          <Link href="/profile" className="flex items-center gap-3 px-4 py-3 rounded-md nb-border nb-shadow-sm bg-[hsl(var(--card))] text-[hsl(var(--foreground))] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5">
-            <User className="w-5 h-5" />
-            <span>Profile</span>
+          <Link href="/profile" className="funky-card flex items-center gap-3 px-4 py-3 mb-2 hover:scale-105">
+            <User className="w-5 h-5 text-cyan-300" />
+            <span className="text-white font-semibold">Profile</span>
           </Link>
-          <a href="#" className="flex items-center gap-3 px-4 py-3 rounded-md nb-border nb-shadow-sm bg-[hsl(var(--card))] text-[hsl(var(--foreground))] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5">
-            <HelpCircle className="w-5 h-5" />
-            <span>Support</span>
+          <a href="#" className="funky-card flex items-center gap-3 px-4 py-3 mb-2 hover:scale-105">
+            <HelpCircle className="w-5 h-5 text-purple-300" />
+            <span className="text-white font-semibold">Support</span>
           </a>
-          <a href="#" className="flex items-center gap-3 px-4 py-3 rounded-md nb-border nb-shadow-sm bg-[hsl(var(--card))] text-[hsl(var(--foreground))] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5">
-            <MoreHorizontal className="w-5 h-5" />
-            <span>More</span>
+          <a href="#" className="funky-card flex items-center gap-3 px-4 py-3 mb-2 hover:scale-105">
+            <MoreHorizontal className="w-5 h-5 text-pink-300" />
+            <span className="text-white font-semibold">More</span>
           </a>
         </nav>
 
         {/* Wallet Status */}
         {mounted && isConnected && (
-          <div className="mb-4 p-3 bg-green-500/20 border border-green-500/30 rounded-2xl">
+          <div className="mb-4 p-3 funky-card border-green-400/50 animate-pulse-glow">
             <div className="flex items-center gap-2 mb-2">
               <Wallet className="w-4 h-4 text-green-400" />
-              <span className="text-sm font-medium text-green-300">Wallet Connected</span>
+              <span className="text-sm font-bold text-green-300 funky-glow">Wallet Connected</span>
             </div>
             <div className="text-xs text-green-200 font-mono">
               {address?.slice(0, 6)}...{address?.slice(-4)}
@@ -394,7 +394,7 @@ export default function App() {
         <Button
           onClick={() => setIsTokenModalOpen(true)}
           disabled={mounted ? !isConnected : true}
-          className="w-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 disabled:from-slate-600 disabled:to-slate-700 disabled:cursor-not-allowed text-white font-semibold rounded-2xl py-4 flex items-center justify-center gap-2 shadow-lg shadow-purple-500/25 transition-all duration-300 transform hover:scale-105"
+          className="funky-button w-full text-white font-black rounded-2xl py-4 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Plus className="w-5 h-5" />
           {mounted && isConnected ? 'Create coin' : 'Connect wallet to create coin'}
@@ -419,30 +419,30 @@ export default function App() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
         {/* Top Bar */}
-        <div className="bg-slate-800/40 backdrop-blur-xl border-b border-slate-700/50 p-6">
+        <div className="funky-box border-b border-purple-400/30 p-6">
           <div className="flex items-center justify-between">
             {/* Alert Banner */}
-            <div className="px-4 py-2 rounded-md nb-border nb-shadow-sm bg-[hsl(var(--primary))]">
-              <span className="text-sm text-black font-bold">(DEMO-ALERT)Live bought 1.4703 MATIC of DINO ~ 1 min(s): $25.7K</span>
+            <div className="px-4 py-2 rounded-xl funky-card border-purple-400/50 animate-pulse-glow">
+              <span className="text-sm text-white font-bold funky-glow">(DEMO-ALERT)Live bought 1.4703 MATIC of DINO ~ 1 min(s): $25.7K</span>
             </div>
 
             {/* Search and Actions */}
             <div className="flex items-center gap-4">
               <div className="relative">
-                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-600" />
+                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-purple-300" />
                 <Input 
                   placeholder="Search coins by name, symbol, or description..." 
-                  className="pl-12 rounded-md w-64"
+                  className="funky-input pl-12 w-64"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
                 {searchQuery && (
-                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-slate-400">
+                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-pink-300 font-bold">
                     {trendingCoins.length} result{trendingCoins.length !== 1 ? 's' : ''}
                   </div>
                 )}
               </div>
-              <Button onClick={() => setSearchQuery('')} className="shadow-[6px_6px_0_#000] active:translate-x-[3px] active:translate-y-[3px] active:shadow-[3px_3px_0_#000]">
+              <Button onClick={() => setSearchQuery('')} className="funky-button">
                 {searchQuery ? 'Clear Search' : 'Search'}
               </Button>
               {mounted && <ConnectButton />}
@@ -454,15 +454,15 @@ export default function App() {
         <div className="flex-1 p-6 overflow-y-auto">
           {/* Status Banner */}
           {mounted && (
-            <div className="mb-4 px-4 py-3 bg-[hsl(var(--card))] nb-border nb-shadow-sm rounded-md">
+            <div className="mb-4 px-4 py-3 funky-card border-purple-400/50">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                  <span className="text-sm text-black text-bold font-bold">
+                  <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse-glow"></div>
+                  <span className="text-sm text-white font-bold funky-glow">
                     {searchQuery ? `Search results for "${searchQuery}"` : 'Real Trading Platform • Polygon Amoy Integration'}
                   </span>
                 </div>
-                <span className="text-xs px-2 py-1 rounded nb-border nb-shadow-sm bg-white text-black">
+                <span className="text-xs px-2 py-1 rounded funky-card border-purple-400/50 text-white font-bold">
                   {searchQuery ? `${trendingCoins.length} search result${trendingCoins.length !== 1 ? 's' : ''}` : `${allCoins.length} real tokens`}
                 </span>
               </div>
@@ -473,17 +473,17 @@ export default function App() {
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mb-6 bg-gradient-to-r from-purple-500/10 via-blue-500/10 to-green-500/10 backdrop-blur-xl rounded-2xl p-4 border border-purple-500/20"
+            className="mb-6 funky-box border-purple-400/50 animate-float"
           >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-purple-500/20 rounded-full flex items-center justify-center">
-                <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-10 h-10 bg-gradient-to-br from-purple-500/30 to-pink-500/30 rounded-full flex items-center justify-center border-2 border-purple-400/50">
+                <svg className="w-5 h-5 text-purple-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
                 </svg>
               </div>
               <div className="flex-1">
-                <h3 className="text-sm font-semibold text-purple-300">Powered by Polygon Amoy</h3>
-                <p className="text-xs text-slate-400">
+                <h3 className="text-sm font-bold text-purple-300 funky-glow">Powered by Polygon Amoy</h3>
+                <p className="text-xs text-pink-200">
                   All coins are permanently stored on Polygon Amoy testnet. Fast, secure, and scalable trading platform! 🚀
                 </p>
               </div>
@@ -494,26 +494,26 @@ export default function App() {
           {mounted && isConnected && (
             <div className="mb-8">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-3xl  bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent" style={{ fontFamily: 'fantasy' }}>
+                <h2 className="text-3xl funky-text funky-glow" style={{ fontFamily: 'fantasy' }}>
                   Your Trading Dashboard
                 </h2>
-                <Badge className="bg-green-500/20 text-green-300 border-green-500/30">
+                <Badge className="funky-card border-green-400/50 text-green-300 animate-pulse-glow">
                   Connected
                 </Badge>
               </div>
               
-              <div className="bg-slate-800/40 backdrop-blur-xl rounded-2xl p-6 border border-slate-700/50">
+              <div className="funky-box border-purple-400/50 animate-float">
                 <div className="text-center py-6">
-                  <div className="w-16 h-16 bg-slate-700/60 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <TrendingUp className="w-8 h-8 text-green-400" />
+                  <div className="w-16 h-16 bg-gradient-to-br from-purple-500/30 to-pink-500/30 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-purple-400/50 animate-pulse-glow">
+                    <TrendingUp className="w-8 h-8 text-cyan-300" />
                   </div>
-                  <h4 className="text-lg font-semibold text-slate-300 mb-2">Ready to Trade!</h4>
-                  <p className="text-slate-400 mb-4">
+                  <h4 className="text-lg font-bold text-white mb-2 funky-glow">Ready to Trade!</h4>
+                  <p className="text-pink-200 mb-4">
                     Connect your wallet and start trading tokens. All data shown is real and user-generated.
                   </p>
                   <Button
                     onClick={() => setIsTokenModalOpen(true)}
-                    variant="default"
+                    className="funky-button"
                     size="lg"
                   >
                     Create Your First Token
@@ -526,7 +526,7 @@ export default function App() {
           {/* Trading Section */}
           <div className="mb-8">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-3xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
+              <h2 className="text-3xl font-bold funky-text funky-glow">
                 {searchQuery ? `Search Results for "${searchQuery}"` : 'Trade Tokens'}
               </h2>
               <div className="flex items-center gap-2">
@@ -563,21 +563,18 @@ export default function App() {
                     }
                     setIsLoading(false);
                   }}
-                  variant="secondary"
-                  className="bg-white-700/60 backdrop-blur-sm hover:bg-slate-600/60 rounded-2xl px-4 py-2 border border-slate-600/30 transition-all duration-300"
+                  className="funky-button px-4 py-2"
                 >
-                  <TrendingUp className="w-4 h-4 mr-2 text-green " />
+                  <TrendingUp className="w-4 h-4 mr-2" />
                   Refresh
                 </Button>
                 <Button
-                  variant="secondary"
-                  className="bg-white-70/60 backdrop-blur-sm  hover:bg-slate-600/60 rounded-2xl w-10 h-10 p-0 border border-slate-600/30 transition-all duration-300 shadow-[6px_6px_0_#000] active:translate-x-[3px] active:translate-y-[3px] active:shadow-[3px_3px_0_#000]"
+                  className="funky-button w-10 h-10 p-0"
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </Button>
                 <Button
-                  variant="secondary"
-                  className="bg-white-70/60 backdrop-blur-sm  hover:bg-slate-600/60 rounded-2xl w-10 h-10 p-0 border border-slate-600/30 transition-all duration-300 shadow-[6px_6px_0_#000] active:translate-x-[3px] active:translate-y-[3px] active:shadow-[3px_3px_0_#000]"
+                  className="funky-button w-10 h-10 p-0"
                 >
                   <ChevronRight className="w-5 h-5" />
                 </Button>
@@ -592,8 +589,7 @@ export default function App() {
                   <Button
                     key={index}
                     onClick={() => toggleCategory(category.name)}
-                    variant="secondary"
-                    className={`${isActive ? category.activeColor : category.color} backdrop-blur-sm hover:opacity-80 text-sm px-4 py-2 rounded-2xl border-2 ${isActive ? 'border-orange-400' : 'border-slate-600/30'} transition-all duration-300 transform hover:scale-105 active:scale-95 cursor-pointer font-bold`}
+                    className={`funky-button text-sm px-4 py-2 ${isActive ? 'border-pink-400' : 'border-purple-400/30'} ${isActive ? 'animate-pulse-glow' : ''}`}
                   >
                     {category.name}
                   </Button>
@@ -607,8 +603,7 @@ export default function App() {
                     const nextIndex = (currentIndex + 1) % options.length
                     setSortOption(options[nextIndex])
                   }}
-                  variant="secondary"
-                  className="bg-white/90 backdrop-blur-sm hover:bg-white text-slate-900 text-sm px-4 py-2 rounded-2xl flex items-center gap-2 shadow-lg transition-all duration-300 transform hover:scale-105 active:scale-95 cursor-pointer font-bold"
+                  className="funky-button text-sm px-4 py-2 flex items-center gap-2"
                 >
                   <Filter className="w-4 h-4" />
                   sort: {sortOption}
@@ -621,14 +616,14 @@ export default function App() {
               {isLoading ? (
                 // Loading skeleton - show more items since we're displaying all tokens
                 Array.from({ length: Math.min(12, allCoins.length || 12) }).map((_, index) => (
-                  <div key={index} className="bg-slate-800/40 backdrop-blur-xl rounded-3xl p-6 border border-slate-700/50 animate-pulse">
+                  <div key={index} className="funky-card animate-pulse">
                     <div className="flex items-start gap-4 mb-4">
-                      <div className="w-14 h-14 rounded-2xl bg-slate-700/60"></div>
+                      <div className="w-14 h-14 rounded-2xl bg-purple-900/40"></div>
                       <div className="flex-1">
-                        <div className="h-6 bg-slate-700/60 rounded mb-2"></div>
-                        <div className="h-4 bg-slate-700/60 rounded mb-3 w-20"></div>
-                        <div className="h-4 bg-slate-700/60 rounded mb-4"></div>
-                        <div className="h-3 bg-slate-700/60 rounded w-32"></div>
+                        <div className="h-6 bg-purple-900/40 rounded mb-2"></div>
+                        <div className="h-4 bg-purple-900/40 rounded mb-3 w-20"></div>
+                        <div className="h-4 bg-purple-900/40 rounded mb-4"></div>
+                        <div className="h-3 bg-purple-900/40 rounded w-32"></div>
                       </div>
                     </div>
                   </div>
@@ -636,12 +631,12 @@ export default function App() {
               ) : trendingCoins.length === 0 ? (
                 // No results message
                 <div className="col-span-full text-center py-12">
-                  <div className="bg-slate-800/40 backdrop-blur-xl rounded-3xl p-8 border border-slate-700/50">
-                    <Search className="w-16 h-16 text-slate-400 mx-auto mb-4" />
-                    <h3 className="text-xl font-semibold text-slate-300 mb-2">
+                  <div className="funky-box border-purple-400/50">
+                    <Search className="w-16 h-16 text-purple-300 mx-auto mb-4 animate-float" />
+                    <h3 className="text-xl font-bold text-white mb-2 funky-glow">
                       {searchQuery ? 'No coins found' : 'No tokens created yet'}
                     </h3>
-                    <p className="text-slate-400 mb-4">
+                    <p className="text-pink-200 mb-4">
                       {searchQuery 
                         ? `No coins match your search for "${searchQuery}". Try different keywords.`
                         : 'Be the first to create a token! Connect your wallet and click "Create coin" to get started.'
@@ -650,8 +645,7 @@ export default function App() {
                     {searchQuery && (
                       <Button 
                         onClick={() => setSearchQuery('')}
-                        variant="secondary"
-                        className="bg-slate-700/60 hover:bg-slate-600/60 text-white border-slate-600/30"
+                        className="funky-button"
                       >
                         Clear Search
                       </Button>
@@ -662,9 +656,11 @@ export default function App() {
                 trendingCoins.map((coin, index) => (
                   <motion.div
                     key={coin.id}
-                    whileHover={{ scale: 1.02, y: -4 }}
-                    transition={{ duration: 0.3 }}
-                    className="bg-sky-100 text-slate-900 rounded-2xl p-6 border-4 border-black shadow-[6px_6px_0_#000] hover:shadow-[8px_8px_0_#000] transition-transform duration-200 hover:-translate-x-1 hover:-translate-y-1"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: index * 0.1 }}
+                    whileHover={{ scale: 1.05, y: -8 }}
+                    className="funky-card"
                   >
                     <EnhancedTradingCard 
                       tokenAddress={coin.tokenAddress || ''}
