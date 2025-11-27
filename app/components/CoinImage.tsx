@@ -3,12 +3,32 @@ import { useEffect, useMemo, useState } from 'react'
 import { CoinData } from '../../lib/0gStorageSDK'
 
 interface CoinImageProps {
-  coin: CoinData & { imageHash?: string; imageRootHash?: string; imageUrl?: string }
+  coin?: CoinData & { imageHash?: string; imageRootHash?: string; imageUrl?: string }
+  imageHash?: string
+  imageRootHash?: string
+  imageUrl?: string
+  tokenName?: string
   size?: 'sm' | 'md' | 'lg'
   className?: string
 }
 
-export default function CoinImage({ coin, size = 'md', className = '' }: CoinImageProps) {
+export default function CoinImage({ 
+  coin, 
+  imageHash, 
+  imageRootHash, 
+  imageUrl, 
+  tokenName,
+  size = 'md', 
+  className = '' 
+}: CoinImageProps) {
+  // Support both old API (coin object) and new API (individual props)
+  const coinData = coin || {
+    name: tokenName || 'Token',
+    symbol: tokenName?.charAt(0) || '?',
+    imageUrl: imageUrl,
+    imageHash: imageHash,
+    imageRootHash: imageRootHash || imageHash,
+  } as any
   const [imageSrc, setImageSrc] = useState<string | null>(null)
 
   const sizeClasses = {
@@ -24,66 +44,54 @@ export default function CoinImage({ coin, size = 'md', className = '' }: CoinIma
   }, [])
 
   useEffect(() => {
-    console.log('CoinImage: Processing coin data:', {
-      imageUrl: coin.imageUrl,
-      imageHash: (coin as any).imageHash,
-      imageRootHash: (coin as any).imageRootHash,
-      coinName: coin.name,
-      coinSymbol: coin.symbol
-    });
+    if (!coinData) {
+      setImageSrc(null)
+      return
+    }
 
     // Preferred: explicit URL
-    if (coin.imageUrl && (coin.imageUrl.startsWith('http') || coin.imageUrl.startsWith('/'))) {
-      console.log('CoinImage: Using imageUrl:', coin.imageUrl);
+    if (coinData.imageUrl && (coinData.imageUrl.startsWith('http') || coinData.imageUrl.startsWith('/'))) {
       // If it's a backend URL, route through Next proxy
-      if (coin.imageUrl.startsWith('http://localhost:4000') || coin.imageUrl.includes('/download/')) {
+      if (coinData.imageUrl.startsWith('http://localhost:4000') || coinData.imageUrl.includes('/download/')) {
         // Extract hash from URL and use proxy
-        const hashMatch = coin.imageUrl.match(/\/download\/([^/?]+)/)
+        const hashMatch = coinData.imageUrl.match(/\/download\/([^/?]+)/)
         if (hashMatch && hashMatch[1]) {
           setImageSrc(`/api/image/${hashMatch[1]}`)
         } else {
-          setImageSrc(coin.imageUrl)
+          setImageSrc(coinData.imageUrl)
         }
-      } else if (coin.imageUrl.startsWith('http')) {
+      } else if (coinData.imageUrl.startsWith('http')) {
         // External URL - use directly
-        setImageSrc(coin.imageUrl)
+        setImageSrc(coinData.imageUrl)
       } else {
         // Relative URL
-        setImageSrc(coin.imageUrl.startsWith('/') ? coin.imageUrl : `/${coin.imageUrl}`)
+        setImageSrc(coinData.imageUrl.startsWith('/') ? coinData.imageUrl : `/${coinData.imageUrl}`)
       }
       return
     }
 
     // Fallback: root hash present
-    const root = (coin as any).imageRootHash || (coin as any).imageHash
+    const root = coinData.imageRootHash || coinData.imageHash
     if (typeof root === 'string' && root.length > 0) {
-      console.log('CoinImage: Using root hash:', root);
       // Use proxy path to avoid mixed content/CORS
       setImageSrc(`/api/image/${encodeURIComponent(root)}`)
       return
     }
 
-    console.log('CoinImage: No image data found, showing fallback for', coin.name);
+    // No image data - show placeholder
     setImageSrc(null)
-  }, [coin.imageUrl, (coin as any).imageHash, (coin as any).imageRootHash, backendBase])
+  }, [coinData, imageHash, imageRootHash, imageUrl, tokenName, backendBase])
 
   if (imageSrc) {
     return (
       <div className={`${sizeClasses[size]} rounded-2xl border-2 border-purple-500/50 overflow-hidden shadow-lg ${className}`}>
         <img 
           src={imageSrc} 
-          alt={coin.name} 
+          alt={coinData.name || tokenName || 'Token'} 
           className="w-full h-full object-cover" 
           onError={(e) => {
-            console.warn('CoinImage: Image failed to load:', imageSrc, 'for coin:', coin.name);
-            // Try alternative sources before giving up
-            const root = (coin as any).imageRootHash || (coin as any).imageHash
-            if (root && imageSrc !== `/api/image/${root}`) {
-              console.log('CoinImage: Trying alternative source with hash:', root);
-              setImageSrc(`/api/image/${encodeURIComponent(root)}`)
-            } else {
-              setImageSrc(null);
-            }
+            // Silently fall back to placeholder without console spam
+            setImageSrc(null);
           }}
         />
       </div>
@@ -95,7 +103,7 @@ export default function CoinImage({ coin, size = 'md', className = '' }: CoinIma
       <span className={`font-bold text-purple-400 ${
         size === 'sm' ? 'text-lg' : size === 'md' ? 'text-xl' : 'text-2xl'
       }`}>
-        {coin.symbol?.charAt(0)?.toUpperCase() || '?'}
+        {(coinData?.symbol || tokenName)?.charAt(0)?.toUpperCase() || '?'}
       </span>
     </div>
   )

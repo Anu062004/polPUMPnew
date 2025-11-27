@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+type PumpAIToolCall =
+  | { type: 'open_token_chart'; tokenSymbol: string }
+  | { type: 'open_games' }
+  | { type: 'buy_token'; tokenSymbol: string; amountUsd: number }
+  | { type: 'sell_token'; tokenSymbol: string; amountPercent: number }
+
 // Helper function to safely require modules
 function safeRequire(path: string) {
   try { 
@@ -13,7 +19,7 @@ function safeRequire(path: string) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { message, conversation } = body
+    const { message, conversation, memory } = body
 
     if (!message) {
       return NextResponse.json(
@@ -64,9 +70,14 @@ export async function POST(request: NextRequest) {
       aiResponse = generateFallbackResponse(message.toLowerCase())
     }
 
+    // Simple rule-based tool call detection (can be enhanced later)
+    const toolCall = detectToolCall(message)
+
     return NextResponse.json({
       response: aiResponse,
-      source: aiResponse ? 'compute' : 'fallback'
+      toolCall,
+      source: aiResponse ? 'compute' : 'fallback',
+      memory: memory || null
     })
   } catch (error: any) {
     console.error('AI Chat error:', error)
@@ -78,6 +89,55 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
+}
+
+// Simple rule-based tool detection until LLM tools are integrated
+function detectToolCall(message: string): PumpAIToolCall | null {
+  const lower = message.toLowerCase()
+
+  // Open games
+  if (lower.includes('open games') || lower.includes('play games')) {
+    return { type: 'open_games' }
+  }
+
+  // Open chart for SYMBOL
+  const openChartMatch = lower.match(/open (?:the )?chart for\s+([a-z0-9]+)/i)
+  if (openChartMatch && openChartMatch[1]) {
+    return {
+      type: 'open_token_chart',
+      tokenSymbol: openChartMatch[1].toUpperCase()
+    }
+  }
+
+  // Buy SYMBOL AMOUNT  (interpreted as USD)
+  const buyMatch = lower.match(/buy\s+([a-z0-9]+)\s+(\d+(?:\.\d+)?)/i)
+  if (buyMatch && buyMatch[1] && buyMatch[2]) {
+    const symbol = buyMatch[1].toUpperCase()
+    const amount = parseFloat(buyMatch[2])
+    if (!isNaN(amount) && amount > 0) {
+      return {
+        type: 'buy_token',
+        tokenSymbol: symbol,
+        amountUsd: amount
+      }
+    }
+  }
+
+  // Sell SYMBOL PERCENT%
+  const sellMatch = lower.match(/sell\s+([a-z0-9]+)\s+(\d+(?:\.\d+)?)%/i)
+  if (sellMatch && sellMatch[1] && sellMatch[2]) {
+    const symbol = sellMatch[1].toUpperCase()
+    const pct = parseFloat(sellMatch[2])
+    if (!isNaN(pct) && pct > 0 && pct <= 100) {
+      return {
+        type: 'sell_token',
+        tokenSymbol: symbol,
+        amountPercent: pct
+      }
+    }
+  }
+
+  return null
 }
 
 // Fallback response generator for when AI service is unavailable

@@ -132,15 +132,46 @@ export default function ProfilePage() {
         notifications: completeProfile.preferences.notifications
       })
 
-      // Enrich from backend: tokens created + trading stats unique to this wallet
+      // Enrich from backend / local API: tokens created + trading stats unique to this wallet
       try {
-        const backendBase = (typeof process !== 'undefined' && (process as any).env && (process as any).env.NEXT_PUBLIC_BACKEND_URL) || 'http://localhost:4000'
+        const backendBase =
+          (typeof process !== 'undefined' &&
+            (process as any).env &&
+            (process as any).env.NEXT_PUBLIC_BACKEND_URL) ||
+          'http://localhost:4000'
 
         // Fetch coins created by this wallet
-        const coinsRes = await fetch(`${backendBase}/coins?limit=200&offset=0&sortBy=createdAt&order=DESC`, { cache: 'no-store' })
-        if (coinsRes.ok) {
+        let coinsRes: Response | null = null
+
+        // Try dedicated backend first (if running)
+        try {
+          coinsRes = await fetch(
+            `${backendBase}/coins?limit=200&offset=0&sortBy=createdAt&order=DESC`,
+            {
+              cache: 'no-store',
+              // Prevent hanging forever if backend is down
+              signal: AbortSignal.timeout(4000)
+            }
+          ).catch(() => null)
+        } catch {
+          coinsRes = null
+        }
+
+        // Fallback to local Next.js API route
+        if (!coinsRes || !coinsRes.ok) {
+          coinsRes = await fetch('/api/coins', { cache: 'no-store' }).catch(
+            () => null
+          )
+        }
+
+        if (coinsRes && coinsRes.ok) {
           const coinsData = await coinsRes.json()
-          const myCoins = (coinsData.coins || []).filter((c: any) => String(c.creator).toLowerCase() === String(userAddress).toLowerCase())
+          const myCoins = (coinsData.coins || []).filter(
+            (c: any) =>
+              String(c.creator).toLowerCase() ===
+              String(userAddress).toLowerCase()
+          )
+
           const tokensCreated = myCoins.map((c: any) => ({
             tokenAddress: c.tokenAddress || '',
             tokenName: c.name,
@@ -148,21 +179,31 @@ export default function ProfilePage() {
             curveAddress: c.curveAddress || undefined,
             createdAt: new Date(c.createdAt).toISOString(),
             txHash: c.txHash || `local-${Date.now()}`,
-            imageUrl: c.imageUrl || (c.imageHash ? `/api/image/${c.imageHash}` : undefined),
+            imageUrl:
+              c.imageUrl || (c.imageHash ? `/api/image/${c.imageHash}` : undefined),
             description: c.description || undefined
           }))
 
           // Only update if different
-          if (JSON.stringify(tokensCreated) !== JSON.stringify(completeProfile.tokensCreated)) {
+          if (
+            JSON.stringify(tokensCreated) !==
+            JSON.stringify(completeProfile.tokensCreated)
+          ) {
             const updated = { ...completeProfile, tokensCreated }
             setProfile(updated)
-            await userProfileManager.updateProfile(userAddress, { tokensCreated })
+            await userProfileManager.updateProfile(userAddress, {
+              tokensCreated
+            })
           }
+        } else {
+          console.warn(
+            'Profile enrichment: failed to fetch created tokens from backend or local API'
+          )
         }
 
-        // Fetch trading history to compute stats
-        const histRes = await fetch(`${backendBase}/trading/history/${userAddress}?limit=500&offset=0`, { cache: 'no-store' })
-        if (histRes.ok) {
+        // Fetch trading history to compute stats (optional backend/indexer)
+        const histRes = await fetch(`${backendBase}/trading/history/${userAddress}?limit=500&offset=0`, { cache: 'no-store' }).catch(() => null as any)
+        if (histRes && histRes.ok) {
           const hist = await histRes.json()
           const trades = hist.history || []
           const totalTrades = trades.length
@@ -185,8 +226,8 @@ export default function ProfilePage() {
         }
 
         // Fetch tokens held count
-        const tokensHeldRes = await fetch(`${backendBase}/profile/${userAddress}/tokens-held`, { cache: 'no-store' })
-        if (tokensHeldRes.ok) {
+        const tokensHeldRes = await fetch(`${backendBase}/profile/${userAddress}/tokens-held`, { cache: 'no-store' }).catch(() => null as any)
+        if (tokensHeldRes && tokensHeldRes.ok) {
           const tokensData = await tokensHeldRes.json()
           const tokensHeld = tokensData.tokensHeld || 0
           
@@ -204,6 +245,56 @@ export default function ProfilePage() {
         }
       } catch (enrichErr) {
         console.warn('Profile enrichment skipped:', (enrichErr as any)?.message || enrichErr)
+      }
+
+      // Merge in lightweight local trading stats captured by the bonding-curve
+      // trading service. This works even when the dedicated backend/indexer
+      // is not running.
+      try {
+        if (typeof window !== 'undefined') {
+          const key = `trading:${userAddress.toLowerCase()}`
+          const raw = window.localStorage.getItem(key)
+          if (raw) {
+            const local = JSON.parse(raw)
+            const localTotalTrades = Number(local.totalTrades || 0)
+            const localTotalVolume = Number(local.totalVolume || 0)
+            const tokens = Array.isArray(local.tokens) ? local.tokens : []
+
+            const mergedStats = {
+              ...completeProfile.tradingStats,
+              totalTrades:
+                completeProfile.tradingStats.totalTrades || localTotalTrades
+                  ? Math.max(
+                      completeProfile.tradingStats.totalTrades,
+                      localTotalTrades
+                    )
+                  : localTotalTrades,
+              totalVolume:
+                completeProfile.tradingStats.totalVolume || localTotalVolume
+                  ? Math.max(
+                      completeProfile.tradingStats.totalVolume,
+                      localTotalVolume
+                    )
+                  : localTotalVolume,
+              tokensHeld:
+                completeProfile.tradingStats.tokensHeld ||
+                (tokens ? tokens.length : 0),
+              lastTradeAt:
+                completeProfile.tradingStats.lastTradeAt ||
+                (local.lastTradeAt
+                  ? new Date(local.lastTradeAt * 1000).toISOString()
+                  : undefined)
+            }
+
+            const updated = { ...completeProfile, tradingStats: mergedStats }
+            setProfile(updated)
+          }
+        }
+      } catch (localErr) {
+        console.warn(
+          'Failed to merge local trading stats (non-fatal):',
+          (localErr as any)?.message || localErr
+        )
       }
     } catch (error: any) {
       console.error('Error loading profile:', error)

@@ -2,6 +2,10 @@
 
 import React, { useState, useRef, useEffect } from 'react'
 import { Send, Bot, User, Sparkles, Loader2 } from 'lucide-react'
+import PremiumNavbar from '../components/PremiumNavbar'
+import BlobBackground from '../components/BlobBackground'
+import { usePumpAI } from '../providers/PumpAIContext'
+import { useRouter } from 'next/navigation'
 
 interface Message {
   id: string
@@ -9,6 +13,12 @@ interface Message {
   content: string
   timestamp: Date
 }
+
+type PumpAIToolCall =
+  | { type: 'open_token_chart'; tokenSymbol: string }
+  | { type: 'open_games' }
+  | { type: 'buy_token'; tokenSymbol: string; amountUsd: number }
+  | { type: 'sell_token'; tokenSymbol: string; amountPercent: number }
 
 export default function AiChatPage() {
   const [messages, setMessages] = useState<Message[]>([
@@ -22,6 +32,8 @@ export default function AiChatPage() {
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const { memory } = usePumpAI()
+  const router = useRouter()
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -30,6 +42,44 @@ export default function AiChatPage() {
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  const openTradeModal = (
+    tokenSymbol: string,
+    action: 'buy' | 'sell',
+    amount: number
+  ) => {
+    // For now, navigate to advanced page with query params.
+    // Existing trading UI will handle the actual trade.
+    const params = new URLSearchParams({
+      token: tokenSymbol.toLowerCase(),
+      action,
+      amount: String(amount)
+    })
+    router.push(`/advanced?${params.toString()}`)
+  }
+
+  const handleToolCall = (toolCall: PumpAIToolCall) => {
+    switch (toolCall.type) {
+      case 'open_token_chart':
+        router.push(`/advanced?token=${toolCall.tokenSymbol.toLowerCase()}`)
+        break
+      case 'open_games':
+        router.push('/gaming')
+        break
+      case 'buy_token':
+        openTradeModal(toolCall.tokenSymbol, 'buy', toolCall.amountUsd)
+        break
+      case 'sell_token':
+        openTradeModal(
+          toolCall.tokenSymbol,
+          'sell',
+          toolCall.amountPercent
+        )
+        break
+      default:
+        break
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -55,7 +105,8 @@ export default function AiChatPage() {
         },
         body: JSON.stringify({
           message: userMessage.content,
-          conversation: messages.slice(-10) // Send last 10 messages for context
+          conversation: messages.slice(-10), // Send last 10 messages for context
+          memory
         })
       })
 
@@ -64,7 +115,7 @@ export default function AiChatPage() {
       }
 
       const data = await response.json()
-      
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -73,6 +124,10 @@ export default function AiChatPage() {
       }
 
       setMessages(prev => [...prev, assistantMessage])
+
+      if (data.toolCall) {
+        handleToolCall(data.toolCall as PumpAIToolCall)
+      }
     } catch (error) {
       console.error('AI Chat error:', error)
       const errorMessage: Message = {
@@ -92,23 +147,27 @@ export default function AiChatPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
+    <div className="min-h-screen relative overflow-hidden">
+      <BlobBackground />
+      <PremiumNavbar />
+      <div className="relative z-10 container mx-auto px-4 pt-24 pb-8 max-w-4xl">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl mb-6">
-            <Bot className="w-8 h-8 text-white" />
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-r from-[#FF4F84] to-[#8C52FF] rounded-2xl mb-6 shadow-lg neon-glow">
+            <Bot className="w-10 h-10 text-white" />
           </div>
-          <h1 className="text-4xl font-bold text-slate-900 mb-4">Ask PumpAI</h1>
-          <p className="text-xl text-slate-600 max-w-2xl mx-auto">
+          <h1 className="text-5xl font-bold text-white mb-4">
+            Ask <span className="text-gradient-primary">PumpAI</span>
+          </h1>
+          <p className="text-xl text-[#E3E4E8] max-w-2xl mx-auto">
             Chat with our AI assistant powered by POL Pump AI. Get insights on tokens, market trends, and Polygon network.
           </p>
         </div>
 
         {/* Chat Container */}
-        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+        <div className="glass-card overflow-hidden border border-white/20 shadow-2xl">
           {/* Messages */}
-          <div className="h-96 overflow-y-auto p-6 space-y-4">
+          <div className="h-[500px] overflow-y-auto p-6 space-y-4 custom-scrollbar">
             {messages.map((message) => (
               <div
                 key={message.id}
@@ -116,27 +175,27 @@ export default function AiChatPage() {
               >
                 <div className={`flex max-w-[80%] ${message.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
                   {/* Avatar */}
-                  <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                  <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center shadow-lg ${
                     message.role === 'user' 
-                      ? 'bg-blue-600 ml-3' 
-                      : 'bg-gradient-to-r from-purple-500 to-pink-500 mr-3'
+                      ? 'bg-gradient-to-r from-[#12D9C8] to-[#0EA89F] ml-3' 
+                      : 'bg-gradient-to-r from-[#FF4F84] to-[#8C52FF] mr-3'
                   }`}>
                     {message.role === 'user' ? (
-                      <User className="w-4 h-4 text-white" />
+                      <User className="w-5 h-5 text-white" />
                     ) : (
-                      <Bot className="w-4 h-4 text-white" />
+                      <Bot className="w-5 h-5 text-white" />
                     )}
                   </div>
                   
                   {/* Message Content */}
-                  <div className={`rounded-2xl px-4 py-3 ${
+                  <div className={`rounded-2xl px-5 py-3 shadow-lg backdrop-blur-sm ${
                     message.role === 'user'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-slate-100 text-slate-900'
+                      ? 'bg-gradient-to-r from-[#12D9C8]/90 to-[#0EA89F]/90 text-white border border-[#12D9C8]/30'
+                      : 'bg-white/10 text-white border border-white/20'
                   }`}>
                     <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
                     <p className={`text-xs mt-2 ${
-                      message.role === 'user' ? 'text-blue-100' : 'text-slate-500'
+                      message.role === 'user' ? 'text-white/70' : 'text-[#E3E4E8]/60'
                     }`}>
                       {formatTime(message.timestamp)}
                     </p>
@@ -149,13 +208,13 @@ export default function AiChatPage() {
             {isLoading && (
               <div className="flex justify-start">
                 <div className="flex">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 mr-3 flex items-center justify-center">
-                    <Bot className="w-4 h-4 text-white" />
+                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-r from-[#FF4F84] to-[#8C52FF] mr-3 flex items-center justify-center shadow-lg">
+                    <Bot className="w-5 h-5 text-white" />
                   </div>
-                  <div className="bg-slate-100 rounded-2xl px-4 py-3">
+                  <div className="bg-white/10 backdrop-blur-sm rounded-2xl px-5 py-3 border border-white/20">
                     <div className="flex items-center space-x-2">
-                      <Loader2 className="w-4 h-4 animate-spin text-purple-500" />
-                      <span className="text-sm text-slate-600">PumpAI is thinking...</span>
+                      <Loader2 className="w-4 h-4 animate-spin text-[#FF4F84]" />
+                      <span className="text-sm text-white">PumpAI is thinking...</span>
                     </div>
                   </div>
                 </div>
@@ -166,7 +225,7 @@ export default function AiChatPage() {
           </div>
 
           {/* Input Form */}
-          <div className="border-t border-slate-200 p-4">
+          <div className="border-t border-white/10 p-4 bg-white/5 backdrop-blur-sm">
             <form onSubmit={handleSubmit} className="flex space-x-3">
               <div className="flex-1 relative">
                 <input
@@ -174,22 +233,22 @@ export default function AiChatPage() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   placeholder="Ask PumpAI anything about tokens, Polygon network, or market trends..."
-                  className="w-full px-4 py-3 pr-12 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-5 py-4 pr-12 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl text-white placeholder-[#E3E4E8]/50 focus:outline-none focus:ring-2 focus:ring-[#FF4F84] focus:border-transparent transition-all"
                   disabled={isLoading}
                 />
-                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                  <Sparkles className="w-5 h-5 text-slate-400" />
+                <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
+                  <Sparkles className="w-5 h-5 text-[#FF4F84]" />
                 </div>
               </div>
               <button
                 type="submit"
                 disabled={!input.trim() || isLoading}
-                className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center space-x-2"
+                className="px-6 py-4 bg-gradient-to-r from-[#FF4F84] to-[#8C52FF] text-white rounded-xl hover:shadow-lg hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 transition-all duration-200 flex items-center space-x-2 font-semibold"
               >
                 {isLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
-                  <Send className="w-4 h-4" />
+                  <Send className="w-5 h-5" />
                 )}
                 <span>Send</span>
               </button>
@@ -199,8 +258,11 @@ export default function AiChatPage() {
 
         {/* Quick Actions */}
         <div className="mt-8">
-          <h3 className="text-lg font-semibold text-slate-900 mb-4">Quick Questions</h3>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
+            <Sparkles className="w-6 h-6 text-[#FF4F84]" />
+            Quick Questions
+          </h3>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {[
               "What's the next meme coin trend?",
               "Analyze my token performance",
@@ -212,9 +274,9 @@ export default function AiChatPage() {
               <button
                 key={index}
                 onClick={() => setInput(question)}
-                className="p-3 text-left bg-white rounded-xl border border-slate-200 hover:border-blue-300 hover:shadow-md transition-all duration-200 text-sm text-slate-700"
+                className="p-4 text-left glass-card border border-white/20 hover:border-[#FF4F84]/50 hover:shadow-lg hover:scale-105 transition-all duration-200 text-sm text-white group"
               >
-                {question}
+                <span className="group-hover:text-gradient-primary transition-all">{question}</span>
               </button>
             ))}
           </div>

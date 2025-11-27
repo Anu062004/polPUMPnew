@@ -14,6 +14,7 @@ import OGImageUploader from './OGImageUploader'
 import { ogStorageSDK } from '../../lib/0gStorageSDK'
 import { newFactoryService } from '../../lib/newFactoryService'
 import { CONTRACT_CONFIG, verifyFactoryContract } from '../../lib/contract-config'
+import { usePumpAI } from '../providers/PumpAIContext'
 
 interface TokenCreatorModalProps {
   isOpen: boolean
@@ -24,12 +25,12 @@ interface TokenCreatorModalProps {
 export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: TokenCreatorModalProps) {
   const { isConnected, address } = useAccount()
   const publicClient = usePublicClient()
-  
+
   // New bonding curve factory configuration - uses centralized config
   const FACTORY_ADDRESS = CONTRACT_CONFIG.FACTORY_ADDRESS
-  
+
   // New bonding curve system - fixed parameters for immediate trading
-  
+
   // Token creation state
   const [name, setName] = useState('DOGEWOW')
   const [symbol, setSymbol] = useState('WOW')
@@ -43,12 +44,14 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
   const [txHash, setTxHash] = useState<string>('')
   const [description, setDescription] = useState('')
   const [creationResult, setCreationResult] = useState<any>(null)
-  
+
   // Social media URLs
   const [telegramUrl, setTelegramUrl] = useState('')
   const [xUrl, setXUrl] = useState('')
   const [discordUrl, setDiscordUrl] = useState('')
   const [websiteUrl, setWebsiteUrl] = useState('')
+
+  const { setMemory } = usePumpAI()
 
   const resetForm = () => {
     setName('DOGEWOW')
@@ -62,13 +65,13 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
     setTxHash('')
     setDescription('')
     setCreationResult(null)
-    
+
     // Reset social media URLs
     setTelegramUrl('')
     setXUrl('')
     setDiscordUrl('')
     setWebsiteUrl('')
-    
+
     // New bonding curve system uses fixed parameters
   }
 
@@ -76,6 +79,7 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
     if (!isOpen) {
       resetForm()
     }
+    console.log('🔴 TokenCreatorModal isOpen changed:', isOpen)
   }, [isOpen])
 
   // Initialize services when modal opens and verify contract
@@ -86,11 +90,11 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
         if (!eth) return
         const provider = new BrowserProvider(eth)
         // Ensure signer is available (RainbowKit already connects, but this is safe)
-        provider.send('eth_requestAccounts', []).catch(() => {})
-        
+        provider.send('eth_requestAccounts', []).catch(() => { })
+
         // Initialize factory service
         newFactoryService.initialize(provider, FACTORY_ADDRESS)
-        
+
         // Verify contract is accessible
         verifyFactoryContract(provider).catch((err) => {
           console.warn('Contract verification failed (non-fatal):', err)
@@ -148,9 +152,9 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
       form.append('imageRootHash', finalImageHash)
 
       // Use Next.js API route instead of direct backend
-      const resp = await fetch('/api/createCoin', { 
-        method: 'POST', 
-        body: form 
+      const resp = await fetch('/api/createCoin', {
+        method: 'POST',
+        body: form
       })
       const json = await resp.json()
       if (!resp.ok || !json.success) {
@@ -160,7 +164,7 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
       const metadataRootHash = json.coin.metadataRootHash as string
 
       setStatus('Creating token with bonding curve on Polygon Amoy (this may take 30-60 seconds)...')
-      
+
       // Create token using new bonding curve mechanism
       const result = await newFactoryService.createPair({
         name,
@@ -184,7 +188,7 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
             if (attempt > 0) {
               await new Promise(r => setTimeout(r, 2000 * attempt)) // 2s, 4s delays
             }
-            
+
             const respResolve = await fetch('/api/resolvePair', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -194,7 +198,7 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
                 factory: FACTORY_ADDRESS
               })
             })
-            
+
             if (respResolve.ok) {
               const rj = await respResolve.json()
               if (rj.tokenAddress && rj.curveAddress) {
@@ -205,7 +209,7 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
               }
             }
           }
-          
+
           if (!tokenAddr || !curveAddr) {
             console.warn('⚠️ Could not resolve addresses immediately, but transaction was successful')
             console.warn('⚠️ You can view your token on PolygonScan:', `https://amoy.polygonscan.com/tx/${result.txHash}`)
@@ -241,6 +245,12 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
 
       if (onTokenCreated) onTokenCreated(tokenData)
 
+      // Update Pump AI memory to reflect creation and last viewed token
+      setMemory({
+        lastAction: 'create',
+        lastViewedToken: symbol
+      })
+
       // Add token to user's profile
       try {
         if (address) {
@@ -270,8 +280,8 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
         console.warn('Failed to add token to profile:', profileError)
         // Don't fail the entire creation process for profile errors
       }
-      
-    } catch (err: any) { 
+
+    } catch (err: any) {
       setError(err.message ?? String(err))
       setStatus('')
     } finally {
@@ -279,15 +289,20 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
     }
   }
 
+  // Add console log to track rendering
+  console.log('🎨 TokenCreatorModal render - isOpen:', isOpen, 'isConnected:', isConnected)
+
   return (
-    <AnimatePresence>
+    <AnimatePresence mode="wait">
       {isOpen && (
         <motion.div
+          key="token-creator-modal"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
           onClick={onClose}
+          style={{ zIndex: 100 }}
         >
           <motion.div
             initial={{ scale: 0.9, opacity: 0 }}
@@ -311,11 +326,11 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
                   </Button>
                 </div>
                 <div className="flex items-center justify-between">
-                   <p className="text-slate-700 text-sm">
-                     Create your own memecoin on Polygon Amoy with immediate trading via new bonding curve system
-                   </p>
-                   <ConnectButton />
-                 </div>
+                  <p className="text-slate-700 text-sm">
+                    Create your own memecoin on Polygon Amoy with immediate trading via new bonding curve system
+                  </p>
+                  <ConnectButton />
+                </div>
               </CardHeader>
 
               <CardContent className="space-y-6">
@@ -379,7 +394,7 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
                     {/* Social Media URLs */}
                     <div className="space-y-3">
                       <h4 className="text-sm font-extrabold text-slate-900">Social Media (Optional)</h4>
-                      
+
                       <div>
                         <label className="text-xs text-slate-900 mb-1 block font-bold">Telegram</label>
                         <Input
@@ -425,19 +440,19 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
                   {/* Right column - Image upload and bonding curve settings */}
                   <div className="space-y-4">
                     <div>
-                       <label className="text-sm font-extrabold text-slate-900 mb-2 block">
-                         Token Icon <span className="text-red-400">*</span>
-                       </label>
-                       <p className="text-xs text-slate-700 mb-3">
-                         Upload an image to storage (required)
-                       </p>
-                       <OGImageUploader
-                         onImageUploaded={(cid, file) => {
-                           setSelectedImage(file);
-                           setImageHash(cid);
-                         }}
-                       />
-                     </div>
+                      <label className="text-sm font-extrabold text-slate-900 mb-2 block">
+                        Token Icon <span className="text-red-400">*</span>
+                      </label>
+                      <p className="text-xs text-slate-700 mb-3">
+                        Upload an image to storage (required)
+                      </p>
+                      <OGImageUploader
+                        onImageUploaded={(cid, file) => {
+                          setSelectedImage(file);
+                          setImageHash(cid);
+                        }}
+                      />
+                    </div>
 
                     {selectedImage && (
                       <div className="bg-white rounded-lg p-3 text-xs text-slate-900 border-4 border-black shadow-[4px_4px_0_#000]">
@@ -476,7 +491,7 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
                           <span>Secure & Audited Contracts</span>
                         </div>
                       </div>
-                        <div className="mt-3 p-2 bg-sky-100 rounded text-xs text-slate-900 border-2 border-black">
+                      <div className="mt-3 p-2 bg-sky-100 rounded text-xs text-slate-900 border-2 border-black">
                         <div className="font-medium mb-1">How it works:</div>
                         <div>1. Create token with initial supply</div>
                         <div>2. System automatically seeds 0.5 MATIC liquidity</div>
@@ -511,17 +526,17 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
                     {txHash && (
                       <div className="text-sm">
                         <span className="text-slate-400">Transaction: </span>
-                        <a 
-                          target="_blank" 
-                          rel="noreferrer" 
-                          className="underline text-blue-400 hover:text-blue-300" 
+                        <a
+                          target="_blank"
+                          rel="noreferrer"
+                          className="underline text-blue-400 hover:text-blue-300"
                           href={`https://amoy.polygonscan.com/tx/${txHash}`}
                         >
                           {txHash}
                         </a>
                       </div>
                     )}
-                    
+
                     {/* Token and Curve Addresses for Trading */}
                     {creationResult?.tokenAddress && creationResult?.curveAddress && (
                       <div className="text-sm space-y-2">
@@ -547,7 +562,7 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
                         <span className="font-mono text-blue-400">{imageHash}</span>
                       </div>
                     )}
-                    
+
                     {/* Social Media URLs Added */}
                     {(telegramUrl || xUrl || discordUrl || websiteUrl) && (
                       <div className="text-sm">
@@ -604,10 +619,10 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
                             Creating Token...
                           </>
                         ) : (
-                                                      <>
-                              <Plus className="w-4 h-4 mr-2" />
-                              Create Token with New Bonding Curve
-                            </>
+                          <>
+                            <Plus className="w-4 h-4 mr-2" />
+                            Create Token with New Bonding Curve
+                          </>
                         )}
                       </Button>
 
@@ -617,8 +632,8 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
                         disabled={isCreating}
                         className="border-4 border-black bg-white text-slate-900 shadow-[4px_4px_0_#000] hover:translate-x-1 hover:translate-y-1 hover:shadow-none"
                       >
-                          Cancel
-                        </Button>
+                        Cancel
+                      </Button>
                     </>
                   ) : (
                     <>

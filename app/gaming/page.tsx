@@ -4,9 +4,13 @@ import { useState, useEffect } from 'react'
 import { useAccount } from 'wagmi'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { ethers } from 'ethers'
+import { useRouter } from 'next/navigation'
+import TokenCreatorModal from '../components/TokenCreatorModal'
+import BlobBackground from '../components/BlobBackground'
 
 export default function GamingPage() {
   const { address } = useAccount()
+  const router = useRouter()
   const [activeTab, setActiveTab] = useState<'pumpplay'|'meme-royale'|'mines'|'arcade'>('pumpplay')
   const backend = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000'
   
@@ -15,6 +19,10 @@ export default function GamingPage() {
   const [userCoins, setUserCoins] = useState<any[]>([])
   const [loadingCoins, setLoadingCoins] = useState(false)
   const [balanceChange, setBalanceChange] = useState<{amount: number, token: string} | null>(null)
+  
+  // Global Coin Selection & Create Coin Modal
+  const [selectedCoin, setSelectedCoin] = useState<string>('')
+  const [isCreateCoinModalOpen, setIsCreateCoinModalOpen] = useState(false)
   
   // PumpPlay State
   const [rounds, setRounds] = useState<any[]>([])
@@ -91,16 +99,39 @@ export default function GamingPage() {
     setLoadingCoins(true)
     
     try {
-      // Try backend first
-      let response = await fetch(`${backend}/gaming/coins/${address}`, { 
-        cache: 'no-store',
-        signal: AbortSignal.timeout(5000) // 5s timeout
-      }).catch(() => null)
+      // Try backend first with better error handling
+      let response: Response | null = null
+      try {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 5000) // 5s timeout
+        
+        response = await fetch(`${backend}/gaming/coins/${address}`, { 
+          cache: 'no-store',
+          signal: controller.signal
+        })
+        
+        clearTimeout(timeoutId)
+      } catch (fetchError: any) {
+        // Silently handle connection errors - backend is not available
+        if (fetchError.name === 'AbortError' || fetchError.message?.includes('Failed to fetch') || fetchError.message?.includes('ERR_CONNECTION_REFUSED')) {
+          // Backend not available, will use fallback
+          response = null
+        } else {
+          throw fetchError
+        }
+      }
       
-      // Fallback to Next.js API route
+      // Fallback to Next.js API route if backend failed
       if (!response || !response.ok) {
-        console.log('Backend not available, using Next.js API route')
-        response = await fetch(`/api/gaming/coins/${address}`, { cache: 'no-store' })
+        try {
+          response = await fetch(`/api/gaming/coins/${address}`, { cache: 'no-store' })
+        } catch (apiError) {
+          console.warn('Both backend and API route failed, using empty data')
+          setAllCoins([])
+          setUserCoins([])
+          setLoadingCoins(false)
+          return
+        }
       }
       
       if (response && response.ok) {
@@ -108,15 +139,18 @@ export default function GamingPage() {
         setAllCoins(data.coins || [])
         setUserCoins(data.userHoldings || [])
         setLoadingCoins(false)
-        console.log(`✅ Balance updated: ${data.totalCoins || 0} coins, you hold ${data.coinsWithBalance || 0}`)
+        // Only log success, not errors
+        // console.log(`✅ Balance updated: ${data.totalCoins || 0} coins, you hold ${data.coinsWithBalance || 0}`)
         // Also refresh native balance
         loadNativeBalance()
       } else {
-        throw new Error('Failed to fetch coins')
+        // Set empty arrays on error instead of throwing
+        setAllCoins([])
+        setUserCoins([])
+        setLoadingCoins(false)
       }
     } catch (e: any) {
-      console.error('Failed to load coins:', e)
-      // Set empty arrays on error
+      // Silently handle errors - don't spam console
       setAllCoins([])
       setUserCoins([])
       setLoadingCoins(false)
@@ -133,11 +167,25 @@ export default function GamingPage() {
   // Load PumpPlay rounds
   useEffect(() => {
     if (activeTab !== 'pumpplay') return
-    const loadRounds = () => {
-      fetch(`${backend}/gaming/pumpplay/rounds`)
-        .then(r => r.json())
-        .then(data => setRounds(data.rounds || []))
-        .catch(() => {})
+    const loadRounds = async () => {
+      try {
+        // Try backend first
+        let response = await fetch(`${backend}/gaming/pumpplay/rounds`, { 
+          signal: AbortSignal.timeout(3000) 
+        }).catch(() => null)
+        
+        if (!response || !response.ok) {
+          // Fallback to Next.js API
+          response = await fetch('/api/gaming/pumpplay/rounds')
+        }
+        
+        if (response && response.ok) {
+          const data = await response.json()
+          setRounds(data.rounds || [])
+        }
+      } catch (e) {
+        console.warn('Failed to load rounds:', e)
+      }
     }
     loadRounds()
     const interval = setInterval(loadRounds, 10000)
@@ -147,11 +195,25 @@ export default function GamingPage() {
   // Load Meme Royale battles
   useEffect(() => {
     if (activeTab !== 'meme-royale') return
-    const loadBattles = () => {
-      fetch(`${backend}/gaming/meme-royale/battles`)
-        .then(r => r.json())
-        .then(data => setBattles(data.battles || []))
-        .catch(() => {})
+    const loadBattles = async () => {
+      try {
+        // Try backend first
+        let response = await fetch(`${backend}/gaming/meme-royale/battles`, { 
+          signal: AbortSignal.timeout(3000) 
+        }).catch(() => null)
+        
+        if (!response || !response.ok) {
+          // Fallback to Next.js API
+          response = await fetch('/api/gaming/meme-royale/battles')
+        }
+        
+        if (response && response.ok) {
+          const data = await response.json()
+          setBattles(data.battles || [])
+        }
+      } catch (e) {
+        console.warn('Failed to load battles:', e)
+      }
     }
     loadBattles()
     const interval = setInterval(loadBattles, 10000)
@@ -163,13 +225,28 @@ export default function GamingPage() {
     if (activeTab !== 'arcade') return
     const load = async () => {
       try {
+        // Try backend first, fallback to Next.js API
+        const fetchWithFallback = async (path: string) => {
+          try {
+            const response = await fetch(`${backend}${path}`, { 
+              signal: AbortSignal.timeout(3000) 
+            })
+            if (response.ok) return await response.json()
+          } catch {}
+          // Fallback
+          const response = await fetch(`/api${path}`)
+          return response.ok ? await response.json() : { leaderboard: [], recent: [] }
+        }
+        
         const [lb, rc] = await Promise.all([
-          fetch(`${backend}/gaming/coinflip/leaderboard`).then(r=>r.json()),
-          fetch(`${backend}/gaming/coinflip/recent`).then(r=>r.json())
+          fetchWithFallback('/gaming/coinflip/leaderboard'),
+          fetchWithFallback('/gaming/coinflip/recent')
         ])
         setLeaderboard(lb.leaderboard || [])
         setRecent(rc.recent || [])
-      } catch {}
+      } catch (e) {
+        console.warn('Failed to load coinflip data:', e)
+      }
     }
     load()
     const interval = setInterval(load, 10000)
@@ -223,8 +300,8 @@ export default function GamingPage() {
       await tx.wait()
       console.log('Stake transferred:', tx.hash)
       
-      // Record bet
-      const res = await fetch(`${backend}/gaming/pumpplay/bet`, {
+      // Record bet - try backend first, fallback to Next.js API
+      let res = await fetch(`${backend}/gaming/pumpplay/bet`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -234,13 +311,36 @@ export default function GamingPage() {
           amount: parseFloat(betAmount),
           tokenAddress: betToken,
           txHash: tx.hash
+        }),
+        signal: AbortSignal.timeout(5000)
+      }).catch(() => null)
+      
+      if (!res || !res.ok) {
+        // Fallback to Next.js API
+        res = await fetch('/api/gaming/pumpplay/bet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            roundId: selectedRound.id,
+            userAddress: address,
+            coinId: betCoin,
+            amount: parseFloat(betAmount),
+            tokenAddress: betToken,
+            txHash: tx.hash
+          })
         })
-      })
-      const data = await res.json()
+      }
+      
+      let data
+      try {
+        data = await res.json()
+      } catch (e) {
+        throw new Error('Invalid response from server')
+      }
+      
       if (data.success) {
-        alert(`✅ Bet placed successfully!\n\nYou bet ${betAmount} tokens on ${selectedRound.coinDetails.find((c:any) => c.id == betCoin)?.symbol}\n\nWait for round to end!`)
+        alert(`✅ Bet placed successfully!\n\nYou bet ${betAmount} tokens on ${selectedRound.coinDetails?.find((c:any) => c.id == betCoin)?.symbol || betCoin}\n\nWait for round to end!`)
         // Reload rounds and refresh balances
-        fetch(`${backend}/gaming/pumpplay/rounds`).then(r => r.json()).then(d => setRounds(d.rounds || []))
         setTimeout(() => {
           loadCoinsData()
           loadNativeBalance()
@@ -309,8 +409,8 @@ export default function GamingPage() {
       await transferTx.wait()
       console.log('Stake transferred:', transferTx.hash)
       
-      // Start AI battle
-      const res = await fetch(`${backend}/gaming/meme-royale`, {
+      // Start AI battle - try backend first, fallback to Next.js API
+      let res = await fetch(`${backend}/gaming/meme-royale`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -321,9 +421,34 @@ export default function GamingPage() {
           stakeSide,
           tokenAddress: stakeToken,
           txHash: transferTx.hash
+        }),
+        signal: AbortSignal.timeout(5000)
+      }).catch(() => null)
+      
+      if (!res || !res.ok) {
+        // Fallback to Next.js API
+        res = await fetch('/api/gaming/meme-royale/bet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            leftCoin, 
+            rightCoin,
+            userAddress: address,
+            stakeAmount: parseFloat(stakeAmount),
+            stakeSide,
+            tokenAddress: stakeToken,
+            txHash: transferTx.hash
+          })
         })
-      })
-      const data = await res.json()
+      }
+      
+      let data
+      try {
+        data = await res.json()
+      } catch (e) {
+        throw new Error('Invalid response from server')
+      }
+      
       setBattleResult(data)
       
       if (data.judged) {
@@ -397,7 +522,8 @@ export default function GamingPage() {
       await transferTx.wait()
       console.log('Stake transferred:', transferTx.hash)
       
-      const res = await fetch(`${backend}/gaming/coinflip`, {
+      // Try backend first, fallback to Next.js API
+      let res = await fetch(`${backend}/gaming/coinflip`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -406,9 +532,32 @@ export default function GamingPage() {
           guess: flipGuess,
           tokenAddress: flipToken,
           txHash: transferTx.hash
+        }),
+        signal: AbortSignal.timeout(5000)
+      }).catch(() => null)
+      
+      if (!res || !res.ok) {
+        // Fallback to Next.js API
+        res = await fetch('/api/gaming/coinflip/play', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            userAddress: address, 
+            wager: parseFloat(flipWager), 
+            choice: flipGuess, // API uses 'choice' not 'guess'
+            tokenAddress: flipToken,
+            txHash: transferTx.hash
+          })
         })
-      })
-      const data = await res.json()
+      }
+      
+      let data
+      try {
+        data = await res.json()
+      } catch (e) {
+        throw new Error('Invalid response from server')
+      }
+      
       setCoinflipResult(data)
       
       if (data.provenanceHash) {
@@ -442,15 +591,10 @@ export default function GamingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-black p-6 relative overflow-hidden">
-      {/* Animated Background Effects */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 left-20 w-96 h-96 bg-pink-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
-        <div className="absolute top-40 right-20 w-96 h-96 bg-cyan-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
-        <div className="absolute -bottom-20 left-40 w-96 h-96 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-4000"></div>
-      </div>
-
-      <div className="max-w-7xl mx-auto relative z-10">
+    <div className="min-h-screen relative overflow-hidden">
+      <BlobBackground />
+      <div className="relative z-10 p-6">
+        <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <div>
             <h1 className="text-5xl font-black bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500 text-transparent bg-clip-text drop-shadow-[0_0_30px_rgba(168,85,247,0.5)] animate-pulse">
@@ -548,14 +692,93 @@ export default function GamingPage() {
             <h2 className="text-2xl font-black text-transparent bg-gradient-to-r from-yellow-400 via-pink-400 to-purple-400 bg-clip-text drop-shadow-[0_0_10px_rgba(251,191,36,0.5)]">
               🎮 GAMING WITH PLATFORM COINS
             </h2>
-            <div className="text-sm text-cyan-300 font-bold">
-              {allCoins.length} COINS AVAILABLE • {userCoins.length} YOU HOLD
+            <div className="flex items-center gap-4">
+              <div className="text-sm text-cyan-300 font-bold">
+                {allCoins.length} COINS AVAILABLE • {userCoins.length} YOU HOLD
+              </div>
+              {address && (
+                <button
+                  onClick={() => setIsCreateCoinModalOpen(true)}
+                  className="px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold rounded-lg shadow-lg transform hover:scale-105 transition-all duration-200 border-2 border-green-400 text-sm"
+                >
+                  ➕ Create Coin
+                </button>
+              )}
             </div>
           </div>
+          
+          {/* Global Coin Selector */}
+          {address && allCoins.length > 0 && (
+            <div className="mb-4 p-4 bg-black/30 rounded-xl border-2 border-purple-400/50">
+              <label className="block text-sm font-bold text-purple-300 mb-2">
+                🎯 Select Coin for Gaming
+              </label>
+              <div className="flex gap-3 items-center">
+                <select
+                  value={selectedCoin}
+                  onChange={(e) => {
+                    setSelectedCoin(e.target.value)
+                    // Auto-set token for all games when coin is selected
+                    if (e.target.value) {
+                      const coin = userCoins.find(c => c.tokenAddress === e.target.value) || 
+                                  allCoins.find(c => c.tokenAddress === e.target.value)
+                      if (coin) {
+                        setBetToken(e.target.value)
+                        setStakeToken(e.target.value)
+                        setMinesToken(e.target.value)
+                        setFlipToken(e.target.value)
+                      }
+                    }
+                  }}
+                  className="flex-1 border-2 border-purple-400 rounded-lg px-4 py-2 font-medium bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  <option value="">-- Select a coin to play with --</option>
+                  {userCoins.length > 0 && (
+                    <optgroup label="Your Coins (You Hold)">
+                      {userCoins.map((c) => (
+                        <option key={c.tokenAddress || c.id} value={c.tokenAddress || c.id}>
+                          {c.symbol || 'UNKNOWN'} ({parseFloat(c.balance || '0').toFixed(4)}) - {c.name || 'Unknown Token'}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {allCoins.filter(c => !userCoins.find(uc => (uc.tokenAddress || uc.id) === (c.tokenAddress || c.id))).length > 0 && (
+                    <optgroup label="All Platform Coins">
+                      {allCoins
+                        .filter(c => !userCoins.find(uc => (uc.tokenAddress || uc.id) === (c.tokenAddress || c.id)))
+                        .map((c) => (
+                          <option key={c.tokenAddress || c.id} value={c.tokenAddress || c.id}>
+                            {c.symbol || 'UNKNOWN'} (0.0000) - {c.name || 'Unknown Token'} - Buy first to play
+                          </option>
+                        ))}
+                    </optgroup>
+                  )}
+                </select>
+                {selectedCoin && (
+                  <div className="px-4 py-2 bg-green-500/20 border-2 border-green-400 rounded-lg">
+                    <span className="text-green-300 font-bold text-sm">✓ Selected</span>
+                  </div>
+                )}
+              </div>
+              {selectedCoin && (
+                <p className="text-xs text-purple-300 mt-2">
+                  💡 This coin will be used for all games. Change it anytime above.
+                </p>
+              )}
+            </div>
+          )}
           {!address && <p className="text-purple-300 font-semibold">CONNECT WALLET TO VIEW YOUR COINS</p>}
           {address && loadingCoins && <p className="text-pink-300 animate-pulse font-semibold">LOADING PLATFORM COINS...</p>}
           {address && !loadingCoins && allCoins.length === 0 && (
-            <p className="text-gray-500">No coins created yet. Create the first coin on the platform!</p>
+            <div className="flex flex-col items-center gap-4 py-6">
+              <p className="text-gray-500 text-center mb-2">No coins created yet. Create the first coin on the platform!</p>
+              <button
+                onClick={() => setIsCreateCoinModalOpen(true)}
+                className="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold rounded-xl shadow-lg transform hover:scale-105 transition-all duration-200 border-2 border-green-400"
+              >
+                ➕ Create Coin
+              </button>
+            </div>
           )}
           {allCoins.length > 0 && (
             <div>
@@ -564,9 +787,18 @@ export default function GamingPage() {
                   <h3 className="text-sm font-semibold text-green-700 mb-2">✅ Your Holdings ({userCoins.length})</h3>
                   <div className="flex flex-wrap gap-2">
                     {userCoins.map((c, i) => (
-                      <div key={i} className="bg-green-50 border-2 border-green-400 rounded-lg px-3 py-2">
-                        <div className="font-bold text-sm">{c.symbol}</div>
-                        <div className="text-xs text-gray-600">{parseFloat(c.balance).toFixed(4)}</div>
+                      <div 
+                        key={i} 
+                        onClick={() => {
+                          const tokenAddress = c.tokenAddress || c.id
+                          if (tokenAddress) {
+                            router.push(`/token/${tokenAddress}`)
+                          }
+                        }}
+                        className="bg-green-50 border-2 border-green-400 rounded-lg px-3 py-2 cursor-pointer hover:bg-green-100 hover:border-green-500 transition-all duration-200 hover:scale-105"
+                      >
+                        <div className="font-bold text-sm">{c.symbol || 'UNKNOWN'}</div>
+                        <div className="text-xs text-gray-600">{parseFloat(c.balance || '0').toFixed(4)}</div>
                       </div>
                     ))}
                   </div>
@@ -575,11 +807,26 @@ export default function GamingPage() {
               <div>
                 <h3 className="text-sm font-semibold text-blue-700 mb-2">📋 All Platform Coins ({allCoins.length})</h3>
                 <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
-                  {allCoins.slice(0, 20).map((c, i) => (
-                    <div key={i} className={`border rounded-lg px-3 py-1 text-xs ${c.hasBalance ? 'bg-blue-50 border-blue-300' : 'bg-slate-50 border-slate-200'}`}>
-                      <span className="font-semibold">{c.symbol}</span> - {c.name}
-                    </div>
-                  ))}
+                  {allCoins.slice(0, 20).map((c, i) => {
+                    const tokenAddress = c.tokenAddress || c.id
+                    return (
+                      <div 
+                        key={i} 
+                        onClick={() => {
+                          if (tokenAddress) {
+                            router.push(`/token/${tokenAddress}`)
+                          }
+                        }}
+                        className={`border rounded-lg px-3 py-1 text-xs cursor-pointer transition-all duration-200 hover:scale-105 ${
+                          c.hasBalance 
+                            ? 'bg-blue-50 border-blue-300 hover:bg-blue-100 hover:border-blue-400' 
+                            : 'bg-slate-50 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
+                        }`}
+                      >
+                        <span className="font-semibold">{c.symbol || 'UNKNOWN'}</span> - {c.name || 'Unknown Token'}
+                      </div>
+                    )
+                  })}
                   {allCoins.length > 20 && <div className="text-xs text-gray-500 px-2">+{allCoins.length - 20} more...</div>}
                 </div>
               </div>
@@ -679,12 +926,18 @@ export default function GamingPage() {
                     return (
                       <div 
                         key={coin.id} 
-                        className={`border-2 rounded-lg p-4 transition-all ${
-                          isSelected ? 'border-blue-500 bg-blue-100' : 'border-gray-200 bg-slate-50'
+                        className={`border-2 rounded-lg p-4 transition-all cursor-pointer hover:scale-105 ${
+                          isSelected ? 'border-blue-500 bg-blue-100' : 'border-gray-200 bg-slate-50 hover:border-gray-300'
                         }`}
+                        onClick={() => {
+                          const tokenAddress = coin.tokenAddress || coin.id
+                          if (tokenAddress) {
+                            router.push(`/token/${tokenAddress}`)
+                          }
+                        }}
                       >
-                        <div className="font-bold text-lg">{coin.symbol}</div>
-                        <div className="text-xs text-gray-500 mb-2">{coin.name}</div>
+                        <div className="font-bold text-lg hover:underline">{coin.symbol}</div>
+                        <div className="text-xs text-gray-500 mb-2 hover:underline">{coin.name}</div>
                         <div className="text-sm font-semibold text-green-600">
                           💰 Pool: {totalBet.toFixed(2)} tokens
                         </div>
@@ -716,20 +969,26 @@ export default function GamingPage() {
                       <div>
                         <label className="block text-sm font-semibold mb-2">Token to Stake</label>
                         <select
-                          value={betToken}
-                          onChange={(e) => setBetToken(e.target.value)}
+                          value={betToken || selectedCoin}
+                          onChange={(e) => {
+                            setBetToken(e.target.value)
+                            setSelectedCoin(e.target.value)
+                          }}
                           className="w-full border-2 rounded-lg px-3 py-2 font-medium"
                           disabled={isBetting}
                         >
                           <option value="">Select your coin...</option>
                           {userCoins.map((c) => (
-                            <option key={c.tokenAddress} value={c.tokenAddress}>
-                              {c.symbol} ({parseFloat(c.balance).toFixed(4)}) - {c.name}
+                            <option key={c.tokenAddress || c.id} value={c.tokenAddress || c.id}>
+                              {c.symbol || 'UNKNOWN'} ({parseFloat(c.balance || '0').toFixed(4)}) - {c.name || 'Unknown Token'}
                             </option>
                           ))}
                         </select>
                         {userCoins.length === 0 && (
                           <p className="text-xs text-red-600 mt-1">You don't hold any coins. Buy some first!</p>
+                        )}
+                        {selectedCoin && (
+                          <p className="text-xs text-blue-600 mt-1">💡 Using globally selected coin</p>
                         )}
                       </div>
                       
@@ -814,8 +1073,28 @@ export default function GamingPage() {
                 </select>
                 {leftCoin && (
                   <div className="bg-white border-2 rounded-lg p-4">
-                    <div className="font-bold text-xl text-blue-600">{leftCoin.symbol}</div>
-                    <div className="text-sm text-gray-600 mb-2">{leftCoin.name}</div>
+                    <div 
+                      onClick={() => {
+                        const tokenAddress = leftCoin.tokenAddress || leftCoin.id
+                        if (tokenAddress) {
+                          router.push(`/token/${tokenAddress}`)
+                        }
+                      }}
+                      className="font-bold text-xl text-blue-600 cursor-pointer hover:text-blue-800 hover:underline transition-colors"
+                    >
+                      {leftCoin.symbol}
+                    </div>
+                    <div 
+                      onClick={() => {
+                        const tokenAddress = leftCoin.tokenAddress || leftCoin.id
+                        if (tokenAddress) {
+                          router.push(`/token/${tokenAddress}`)
+                        }
+                      }}
+                      className="text-sm text-gray-600 mb-2 cursor-pointer hover:text-gray-800 hover:underline transition-colors"
+                    >
+                      {leftCoin.name}
+                    </div>
                     <button
                       onClick={() => setStakeSide('left')}
                       disabled={isBattling}
@@ -849,8 +1128,28 @@ export default function GamingPage() {
                 </select>
                 {rightCoin && (
                   <div className="bg-white border-2 rounded-lg p-4">
-                    <div className="font-bold text-xl text-purple-600">{rightCoin.symbol}</div>
-                    <div className="text-sm text-gray-600 mb-2">{rightCoin.name}</div>
+                    <div 
+                      onClick={() => {
+                        const tokenAddress = rightCoin.tokenAddress || rightCoin.id
+                        if (tokenAddress) {
+                          router.push(`/token/${tokenAddress}`)
+                        }
+                      }}
+                      className="font-bold text-xl text-purple-600 cursor-pointer hover:text-purple-800 hover:underline transition-colors"
+                    >
+                      {rightCoin.symbol}
+                    </div>
+                    <div 
+                      onClick={() => {
+                        const tokenAddress = rightCoin.tokenAddress || rightCoin.id
+                        if (tokenAddress) {
+                          router.push(`/token/${tokenAddress}`)
+                        }
+                      }}
+                      className="text-sm text-gray-600 mb-2 cursor-pointer hover:text-gray-800 hover:underline transition-colors"
+                    >
+                      {rightCoin.name}
+                    </div>
                     <button
                       onClick={() => setStakeSide('right')}
                       disabled={isBattling}
@@ -871,20 +1170,26 @@ export default function GamingPage() {
               <div>
                 <label className="block text-sm font-semibold mb-2">Token to Stake</label>
                 <select
-                  value={stakeToken}
-                  onChange={(e) => setStakeToken(e.target.value)}
+                  value={stakeToken || selectedCoin}
+                  onChange={(e) => {
+                    setStakeToken(e.target.value)
+                    setSelectedCoin(e.target.value)
+                  }}
                   className="w-full border-2 rounded-lg px-3 py-2 font-medium"
                   disabled={isBattling}
                 >
                   <option value="">Select your coin...</option>
                   {userCoins.map((c) => (
-                    <option key={c.tokenAddress} value={c.tokenAddress}>
-                      {c.symbol} ({parseFloat(c.balance).toFixed(4)}) - {c.name}
+                    <option key={c.tokenAddress || c.id} value={c.tokenAddress || c.id}>
+                      {c.symbol || 'UNKNOWN'} ({parseFloat(c.balance || '0').toFixed(4)}) - {c.name || 'Unknown Token'}
                     </option>
                   ))}
                 </select>
                 {userCoins.length === 0 && (
                   <p className="text-xs text-red-600 mt-1">You don't hold any coins. Buy some first!</p>
+                )}
+                {selectedCoin && (
+                  <p className="text-xs text-blue-600 mt-1">💡 Using globally selected coin</p>
                 )}
               </div>
               
@@ -916,7 +1221,17 @@ export default function GamingPage() {
                 
                 <div className="grid grid-cols-2 gap-6 mb-4">
                   <div className={`border-2 rounded-lg p-4 ${battleResult.winner === 'left' ? 'border-green-500 bg-green-50' : 'border-gray-300'}`}>
-                    <div className="font-bold text-xl mb-2">{leftCoin.symbol}</div>
+                    <div 
+                      onClick={() => {
+                        const tokenAddress = leftCoin.tokenAddress || leftCoin.id
+                        if (tokenAddress) {
+                          router.push(`/token/${tokenAddress}`)
+                        }
+                      }}
+                      className="font-bold text-xl mb-2 cursor-pointer hover:underline transition-colors"
+                    >
+                      {leftCoin.symbol}
+                    </div>
                     <div className="text-4xl font-bold text-blue-600 mb-2">{battleResult.judged.left?.total || 0}/30</div>
                     <div className="text-xs space-y-1 text-gray-700">
                       <div>Virality: {battleResult.judged.left?.virality || 0}/10</div>
@@ -929,7 +1244,17 @@ export default function GamingPage() {
                   </div>
                   
                   <div className={`border-2 rounded-lg p-4 ${battleResult.winner === 'right' ? 'border-green-500 bg-green-50' : 'border-gray-300'}`}>
-                    <div className="font-bold text-xl mb-2">{rightCoin.symbol}</div>
+                    <div 
+                      onClick={() => {
+                        const tokenAddress = rightCoin.tokenAddress || rightCoin.id
+                        if (tokenAddress) {
+                          router.push(`/token/${tokenAddress}`)
+                        }
+                      }}
+                      className="font-bold text-xl mb-2 cursor-pointer hover:underline transition-colors"
+                    >
+                      {rightCoin.symbol}
+                    </div>
                     <div className="text-4xl font-bold text-purple-600 mb-2">{battleResult.judged.right?.total || 0}/30</div>
                     <div className="text-xs space-y-1 text-gray-700">
                       <div>Virality: {battleResult.judged.right?.virality || 0}/10</div>
@@ -1022,10 +1347,20 @@ export default function GamingPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-semibold mb-2">Token to Stake</label>
-                    <select value={minesToken} onChange={(e) => setMinesToken(e.target.value)} className="w-full border-2 rounded-lg px-3 py-2 font-medium">
+                    <select 
+                      value={minesToken || selectedCoin} 
+                      onChange={(e) => {
+                        setMinesToken(e.target.value)
+                        setSelectedCoin(e.target.value)
+                      }} 
+                      className="w-full border-2 rounded-lg px-3 py-2 font-medium"
+                    >
                       <option value="">Select coin...</option>
-                      {userCoins.map((c) => (<option key={c.tokenAddress} value={c.tokenAddress}>{c.symbol} ({parseFloat(c.balance).toFixed(4)})</option>))}
+                      {userCoins.map((c) => (<option key={c.tokenAddress || c.id} value={c.tokenAddress || c.id}>{c.symbol || 'UNKNOWN'} ({parseFloat(c.balance || '0').toFixed(4)})</option>))}
                     </select>
+                    {selectedCoin && (
+                      <p className="text-xs text-blue-600 mt-1">💡 Using globally selected coin</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-semibold mb-2">Bet Amount</label>
@@ -1071,7 +1406,8 @@ export default function GamingPage() {
                       const tx = await tokenContract.transfer('0x2dC274ABC0df37647CEd9212e751524708a68996', amount)
                       await tx.wait()
                       
-                      const res = await fetch(`${backend}/gaming/mines/start`, {
+                      // Try backend first, fallback to Next.js API
+                      let res = await fetch(`${backend}/gaming/mines/start`, {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({
@@ -1080,16 +1416,40 @@ export default function GamingPage() {
                           minesCount,
                           tokenAddress: minesToken,
                           txHash: tx.hash
-                        })
-                      })
+                        }),
+                        signal: AbortSignal.timeout(5000)
+                      }).catch(() => null)
                       
-                      const data = await res.json()
+                      if (!res || !res.ok) {
+                        // Fallback to Next.js API
+                        res = await fetch('/api/gaming/mines/start', {
+                          method: 'POST',
+                          headers: {'Content-Type': 'application/json'},
+                          body: JSON.stringify({
+                            userAddress: address,
+                            betAmount: parseFloat(minesBet),
+                            minesCount,
+                            tokenAddress: minesToken,
+                            txHash: tx.hash
+                          })
+                        })
+                      }
+                      
+                      let data
+                      try {
+                        data = await res.json()
+                      } catch (e) {
+                        throw new Error('Invalid response from server')
+                      }
+                      
                       if (data.success) {
                         setMinesGame(data)
                         setGameStatus('active')
                         setRevealedTiles([])
                         setMinePositions([])
                         setCurrentMultiplier(1.0)
+                      } else {
+                        alert(data.error || 'Failed to start game')
                       }
                     } catch (e: any) {
                       alert(e.message || 'Failed')
@@ -1140,18 +1500,24 @@ export default function GamingPage() {
               <div>
                 <label className="block text-sm font-medium mb-1">Token to Stake</label>
                 <select
-                  value={flipToken}
-                  onChange={(e) => setFlipToken(e.target.value)}
+                  value={flipToken || selectedCoin}
+                  onChange={(e) => {
+                    setFlipToken(e.target.value)
+                    setSelectedCoin(e.target.value)
+                  }}
                   className="w-full border rounded px-3 py-2"
                   disabled={isFlipping}
                 >
                   <option value="">Select your coin...</option>
                   {userCoins.map((c) => (
-                    <option key={c.tokenAddress} value={c.tokenAddress}>
-                      {c.symbol} ({parseFloat(c.balance).toFixed(4)}) - {c.name}
+                    <option key={c.tokenAddress || c.id} value={c.tokenAddress || c.id}>
+                      {c.symbol || 'UNKNOWN'} ({parseFloat(c.balance || '0').toFixed(4)}) - {c.name || 'Unknown Token'}
                     </option>
                   ))}
                 </select>
+                {selectedCoin && (
+                  <p className="text-xs text-blue-600 mt-1">💡 Using globally selected coin</p>
+                )}
                 {userCoins.length === 0 && (
                   <p className="text-xs text-red-600 mt-1">Buy some coins first!</p>
                 )}
@@ -1260,7 +1626,24 @@ export default function GamingPage() {
         <div className="mt-6 text-center text-gray-500 text-sm">
           <p>🎮 All games powered by Polygon Amoy - Decentralized Trading Platform</p>
         </div>
+        </div>
       </div>
+      
+      {/* Token Creator Modal */}
+      <TokenCreatorModal
+        isOpen={isCreateCoinModalOpen}
+        onClose={() => setIsCreateCoinModalOpen(false)}
+        onTokenCreated={(tokenData) => {
+          console.log('✅ Token created:', tokenData)
+          // Refresh coins list after creation
+          if (address) {
+            setTimeout(() => {
+              loadCoinsData()
+            }, 2000) // Wait 2 seconds for backend to index
+          }
+          setIsCreateCoinModalOpen(false)
+        }}
+      />
     </div>
   )
 }

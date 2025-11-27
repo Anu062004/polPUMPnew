@@ -1,21 +1,23 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { useAccount, usePublicClient } from 'wagmi'
-import { ethers, BrowserProvider } from 'ethers'
+import { ethers } from 'ethers'
+import { BrowserProvider, Contract } from 'ethers'
+import { useAccount } from 'wagmi'
+import { Info, TrendingUp, TrendingDown, Loader2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react'
 import { newBondingCurveTradingService } from '../../lib/newBondingCurveTradingService'
-import { Info, X, Copy, ExternalLink } from 'lucide-react'
+import { usePumpAI } from '../providers/PumpAIContext'
 
 interface EnhancedTradingCardProps {
   tokenAddress: string
   tokenName: string
   tokenSymbol: string
-  description: string
+  description?: string
   imageUrl?: string
   metadataUrl?: string
   creator: string
   createdAt: string
-  supply?: string
+  supply: string
   curveAddress?: string
 }
 
@@ -32,105 +34,90 @@ export default function EnhancedTradingCard({
   curveAddress
 }: EnhancedTradingCardProps) {
   const { address: userAddress, isConnected } = useAccount()
-  const publicClient = usePublicClient()
-  
-  // Use the curve address from props
+  const [provider, setProvider] = useState<BrowserProvider | null>(null)
   const [curveAddressState, setCurveAddressState] = useState<string | null>(curveAddress || null)
-  
-  // Trading state
-  const [tradeAmount, setTradeAmount] = useState('')
-  const [tradeType, setTradeType] = useState<'buy' | 'sell'>('buy')
-  const [slippageTolerance, setSlippageTolerance] = useState(0.05) // 5%
-  
-  // Curve info state
   const [curveInfo, setCurveInfo] = useState<any>(null)
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  
-  // Quotes state
+  const [tradeType, setTradeType] = useState<'buy' | 'sell'>('buy')
+  const [tradeAmount, setTradeAmount] = useState('')
   const [buyQuote, setBuyQuote] = useState<any>(null)
   const [sellQuote, setSellQuote] = useState<any>(null)
+  const [slippageTolerance, setSlippageTolerance] = useState(0.05)
   const [isTrading, setIsTrading] = useState(false)
-  
-  // Provider state
-  const [provider, setProvider] = useState<any>(null)
-  
-  // Info modal state - ONLY controlled by button click
-  const [showInfoModal, setShowInfoModal] = useState(false)
-  
-  // Track if button was clicked - this is the ONLY way to open modal
-  const [buttonClicked, setButtonClicked] = useState(false)
-
-  // User balances
   const [userTokenBalance, setUserTokenBalance] = useState('0')
   const [userNativeBalance, setUserNativeBalance] = useState('0')
+  const [showInfoModal, setShowInfoModal] = useState(false)
+  const [tradeSuccess, setTradeSuccess] = useState<string | null>(null)
+  const { setMemory } = usePumpAI()
 
-  // Debug modal state changes
+  // Initialize services and resolve curve address
   useEffect(() => {
-    if (showInfoModal) {
-      console.log('🚨 INFO MODAL OPENED for:', tokenName)
-    } else {
-      console.log('✅ INFO MODAL CLOSED for:', tokenName)
-    }
-  }, [showInfoModal, tokenName])
-
-  // Function to open modal (explicit) - ONLY way to open modal
-  const openInfoModal = () => {
-    console.log('🎯 INFO BUTTON CLICKED - Opening info modal for token:', tokenName)
-    setButtonClicked(true)
-    setShowInfoModal(true)
-  }
-
-  // Function to close modal
-  const closeInfoModal = () => {
-    console.log('Closing info modal')
-    setShowInfoModal(false)
-    setButtonClicked(false)
-  }
-
-  // Close modal only with Escape key
-  useEffect(() => {
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        closeInfoModal()
-      }
-    }
-
-    document.addEventListener('keydown', handleEscape)
-    return () => {
-      document.removeEventListener('keydown', handleEscape)
-    }
-  }, [])
-  
-  // Initialize services
-  useEffect(() => {
-    if (isConnected) {
-      (async () => {
-        try {
-          const eth = (typeof window !== 'undefined') ? (window as any).ethereum : undefined
-          if (!eth) return
-          const ethersProvider = new BrowserProvider(eth)
-          setProvider(ethersProvider)
-          await newBondingCurveTradingService.initialize(ethersProvider)
-        
-          // Use curve address from props if available
-          if (curveAddress && curveAddress !== '' && curveAddress !== 'undefined') {
-            setCurveAddressState(curveAddress)
-            loadCurveInfo(curveAddress)
-          } else if (tokenAddress && tokenAddress !== '' && tokenAddress !== 'undefined') {
-            // Fallback: try to use token address (this won't work for trading)
-            console.warn('⚠️ No curve address provided - trading will not work')
-            setCurveAddressState(null)
+    (async () => {
+      try {
+        if (tokenAddress && tokenAddress !== '' && tokenAddress !== 'undefined') {
+          let resolvedCurveAddress = curveAddress
+          
+          if (!resolvedCurveAddress || resolvedCurveAddress === '' || resolvedCurveAddress === 'undefined') {
+            console.log('🔍 Resolving curve address for token:', tokenAddress)
+            try {
+              const res = await fetch(`/api/token/curve?tokenAddress=${tokenAddress}`)
+              const data = await res.json()
+              
+              if (data.success && data.curveAddress) {
+                console.log('✅ Found curve address:', data.curveAddress)
+                resolvedCurveAddress = data.curveAddress
+              } else {
+                console.warn('⚠️ Could not resolve curve address')
+                setError('Curve address not found. This token may not have been created with the factory.')
+                setCurveAddressState(null)
+                setIsLoading(false)
+                return
+              }
+            } catch (e) {
+              console.warn('Failed to resolve curve address:', e)
+              setError('Failed to resolve curve address. Trading unavailable.')
+              setCurveAddressState(null)
+              setIsLoading(false)
+              return
+            }
           }
-        } catch (error) {
-          console.warn('Failed to initialize services:', error)
+          
+          setCurveAddressState(resolvedCurveAddress)
+          
+          if (isConnected) {
+            const eth = (typeof window !== 'undefined') ? (window as any).ethereum : undefined
+            if (eth) {
+              const ethersProvider = new BrowserProvider(eth)
+              setProvider(ethersProvider)
+              await newBondingCurveTradingService.initialize(ethersProvider)
+              await loadCurveInfo(resolvedCurveAddress!)
+              await updateBalances()
+            }
+          } else {
+            try {
+              const rpcUrl = process.env.NEXT_PUBLIC_EVM_RPC || 'https://polygon-amoy.infura.io/v3/b4f237515b084d4bad4e5de070b0452f'
+              const readProvider = new ethers.JsonRpcProvider(rpcUrl)
+              const curveInfo = await newBondingCurveTradingService.getCurveInfo(resolvedCurveAddress!, readProvider)
+              if (curveInfo) {
+                setCurveInfo(curveInfo)
+              }
+            } catch (e) {
+              console.warn('Could not load curve info without wallet:', e)
+            }
+          }
         }
-      })()
-    }
+      } catch (error) {
+        console.error('Failed to initialize services:', error)
+        setError('Failed to initialize trading service. Please refresh the page.')
+      } finally {
+        setIsLoading(false)
+      }
+    })()
   }, [isConnected, tokenAddress, curveAddress])
   
   const loadCurveInfo = async (curveAddr: string) => {
-    if (!provider) return
+    if (!provider && !isConnected) return
     
     setIsLoading(true)
     setError(null)
@@ -152,7 +139,6 @@ export default function EnhancedTradingCard({
     }
   }
   
-  // Get user balances
   useEffect(() => {
     if (userAddress && curveAddressState && provider) {
       updateBalances()
@@ -163,13 +149,8 @@ export default function EnhancedTradingCard({
     if (!userAddress || !curveAddressState || !provider) return
     
     try {
-      // Get curve info to get the token address
       const curveInfo = await newBondingCurveTradingService.getCurveInfo(curveAddressState)
-      
-      if (!curveInfo) {
-        console.warn('Could not get curve info, skipping balance update')
-        return
-      }
+      if (!curveInfo) return
       
       const [tokenBalance, nativeBalance] = await Promise.all([
         newBondingCurveTradingService.getTokenBalance(curveInfo.tokenAddress, userAddress),
@@ -183,9 +164,10 @@ export default function EnhancedTradingCard({
     }
   }
 
-  // Handle trade amount change
   const handleTradeAmountChange = async (amount: string) => {
     setTradeAmount(amount)
+    setBuyQuote(null)
+    setSellQuote(null)
     
     if (!amount || parseFloat(amount) <= 0 || !curveAddressState) {
       return
@@ -204,98 +186,95 @@ export default function EnhancedTradingCard({
     }
   }
 
-  // Handle trade execution
   const handleTrade = async () => {
-    if (!tradeAmount || parseFloat(tradeAmount) <= 0 || !curveAddressState) {
+    if (!isConnected) {
+      setError('Please connect your wallet to trade')
+      return
+    }
+    
+    if (!tradeAmount || parseFloat(tradeAmount) <= 0) {
+      setError('Please enter a valid trade amount')
+      return
+    }
+    
+    if (!curveAddressState) {
+      setError('Trading unavailable: curve address not found')
+      return
+    }
+    
+    if (!provider) {
+      setError('Wallet provider not initialized. Please refresh the page.')
       return
     }
     
     setIsTrading(true)
+    setError(null)
+    setTradeSuccess(null)
     
     try {
+      if (!(newBondingCurveTradingService as any).signer) {
+        await newBondingCurveTradingService.initialize(provider)
+      }
+      
       let result
       
       if (tradeType === 'buy') {
-        if (!buyQuote) return
-        
-        // Calculate min tokens out with slippage protection
-        const minTokensOut = (parseFloat(buyQuote.outputAmount) * (1 - slippageTolerance)).toString()
-        
-        result = await newBondingCurveTradingService.buyTokens(curveAddressState, tradeAmount, minTokensOut)
+        if (!buyQuote) {
+          const quote = await newBondingCurveTradingService.getBuyQuote(curveAddressState, tradeAmount)
+          if (!quote) {
+            throw new Error('Failed to get buy quote')
+          }
+          setBuyQuote(quote)
+          const minTokensOut = (parseFloat(quote.outputAmount) * (1 - slippageTolerance)).toString()
+          result = await newBondingCurveTradingService.buyTokens(curveAddressState, tradeAmount, minTokensOut)
+        } else {
+          const minTokensOut = (parseFloat(buyQuote.outputAmount) * (1 - slippageTolerance)).toString()
+          result = await newBondingCurveTradingService.buyTokens(curveAddressState, tradeAmount, minTokensOut)
+        }
       } else {
-        if (!sellQuote) return
-        
-        // Calculate min MATIC out with slippage protection
-        const minOgOut = (parseFloat(sellQuote.outputAmount) * (1 - slippageTolerance)).toString()
-        
-        result = await newBondingCurveTradingService.sellTokens(curveAddressState, tradeAmount, minOgOut)
+        if (!sellQuote) {
+          const quote = await newBondingCurveTradingService.getSellQuote(curveAddressState, tradeAmount)
+          if (!quote) {
+            throw new Error('Failed to get sell quote')
+          }
+          setSellQuote(quote)
+          const minOgOut = (parseFloat(quote.outputAmount) * (1 - slippageTolerance)).toString()
+          result = await newBondingCurveTradingService.sellTokens(curveAddressState, tradeAmount, minOgOut)
+        } else {
+          const minOgOut = (parseFloat(sellQuote.outputAmount) * (1 - slippageTolerance)).toString()
+          result = await newBondingCurveTradingService.sellTokens(curveAddressState, tradeAmount, minOgOut)
+        }
       }
       
       if (result.success) {
-        // Clear trade amount and refresh data
         setTradeAmount('')
+        setBuyQuote(null)
+        setSellQuote(null)
         await updateBalances()
         await loadCurveInfo(curveAddressState)
-        
-        // Update user's trading stats in profile
-        try {
-          if (userAddress) {
-            const tradeVolume = parseFloat(tradeAmount)
-            const backendBase = (typeof process !== 'undefined' && (process as any).env && (process as any).env.NEXT_PUBLIC_BACKEND_URL) || 'http://localhost:4000'
-            await fetch(`${backendBase}/profile/${userAddress}/stats`, {
-              method: 'PUT',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                totalTrades: 1, // Increment by 1
-                totalVolume: tradeVolume, // Add this trade's volume
-                tokensHeld: tradeType === 'buy' ? 1 : 0, // Increment if buying
-                favoriteTokens: [tokenSymbol] // Add this token to favorites
-              })
-            })
-          }
-        } catch (profileError) {
-          console.warn('Failed to update trading stats:', profileError)
-          // Don't fail the trade for profile errors
-        }
-        
-        // Show success message
-        alert(`Trade successful! TX: ${result.txHash}`)
+        const shortHash = result.txHash ? `${result.txHash.slice(0, 6)}...${result.txHash.slice(-4)}` : 'N/A'
+        setTradeSuccess(`Trade successful! TX: ${shortHash}`)
+        setTimeout(() => setTradeSuccess(null), 5000)
+
+        // Update Pump AI memory with last trade action
+        setMemory({
+          lastAction: tradeType
+        })
       } else {
-        alert(`Trade failed: ${result.error}`)
+        setError(result.error || 'Trade failed')
       }
     } catch (error: any) {
       console.error('Trade execution failed:', error)
-      alert(`Trade failed: ${error.message}`)
+      setError(error.message || 'Unknown error occurred')
     } finally {
       setIsTrading(false)
     }
   }
 
-  // Utility functions
   const formatBalance = (balance: string) => {
     const num = parseFloat(balance)
     if (isNaN(num)) return '0.00'
     return num.toFixed(6)
-  }
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    // You could add a toast notification here
-  }
-
-  const formatDate = (dateString: string) => {
-    try {
-      const date = new Date(dateString)
-      return date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      })
-    } catch {
-      return 'Unknown date'
-    }
   }
 
   const shortenAddress = (address: string) => {
@@ -303,355 +282,221 @@ export default function EnhancedTradingCard({
     return `${address.slice(0, 6)}...${address.slice(-4)}`
   }
 
-  // Loading state
+  const formatDate = (dateString: string) => {
+    try {
+      const date = new Date(dateString)
+      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+    } catch {
+      return 'Unknown date'
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="animate-pulse">
         <div className="h-48 bg-gray-200 rounded-lg"></div>
-          </div>
+      </div>
     )
   }
 
   return (
     <>
-      {/* Main Card */}
-      <div className="space-y-4 bg-sky-100 rounded-2xl p-4 border-4 border-black">
-        {/* Header */}
-        <div className="flex items-center space-x-4 mb-6">
-          <div className="w-16 h-16 rounded-full flex items-center justify-center text-white text-2xl font-bold bg-slate-900 border-4 border-black shadow-[4px_4px_0_#000]">
-            {tokenSymbol.charAt(0)}
-          </div>
-          <div className="flex-1">
-            <div className="flex items-center gap-3">
-              <h2 className="text-2xl font-extrabold text-gray-900">
-                {tokenName} ({tokenSymbol})
-              </h2>
-              {curveInfo && (
-                <span className="px-3 py-1 bg-yellow-200 border-2 border-black text-black text-sm font-extrabold rounded-full shadow-[2px_2px_0_#000]">
-                  {parseFloat(curveInfo.currentPrice).toFixed(6)} MATIC
-                </span>
-              )}
-              <button
-                onClick={openInfoModal}
-                className="p-2 text-gray-800 hover:text-black hover:bg-yellow-200 rounded-full border-2 border-black shadow-[2px_2px_0_#000]"
-                title="View token information"
-              >
-                <Info className="w-5 h-5" />
-              </button>
-            </div>
-            <p className="text-gray-600 mt-1">
-              {tokenName} ({tokenSymbol}) - A memecoin created on Polygon Amoy. Created by {shortenAddress(creator)} on {formatDate(createdAt)}.
-            </p>
-          </div>
-        </div>
+      {/* Modern Sleek Card Design */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 border border-purple-500/20 shadow-2xl backdrop-blur-xl">
+        {/* Animated Background Gradient */}
+        <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 via-transparent to-cyan-500/10 animate-pulse"></div>
         
-        {/* Current Price Display */}
-        {curveInfo && (
-          <div className="bg-gradient-to-r from-blue-50 to-green-50 border border-blue-200 rounded-lg p-4 mb-6">
-            <div className="flex items-center justify-between">
+        <div className="relative z-10 p-8 space-y-6">
+          {/* Header */}
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-cyan-500 flex items-center justify-center text-white text-2xl font-bold shadow-lg">
+                {tokenSymbol.charAt(0)}
+              </div>
               <div>
-                <span className="text-sm font-medium text-blue-800">Current Price:</span>
-                <div className="text-2xl font-bold text-blue-900 mt-1">
-                  {parseFloat(curveInfo.currentPrice).toFixed(6)} MATIC per {tokenSymbol}
-          </div>
+                <h2 className="text-3xl font-bold text-white mb-1">{tokenName}</h2>
+                <p className="text-purple-300 text-sm">{tokenSymbol}</p>
+              </div>
             </div>
-                <div className="text-right">
-                <div className="text-sm text-gray-600">Market Cap</div>
-                <div className="text-lg font-semibold text-gray-900">
-                  {curveInfo.ogReserve} MATIC
-        </div>
-            </div>
-            </div>
-            <div className="mt-3 pt-3 border-t border-blue-200">
-              <div className="grid grid-cols-3 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-600">MATIC Reserve:</span>
-                  <div className="font-mono text-gray-900">{curveInfo.ogReserve}</div>
-                </div>
-                <div>
-                  <span className="text-gray-600">Token Reserve:</span>
-                  <div className="font-mono text-gray-900">{curveInfo.tokenReserve}</div>
-                </div>
-                <div>
-                  <span className="text-gray-600">Trading Fee:</span>
-                  <div className="font-mono text-gray-900">{curveInfo.feeBps / 100}%</div>
-          </div>
-            </div>
-            </div>
-          </div>
-        )}
-
-        {/* Trading Interface */}
-        {isConnected && curveAddressState && (
-          <div className="rounded-2xl p-4 mb-6 bg-white border-4 border-black shadow-[6px_6px_0_#000]">
-            <h3 className="text-lg font-extrabold mb-4 text-slate-900">Trade {tokenSymbol}</h3>
-            
-            {/* Trade Type Toggle */}
-            <div className="flex bg-white rounded-lg p-1 mb-4 border-4 border-black shadow-[4px_4px_0_#000] hover:shadow-[3px_3px_0_#000]">
-              <button
-                onClick={() => setTradeType('buy')}
-                className={`flex-1 py-2 px-4 rounded-md font-extrabold transition-transform border-4 border-black hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[1px_1px_0_#000] ${
-                  tradeType === 'buy'
-                    ? 'bg-green-400 text-black shadow-[3px_3px_0_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#000]'
-                    : 'bg-white text-slate-800 hover:bg-slate-100 shadow-[3px_3px_0_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#000]'
-                }`}
-              >
-                Buy
-              </button>
-              <button
-                onClick={() => setTradeType('sell')}
-                className={`flex-1 py-2 px-4 rounded-md font-extrabold transition-transform border-4 border-black hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[1px_1px_0_#000] ${
-                  tradeType === 'sell'
-                    ? 'bg-red-400 text-black shadow-[3px_3px_0_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#000]'
-                    : 'bg-white text-slate-800 hover:bg-slate-100 shadow-[3px_3px_0_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#000]'
-                }`}
-              >
-                Sell
-              </button>
-            </div>
-
-            {/* Trade Amount Input */}
-            <div className="mb-4">
-              <label className="block text-sm font-extrabold text-slate-900 mb-2">
-                {tradeType === 'buy' ? 'Amount of MATIC to spend' : 'Amount of tokens to sell'}
-              </label>
-                <input
-                  type="number"
-                  value={tradeAmount}
-                  onChange={(e) => handleTradeAmountChange(e.target.value)}
-                  placeholder={tradeType === 'buy' ? '0.0' : '0.0'}
-                  className="w-full px-3 py-2 rounded-md border-4 border-black shadow-[4px_4px_0_#000] focus:outline-none focus:ring-0 focus:border-black active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0_#000]"
-                  step="0.1"
-                  min="0"
-                />
-            </div>
-
-            {/* Slippage Tolerance */}
-            <div className="mb-4">
-              <label className="block text-sm font-extrabold text-slate-900 mb-2">
-                Slippage Tolerance: {(slippageTolerance * 100).toFixed(1)}%
-              </label>
-              <input
-                type="range"
-                min="0.01"
-                max="0.20"
-                step="0.01"
-                value={slippageTolerance}
-                onChange={(e) => setSlippageTolerance(parseFloat(e.target.value))}
-                className="w-full h-2 bg-white rounded-lg appearance-none cursor-pointer border-4 border-black shadow-[2px_2px_0_#000]"
-              />
-            </div>
-
-            {/* Execute Trade Button */}
-            <button
-              onClick={handleTrade}
-              disabled={isTrading || !tradeAmount || parseFloat(tradeAmount) <= 0}
-              className={`w-full py-2 px-4 rounded-md font-extrabold transition-transform border-4 border-black shadow-[6px_6px_0_#000] hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-[3px_3px_0_#000] active:translate-x-[3px] active:translate-y-[3px] active:shadow-[3px_3px_0_#000] ${
-                isTrading || !tradeAmount || parseFloat(tradeAmount) <= 0
-                  ? 'bg-gray-300 text-slate-600 cursor-not-allowed'
-                  : tradeType === 'buy'
-                  ? 'bg-green-400 text-black'
-                  : 'bg-red-400 text-black'
-              }`}
-            >
-              {isTrading ? 'Processing...' : `${tradeType === 'buy' ? 'Buy' : 'Sell'} ${tokenSymbol}`}
-            </button>
-          </div>
-        )}
-
-        {/* No Curve Message */}
-        {!curveAddressState && isConnected && (
-          <div className="text-center py-8 text-gray-500">
-            {!tokenAddress || tokenAddress === '' || tokenAddress === 'undefined' ? (
-              <div>
-                <div className="text-yellow-600 mb-2">⚠️ Legacy Token</div>
-                <div className="text-sm">
-                  This token was created before bonding curves were implemented. Only new tokens created with the 'Create Token' button support trading.
+            {curveInfo && (
+              <div className="text-right">
+                <div className="text-xs text-purple-400 mb-1">Price</div>
+                <div className="text-2xl font-bold text-white">
+                  {parseFloat(curveInfo.currentPrice).toFixed(6)} <span className="text-sm text-purple-300">MATIC</span>
                 </div>
               </div>
-            ) : (
-              <div>This token doesn't have a bonding curve yet.</div>
+            )}
+          </div>
+
+          {/* Price Stats Card */}
+          {curveInfo && (
+            <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-6 border border-white/10">
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <div className="text-xs text-purple-400 mb-1">MATIC Reserve</div>
+                  <div className="text-lg font-bold text-white">{parseFloat(curveInfo.ogReserve).toFixed(2)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-purple-400 mb-1">Token Reserve</div>
+                  <div className="text-lg font-bold text-white">{parseFloat(curveInfo.tokenReserve).toFixed(2)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-purple-400 mb-1">Fee</div>
+                  <div className="text-lg font-bold text-white">{curveInfo.feeBps / 100}%</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Trading Interface */}
+          {isConnected && curveAddressState ? (
+            <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-6 border border-white/10 space-y-4">
+              {/* Trade Type Toggle */}
+              <div className="flex gap-2 bg-white/5 rounded-xl p-1">
+                <button
+                  onClick={() => {
+                    setTradeType('buy')
+                    setBuyQuote(null)
+                    setSellQuote(null)
+                  }}
+                  className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all ${
+                    tradeType === 'buy'
+                      ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg'
+                      : 'text-purple-300 hover:text-white'
+                  }`}
+                >
+                  <TrendingUp className="w-4 h-4 inline mr-2" />
+                  Buy
+                </button>
+                <button
+                  onClick={() => {
+                    setTradeType('sell')
+                    setBuyQuote(null)
+                    setSellQuote(null)
+                  }}
+                  className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all ${
+                    tradeType === 'sell'
+                      ? 'bg-gradient-to-r from-red-500 to-rose-500 text-white shadow-lg'
+                      : 'text-purple-300 hover:text-white'
+                  }`}
+                >
+                  <TrendingDown className="w-4 h-4 inline mr-2" />
+                  Sell
+                </button>
+              </div>
+
+              {/* Amount Input */}
+              <div>
+                <label className="block text-sm text-purple-300 mb-2">
+                  {tradeType === 'buy' ? 'MATIC Amount' : 'Token Amount'}
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={tradeAmount}
+                    onChange={(e) => handleTradeAmountChange(e.target.value)}
+                    placeholder="0.0"
+                    className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white placeholder-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    step="0.1"
+                    min="0"
+                    disabled={isTrading}
+                  />
+                  {tradeAmount && (buyQuote || sellQuote) && (
+                    <div className="mt-2 text-sm text-purple-300">
+                      You'll receive: <span className="text-white font-semibold">
+                        {tradeType === 'buy' 
+                          ? `${formatBalance(buyQuote?.outputAmount || '0')} ${tokenSymbol}`
+                          : `${formatBalance(sellQuote?.outputAmount || '0')} MATIC`
+                        }
+                      </span>
+                    </div>
                   )}
                 </div>
-              )}
-
-        {/* Balances */}
-        {isConnected && (
-          <div className="grid grid-cols-2 gap-4 mb-6">
-            <div className="bg-gray-50 p-3 rounded-lg">
-              <div className="text-sm text-gray-600 font-medium">Your {tokenSymbol}</div>
-              <div className="text-lg font-bold text-gray-900">
-                {formatBalance(userTokenBalance)}
               </div>
-            </div>
-            <div className="bg-gray-50 p-3 rounded-lg">
-              <div className="text-sm text-gray-600 font-medium">Your MATIC</div>
-              <div className="text-lg font-bold text-gray-900">
-                {formatBalance(userNativeBalance)} MATIC
+
+              {/* Slippage */}
+              <div>
+                <label className="block text-sm text-purple-300 mb-2">
+                  Slippage: {(slippageTolerance * 100).toFixed(1)}%
+                </label>
+                <input
+                  type="range"
+                  min="0.01"
+                  max="0.20"
+                  step="0.01"
+                  value={slippageTolerance}
+                  onChange={(e) => setSlippageTolerance(parseFloat(e.target.value))}
+                  className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                  disabled={isTrading}
+                />
               </div>
-        </div>
-          </div>
-        )}
 
-        {/* Error Display */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
-            <div className="text-red-800 text-sm">{error}</div>
-          </div>
-        )}
-      </div>
-
-      {/* Info Modal */}
-      {showInfoModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <h2 className="text-xl font-bold text-gray-900">Token Information</h2>
+              {/* Trade Button */}
               <button
-                onClick={closeInfoModal}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+                onClick={handleTrade}
+                disabled={isTrading || !tradeAmount || parseFloat(tradeAmount) <= 0}
+                className={`w-full py-4 rounded-xl font-bold text-white transition-all ${
+                  isTrading || !tradeAmount || parseFloat(tradeAmount) <= 0
+                    ? 'bg-gray-600 cursor-not-allowed'
+                    : tradeType === 'buy'
+                    ? 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 shadow-lg hover:shadow-xl transform hover:scale-[1.02]'
+                    : 'bg-gradient-to-r from-red-500 to-rose-500 hover:from-red-600 hover:to-rose-600 shadow-lg hover:shadow-xl transform hover:scale-[1.02]'
+                }`}
               >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Content */}
-            <div className="p-6 space-y-6">
-              {/* Token Basic Info */}
-              <div className="flex items-center space-x-3">
-                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-xl font-bold">
-                  {tokenSymbol.charAt(0)}
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900">{tokenName}</h3>
-                  <div className="flex gap-2 mt-1">
-                    <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
-                      {tokenSymbol}
-                    </span>
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                      curveAddressState 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {curveAddressState ? '✅ Tradable' : '⚠️ Legacy'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Token Details */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                  <p className="text-gray-900">{description || 'No description available'}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Creator</label>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-gray-900 font-mono text-sm">
-                      {shortenAddress(creator)}
-                    </span>
-                    <button
-                      onClick={() => copyToClipboard(creator)}
-                      className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                      title="Copy address"
-                    >
-                      <Copy className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Created</label>
-                  <p className="text-gray-900">{formatDate(createdAt)}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Supply</label>
-                  <p className="text-gray-900">{supply ? `${supply} ${tokenSymbol}` : 'Unknown'}</p>
-                </div>
-              </div>
-
-              {/* Contract Addresses */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm font-medium text-gray-700">Token Contract:</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm font-mono text-gray-900">
-                      {shortenAddress(tokenAddress)}
-                    </span>
-                    <button
-                      onClick={() => copyToClipboard(tokenAddress)}
-                      className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                      title="Copy address"
-                    >
-                      <Copy className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
-                {curveAddressState && (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm font-medium text-gray-700">Bonding Curve:</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm font-mono text-gray-900">
-                        {shortenAddress(curveAddressState)}
-                      </span>
-                      <button
-                        onClick={() => copyToClipboard(curveAddressState)}
-                        className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                        title="Copy address"
-                      >
-                        <Copy className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
+                {isTrading ? (
+                  <span className="flex items-center justify-center">
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Processing...
+                  </span>
+                ) : (
+                  `${tradeType === 'buy' ? 'Buy' : 'Sell'} ${tokenSymbol}`
                 )}
+              </button>
+
+              {/* Balances */}
+              <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/10">
+                <div>
+                  <div className="text-xs text-purple-400 mb-1">Your {tokenSymbol}</div>
+                  <div className="text-lg font-bold text-white">{formatBalance(userTokenBalance)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-purple-400 mb-1">Your MATIC</div>
+                  <div className="text-lg font-bold text-white">{formatBalance(userNativeBalance)}</div>
+                </div>
               </div>
-
-              {/* Trading Status */}
-              {curveAddressState && (
-                <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                  <div className="flex items-center gap-2 text-green-800">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <span className="text-sm font-medium">Trading Enabled</span>
-                  </div>
-                  <p className="text-sm text-green-700 mt-1">
-                    This token supports immediate trading through its bonding curve.
-                  </p>
-          </div>
-        )}
-
-              {/* Curve Info */}
-              {curveInfo && (
-                <div className="border border-gray-200 rounded-lg p-4">
-                  <h4 className="font-medium text-gray-900 mb-3">Bonding Curve Information</h4>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="text-gray-600">MATIC Reserve:</span>
-                      <span className="ml-2 font-mono">{curveInfo.ogReserve}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Token Reserve:</span>
-                      <span className="ml-2 font-mono">{curveInfo.tokenReserve}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Current Price:</span>
-                      <span className="ml-2 font-mono">{curveInfo.currentPrice} MATIC</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Fee:</span>
-                      <span className="ml-2 font-mono">{curveInfo.feeBps / 100}%</span>
-                    </div>
-                  </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-purple-300">
+              {!isConnected ? (
+                <div>
+                  <AlertCircle className="w-12 h-12 mx-auto mb-4 text-purple-400" />
+                  <p>Connect your wallet to start trading</p>
+                </div>
+              ) : (
+                <div>
+                  <XCircle className="w-12 h-12 mx-auto mb-4 text-red-400" />
+                  <p className="mb-2">Trading unavailable</p>
+                  <p className="text-sm text-purple-400">{error || 'Curve address not found'}</p>
                 </div>
               )}
             </div>
-          </div>
+          )}
+
+          {/* Success/Error Messages */}
+          {tradeSuccess && (
+            <div className="bg-green-500/20 border border-green-500/50 rounded-xl p-4 flex items-center gap-3">
+              <CheckCircle2 className="w-5 h-5 text-green-400" />
+              <span className="text-green-300">{tradeSuccess}</span>
+            </div>
+          )}
+          {error && (
+            <div className="bg-red-500/20 border border-red-500/50 rounded-xl p-4 flex items-center gap-3">
+              <XCircle className="w-5 h-5 text-red-400" />
+              <span className="text-red-300">{error}</span>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </>
   )
 }

@@ -25,6 +25,16 @@ export const CONTRACT_CONFIG = {
   // Auto Trading Factory (optional, for automatic pool creation)
   AUTO_TRADING_FACTORY_ADDRESS: process.env.NEXT_PUBLIC_AUTO_TRADING_FACTORY_ADDRESS || '0xA01CD368F39956ce09e538ed731D685b60Ea68eb',
   
+  // PumpFun Factory (pump.fun-style bonding curve)
+  PUMPFUN_FACTORY_ADDRESS: process.env.NEXT_PUBLIC_PUMPFUN_FACTORY_ADDRESS || '',
+  
+  // Default bonding curve parameters
+  DEFAULT_BASE_PRICE: process.env.NEXT_PUBLIC_DEFAULT_BASE_PRICE || '0.0001', // 0.0001 MATIC per token
+  DEFAULT_PRICE_INCREMENT: process.env.NEXT_PUBLIC_DEFAULT_PRICE_INCREMENT || '0.0000001', // Linear increment
+  DEFAULT_GROWTH_RATE_BPS: process.env.NEXT_PUBLIC_DEFAULT_GROWTH_RATE_BPS || '100', // 1% for exponential
+  DEFAULT_USE_EXPONENTIAL: process.env.NEXT_PUBLIC_DEFAULT_USE_EXPONENTIAL === 'true' || false,
+  DEFAULT_MAX_SUPPLY: process.env.NEXT_PUBLIC_DEFAULT_MAX_SUPPLY || '1000000', // 1M tokens max
+  
   // Network configuration
   NETWORK: 'polygon-amoy-testnet',
   CHAIN_ID: 80002,

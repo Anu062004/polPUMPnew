@@ -35,6 +35,7 @@ async function initDatabase() {
       supply TEXT NOT NULL,
       imageHash TEXT,
       tokenAddress TEXT,
+      curveAddress TEXT,
       txHash TEXT NOT NULL,
       creator TEXT NOT NULL,
       createdAt INTEGER NOT NULL,
@@ -50,6 +51,13 @@ async function initDatabase() {
       totalTransactions INTEGER
     )
   `)
+  
+  // Add curveAddress column if it doesn't exist (migration)
+  try {
+    await db.exec(`ALTER TABLE coins ADD COLUMN curveAddress TEXT;`)
+  } catch (e) {
+    // Column already exists
+  }
 
   // Create indexes for better performance
   await db.exec(`
@@ -166,6 +174,7 @@ export async function POST(request: NextRequest) {
       supply: coinData.supply,
       imageHash: safeImageHash,
       tokenAddress: coinData.tokenAddress || null,
+      curveAddress: coinData.curveAddress || null,
       txHash: coinData.txHash,
       creator: coinData.creator,
       createdAt: Date.now(),
@@ -185,13 +194,13 @@ export async function POST(request: NextRequest) {
     // Insert into database
     await db.run(`
       INSERT INTO coins (
-        id, name, symbol, supply, imageHash, tokenAddress, txHash, 
+        id, name, symbol, supply, imageHash, tokenAddress, curveAddress, txHash, 
         creator, createdAt, description, telegramUrl, xUrl, discordUrl, websiteUrl,
         marketCap, price, volume24h, holders, totalTransactions
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       newCoin.id, newCoin.name, newCoin.symbol, newCoin.supply,
-      newCoin.imageHash, newCoin.tokenAddress, newCoin.txHash,
+      newCoin.imageHash, newCoin.tokenAddress, newCoin.curveAddress, newCoin.txHash,
       newCoin.creator, newCoin.createdAt, newCoin.description,
       newCoin.telegramUrl, newCoin.xUrl, newCoin.discordUrl, newCoin.websiteUrl,
       newCoin.marketCap, newCoin.price, newCoin.volume24h,
@@ -216,13 +225,15 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Danger zone: delete all coins (for resets). Security:
+// Danger zone: delete coins (for resets). Security:
 // - If ADMIN_SECRET is set, require it as ?secret=...
 // - If not set, allow only when not in production
+// - Supports ?keep=PEPA to keep only coins with symbol PEPA
 export async function DELETE(request: NextRequest) {
   try {
     const url = new URL(request.url)
     const provided = url.searchParams.get('secret') || ''
+    const keepSymbol = url.searchParams.get('keep') || ''
     const adminSecret = process.env.ADMIN_SECRET
 
     if (adminSecret) {
@@ -234,10 +245,27 @@ export async function DELETE(request: NextRequest) {
     }
 
     const db = await getDatabase()
-    await db.exec('DELETE FROM coins')
-    await db.close()
-
-    return NextResponse.json({ success: true, message: 'All coins deleted' })
+    
+    if (keepSymbol) {
+      // Delete all coins except those with the specified symbol (case-insensitive)
+      const result = await db.run(
+        'DELETE FROM coins WHERE LOWER(symbol) != LOWER(?)',
+        [keepSymbol]
+      )
+      await db.close()
+      
+      return NextResponse.json({ 
+        success: true, 
+        message: `All coins deleted except ${keepSymbol}`,
+        deleted: result.changes 
+      })
+    } else {
+      // Delete all coins
+      await db.exec('DELETE FROM coins')
+      await db.close()
+      
+      return NextResponse.json({ success: true, message: 'All coins deleted' })
+    }
   } catch (error) {
     console.error('Failed to delete coins:', error)
     return NextResponse.json(

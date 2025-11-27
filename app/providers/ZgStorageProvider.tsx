@@ -1,19 +1,23 @@
 import { createContext, useState, useEffect, useContext, ReactNode } from "react";
-import { ZgStorageService, getZgStorageService } from "../lib/zg-storage";
+import { ZgStorageService, getZgStorageService } from "../../lib/zg-storage";
+import { useAccount } from "wagmi";
 
 export const ZgStorageContext = createContext<{
   zgStorage: ZgStorageService | null;
   isConnected: boolean;
   error?: string;
+  isWalletConnected: boolean;
 }>({ 
   zgStorage: null, 
-  isConnected: false 
+  isConnected: false,
+  isWalletConnected: false
 });
 
 export const ZgStorageProvider = ({ children }: { children: ReactNode }) => {
   const [zgStorage, setZgStorage] = useState<ZgStorageService | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const { isConnected: isWalletConnected } = useAccount();
 
   const initializeZgStorage = async () => {
     try {
@@ -31,7 +35,7 @@ export const ZgStorageProvider = ({ children }: { children: ReactNode }) => {
         setIsConnected(true);
       } else {
         setIsConnected(false);
-        setError('Failed to connect to storage');
+        setError('Failed to connect to storage network');
       }
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Unknown error');
@@ -44,13 +48,13 @@ export const ZgStorageProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   return (
-    <ZgStorageContext.Provider value={{ zgStorage, isConnected, error }}>
+    <ZgStorageContext.Provider value={{ zgStorage, isConnected, error, isWalletConnected }}>
       {children}
     </ZgStorageContext.Provider>
   );
 };
 
 export const useZgStorage = () => {
-  const { zgStorage, isConnected, error } = useContext(ZgStorageContext);
-  return { zgStorage, isConnected, error };
+  const { zgStorage, isConnected, error, isWalletConnected } = useContext(ZgStorageContext);
+  return { zgStorage, isConnected, error, isWalletConnected };
 };

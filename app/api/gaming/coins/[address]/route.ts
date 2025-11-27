@@ -177,24 +177,36 @@ export async function GET(
       const { ogStorageSDK } = await import('@/lib/0gStorageSDK')
       const storedCoins = await ogStorageSDK.getAllCoins()
       
-      // Merge stored coins that aren't already in database
+      // Merge stored coins that aren't already in database.
+      // Many legacy coins were stored without an explicit tokenAddress field,
+      // using `id` as the token address instead. We handle both shapes here.
       for (const coin of storedCoins) {
-        if (!(coin as any).tokenAddress) continue
-        
-        const exists = coinsWithData.find(c => 
-          c.tokenAddress?.toLowerCase() === (coin as any).tokenAddress?.toLowerCase()
+        const rawTokenAddress =
+          (coin as any).tokenAddress ||
+          (typeof coin.id === 'string' &&
+            coin.id.startsWith('0x') &&
+            coin.id.length === 42
+              ? coin.id
+              : null)
+
+        if (!rawTokenAddress) continue
+
+        const tokenAddress = rawTokenAddress.toLowerCase()
+
+        const exists = coinsWithData.find(
+          (c) => c.tokenAddress?.toLowerCase() === tokenAddress
         )
-        
+
         if (!exists) {
           try {
-            const balance = await getTokenBalance(provider, (coin as any).tokenAddress, userAddress)
+            const balance = await getTokenBalance(provider, tokenAddress, userAddress)
             const hasBalance = parseFloat(balance) > 0
 
             const coinData = {
               id: coin.id,
               name: coin.name,
               symbol: coin.symbol,
-              tokenAddress: (coin as any).tokenAddress,
+              tokenAddress,
               curveAddress: (coin as any).curveAddress || null,
               imageHash: coin.imageRootHash || coin.imageUrl,
               description: coin.description,
