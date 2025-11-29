@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ethers } from 'ethers'
 import { sql } from '@vercel/postgres'
-import { initializeSchema } from '../../../../lib/postgresManager'
+import { initializeSchema } from '@/lib/postgresManager'
 
 // ERC20 ABI for balance checking
 const ERC20_ABI = [
