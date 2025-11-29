@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { pinataService } from '../../../lib/pinataService'
 
 // Proxy image download through Next API to avoid mixed content/CORS
+// Supports IPFS hashes (Pinata) and local storage
 export async function GET(
   request: NextRequest,
   { params }: { params: { hash: string } }
@@ -8,6 +10,46 @@ export async function GET(
   try {
     const hash = params.hash
     if (!hash) return new NextResponse('Missing image hash', { status: 400 })
+
+    // Check if hash looks like an IPFS hash (starts with Qm, bafy, or is 46 chars base58)
+    const isIPFSHash = /^Qm[1-9A-HJ-NP-Za-km-z]{44}$/.test(hash) || 
+                       /^baf[a-z0-9]{56,}$/.test(hash) ||
+                       hash.length === 46
+
+    // Try IPFS (Pinata gateway) first if it looks like an IPFS hash
+    if (isIPFSHash) {
+      try {
+        const ipfsUrl = pinataService.getGatewayUrl(hash)
+        console.log('🌐 Fetching from IPFS:', ipfsUrl)
+        
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+        
+        const res = await fetch(ipfsUrl, {
+          cache: 'no-store',
+          signal: controller.signal,
+          headers: {
+            'Accept': 'image/*'
+          }
+        })
+        
+        clearTimeout(timeoutId)
+        
+        if (res.ok) {
+          const buffer = Buffer.from(await res.arrayBuffer())
+          const contentType = res.headers.get('content-type') || 'image/png'
+          
+          return new NextResponse(buffer, {
+            headers: {
+              'Content-Type': contentType,
+              'Cache-Control': 'public, max-age=31536000, immutable'
+            }
+          })
+        }
+      } catch (ipfsError: any) {
+        console.log('IPFS fetch failed, trying other sources:', ipfsError?.message || ipfsError)
+      }
+    }
 
     // Try backend first if available
     const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000'

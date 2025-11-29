@@ -69,7 +69,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      outcome,
+      result: outcome, // 'heads' or 'tails' - the actual coin flip result
+      outcome: userWon ? 'win' : 'lose', // 'win' or 'lose' - whether user won
       userChoice: choice,
       won: userWon,
       blockNumber,

@@ -99,7 +99,7 @@ export default function ImageUpload({ onImageSelect, selectedImage, className = 
         ) : (
           <div className="relative border border-white/20 rounded-xl p-4 nb-press">
             <div className="flex items-center space-x-4">
-              <div className="w-16 h-16 rounded-lg overflow-hidden bg-black/20">
+              <div className="w-16 h-16 rounded-lg overflow-hidden bg-[#8C52FF]/10">
                 {previewUrl && (
                   <img 
                     src={previewUrl} 

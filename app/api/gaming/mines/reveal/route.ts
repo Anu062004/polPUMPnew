@@ -13,8 +13,48 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    await databaseManager.initialize()
-    const db = await databaseManager.getConnection()
+    try {
+      await databaseManager.initialize()
+    } catch (dbError: any) {
+      console.error('Database initialization error:', dbError)
+      return NextResponse.json(
+        { success: false, error: 'Database not available. Please try again later.' },
+        { status: 503 }
+      )
+    }
+
+    let db
+    try {
+      db = await databaseManager.getConnection()
+    } catch (dbError: any) {
+      console.error('Database connection error:', dbError)
+      return NextResponse.json(
+        { success: false, error: 'Database connection failed. Please try again.' },
+        { status: 503 }
+      )
+    }
+
+    // Ensure table exists
+    try {
+      await db.run(`
+        CREATE TABLE IF NOT EXISTS gaming_mines (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          userAddress TEXT NOT NULL,
+          betAmount REAL NOT NULL,
+          tokenAddress TEXT NOT NULL,
+          minesCount INTEGER NOT NULL,
+          gridState TEXT NOT NULL,
+          revealedTiles TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'active',
+          currentMultiplier REAL NOT NULL DEFAULT 1.0,
+          cashoutAmount REAL,
+          createdAt INTEGER NOT NULL,
+          completedAt INTEGER
+        )
+      `)
+    } catch (tableError: any) {
+      console.warn('Table creation warning (may already exist):', tableError.message)
+    }
 
     // Get game
     const game = await db.get('SELECT * FROM gaming_mines WHERE id = ? AND userAddress = ?', [gameId, userAddress.toLowerCase()])
@@ -66,7 +106,9 @@ export async function POST(request: NextRequest) {
 
     // Check if it's a mine
     if (tile.isMine) {
-      // Game over - lost
+      // Game over - lost - reveal all mines
+      const allMines = gridState.filter((t: any) => t.isMine).map((t: any) => t.index)
+      
       await db.run(
         `UPDATE gaming_mines 
          SET gridState = ?, revealedTiles = ?, status = 'lost', completedAt = ?
@@ -82,6 +124,36 @@ export async function POST(request: NextRequest) {
         won: false,
         revealedTile: tileIndex,
         isMine: true,
+        revealedTiles,
+        minePositions: allMines,
+        gridState: gridState.map((t: any) => ({ index: t.index, revealed: t.revealed, isMine: t.isMine })),
+      })
+    }
+    
+    // Check if all safe tiles are revealed (game won)
+    const totalSafeTiles = 25 - gridState.filter((t: any) => t.isMine).length
+    if (revealedTiles.length >= totalSafeTiles) {
+      // Game won - reveal all mines
+      const allMines = gridState.filter((t: any) => t.isMine).map((t: any) => t.index)
+      
+      await db.run(
+        `UPDATE gaming_mines 
+         SET gridState = ?, revealedTiles = ?, status = 'won', completedAt = ?
+         WHERE id = ?`,
+        [JSON.stringify(gridState), JSON.stringify(revealedTiles), Date.now(), gameId]
+      )
+
+      await db.close()
+
+      return NextResponse.json({
+        success: true,
+        gameOver: true,
+        won: true,
+        revealedTile: tileIndex,
+        isMine: false,
+        revealedTiles,
+        minePositions: allMines,
+        currentMultiplier: newMultiplier,
         gridState: gridState.map((t: any) => ({ index: t.index, revealed: t.revealed, isMine: t.isMine })),
       })
     }

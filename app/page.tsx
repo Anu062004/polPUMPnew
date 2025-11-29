@@ -38,6 +38,28 @@ export default function HomePage() {
     console.log('🟢 Modal state changed:', isTokenModalOpen)
   }, [isTokenModalOpen])
 
+  // Helper function to deduplicate coins based on unique identifiers
+  const deduplicateCoins = (coins: ExtendedCoinData[]): ExtendedCoinData[] => {
+    const seen = new Set<string>()
+    const unique: ExtendedCoinData[] = []
+    
+    for (const coin of coins) {
+      // Create a unique key from tokenAddress, id, or symbol
+      const key = coin.tokenAddress?.toLowerCase() || 
+                  coin.id?.toLowerCase() || 
+                  `${coin.symbol?.toLowerCase()}-${coin.name?.toLowerCase()}` || 
+                  coin.txHash?.toLowerCase() || 
+                  ''
+      
+      if (key && !seen.has(key)) {
+        seen.add(key)
+        unique.push(coin)
+      }
+    }
+    
+    return unique
+  }
+
   const loadStoredCoins = async () => {
     try {
       console.log('🔄 Loading coins...')
@@ -95,7 +117,10 @@ export default function HomePage() {
             unique_traders: c.unique_traders || 0,
           })) as ExtendedCoinData[]
           
-          const sorted = [...mapped].sort(
+          // Deduplicate coins before sorting
+          const unique = deduplicateCoins(mapped)
+          
+          const sorted = [...unique].sort(
             (a, b) =>
               new Date(b.createdAt as any).getTime() -
               new Date(a.createdAt as any).getTime()
@@ -103,8 +128,8 @@ export default function HomePage() {
           setTrendingCoins(sorted.slice(0, 6))
           
           // Also sync to localStorage for offline access
-          if (mapped.length > 0) {
-            await ogStorageSDK.saveCoinToLocal(mapped[0])
+          if (unique.length > 0) {
+            await ogStorageSDK.saveCoinToLocal(unique[0])
           }
           return
         }
@@ -123,7 +148,9 @@ export default function HomePage() {
       console.log('📦 Loaded coins from localStorage:', storedCoins.length)
       
       if (storedCoins.length > 0) {
-        const sorted = [...storedCoins].sort(
+        // Deduplicate coins from localStorage
+        const unique = deduplicateCoins(storedCoins as ExtendedCoinData[])
+        const sorted = [...unique].sort(
           (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         )
         setTrendingCoins(sorted.slice(0, 6))
@@ -143,6 +170,16 @@ export default function HomePage() {
     try {
       console.log('🎉 Token created, refreshing list...', tokenData)
       
+      // Validate that we have both addresses before proceeding
+      if (!tokenData.tokenAddress || !tokenData.curveAddress) {
+        console.error('❌ Token data missing addresses:', { 
+          tokenAddress: tokenData.tokenAddress, 
+          curveAddress: tokenData.curveAddress 
+        })
+        alert('Error: Token addresses are missing. Please try creating the token again.')
+        return
+      }
+      
       // Save to backend database
       const backendBase =
         (typeof process !== 'undefined' &&
@@ -150,9 +187,12 @@ export default function HomePage() {
           (process as any).env.NEXT_PUBLIC_BACKEND_URL) ||
         'http://localhost:4000'
       
+      let saveSuccess = false
+      let saveError: string | null = null
+      
       try {
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 5000)
+        const timeoutId = setTimeout(() => controller.abort(), 10000) // Increased timeout
         
         const response = await fetch(`${backendBase}/api/coins`, {
           method: 'POST',
@@ -188,7 +228,14 @@ export default function HomePage() {
         clearTimeout(timeoutId)
         
         if (response && response.ok) {
-          console.log('✅ Token saved to backend database')
+          const result = await response.json()
+          if (result.success) {
+            console.log('✅ Token saved to backend database')
+            saveSuccess = true
+          } else {
+            saveError = result.error || 'Failed to save token'
+            console.error('❌ Backend save failed:', saveError)
+          }
         } else if (!response) {
           // Backend not available, try Next.js API route instead
           console.log('Backend not available, trying Next.js API...')
@@ -213,14 +260,37 @@ export default function HomePage() {
               }),
             })
             if (localResponse.ok) {
-              console.log('✅ Token saved to local database')
+              const result = await localResponse.json()
+              if (result.success) {
+                console.log('✅ Token saved to local database')
+                saveSuccess = true
+              } else {
+                saveError = result.error || 'Failed to save token'
+                console.error('❌ Local save failed:', saveError)
+              }
+            } else {
+              const errorData = await localResponse.json().catch(() => ({}))
+              saveError = errorData.error || `HTTP ${localResponse.status}: Failed to save token`
+              console.error('❌ Local API returned error:', saveError)
             }
-          } catch (localErr) {
-            console.warn('Local API also failed:', localErr)
+          } catch (localErr: any) {
+            saveError = localErr.message || 'Failed to save token'
+            console.error('❌ Local API exception:', localErr)
           }
+        } else {
+          const errorData = await response.json().catch(() => ({}))
+          saveError = errorData.error || `HTTP ${response.status}: Failed to save token`
+          console.error('❌ Backend API returned error:', saveError)
         }
-      } catch (e) {
-        console.warn('Failed to save to backend, saving locally:', e)
+      } catch (e: any) {
+        saveError = e.message || 'Failed to save token'
+        console.error('❌ Save exception:', e)
+      }
+      
+      // Only proceed if save was successful
+      if (!saveSuccess) {
+        alert(`Failed to save token to database: ${saveError}\n\nThe token was created on-chain, but couldn't be saved. Please refresh the page and try again.`)
+        return
       }
       
       // Create coin object for immediate display
@@ -243,8 +313,12 @@ export default function HomePage() {
       // Save to localStorage as backup
       await ogStorageSDK.saveCoinToLocal(coin)
       
-      // Add to trending coins immediately
-      setTrendingCoins((prev) => [coin, ...prev].slice(0, 6))
+      // Add to trending coins immediately (with deduplication)
+      setTrendingCoins((prev) => {
+        const combined = [coin, ...prev]
+        const unique = deduplicateCoins(combined)
+        return unique.slice(0, 6)
+      })
       
       // Reload all coins from backend to ensure sync
       setTimeout(() => {
@@ -256,7 +330,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white">
+    <div className="min-h-screen text-white" style={{ background: 'linear-gradient(135deg, #1a0b2e 0%, #16213e 25%, #0f3460 50%, #1a0b2e 100%)' }}>
       <PremiumNavbar />
 
       {/* Hero Section */}
@@ -286,26 +360,37 @@ export default function HomePage() {
                 </div>
               )}
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                <motion.button
-                  whileHover={{ scale: isConnected ? 1.05 : 1 }}
-                  whileTap={{ scale: isConnected ? 0.95 : 1 }}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    if (!isConnected) {
-                      alert('Please connect your wallet first!\n\nClick the "Connect Wallet" button in the top right corner.')
-                      return
-                    }
-                    setIsTokenModalOpen(true)
-                  }}
-                  disabled={!isConnected}
-                  className={`btn-primary ${!isConnected ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:shadow-lg'}`}
-                  type="button"
-                  title={!isConnected ? 'Connect wallet first' : 'Create your first token'}
-                >
-                  {!isConnected ? '🔒 Connect Wallet to Create Token' : 'Create Your First Token'}
-                  <ArrowRight className="w-5 h-5 ml-2" />
-                </motion.button>
+                {mounted ? (
+                  <motion.button
+                    whileHover={{ scale: isConnected ? 1.05 : 1 }}
+                    whileTap={{ scale: isConnected ? 0.95 : 1 }}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      if (!isConnected) {
+                        alert('Please connect your wallet first!\n\nClick the "Connect Wallet" button in the top right corner.')
+                        return
+                      }
+                      setIsTokenModalOpen(true)
+                    }}
+                    disabled={!isConnected}
+                    className={`btn-primary ${!isConnected ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:shadow-lg'}`}
+                    type="button"
+                    title={!isConnected ? 'Connect wallet first' : 'Create your first token'}
+                  >
+                    {!isConnected ? '🔒 Connect Wallet to Create Token' : 'Create Your First Token'}
+                    <ArrowRight className="w-5 h-5 ml-2" />
+                  </motion.button>
+                ) : (
+                  <motion.button
+                    disabled
+                    className="btn-primary opacity-50 cursor-not-allowed"
+                    type="button"
+                  >
+                    🔒 Connect Wallet to Create Token
+                    <ArrowRight className="w-5 h-5 ml-2" />
+                  </motion.button>
+                )}
                 <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                   <Link href="/explore" className="btn-secondary inline-flex items-center justify-center cursor-pointer">
                     Explore Tokens

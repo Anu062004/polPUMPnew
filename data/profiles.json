@@ -5,21 +5,23 @@
     "bio": "Welcome to POL Pump! 🚀",
     "avatarUrl": "",
     "createdAt": "2025-11-06T11:17:40.349Z",
-    "updatedAt": "2025-11-27T05:26:20.623Z",
+    "updatedAt": "2025-11-29T11:46:25.209Z",
     "tokensCreated": [
       {
-        "tokenAddress": "",
+        "tokenAddress": "0x29f21a199e6ce9f96948ebc4934d4d851383382f",
         "tokenName": "choduAnshu",
         "tokenSymbol": "CHOD",
+        "curveAddress": "0x1c24c193ac6c6b791457f16f1806026a48fefc32",
         "createdAt": "2025-11-26T19:01:49.237Z",
         "txHash": "pending-1764183709229",
         "imageUrl": "/api/image/554360ebd750c69016b7ea0caba0f909bcdfd1f3026ce31a2b1a72c7ecbb4fcc",
         "description": "a stupid person"
       },
       {
-        "tokenAddress": "",
+        "tokenAddress": "0xc44fecf69426d38d69cfe1bd2ea13e7a5589fd60",
         "tokenName": "PEPEMAXXXX",
         "tokenSymbol": "PEPA",
+        "curveAddress": "0x21cb13e6bcaa6ca94296424e0865996675048890",
         "createdAt": "2025-11-23T14:09:30.232Z",
         "txHash": "pending-1763906970225",
         "imageUrl": "/api/image/13aab923626b034dacb1513bc00840a046a7a5e3795e5acd0ff7273b0354b7d3",

@@ -72,3 +72,4 @@ The server validates these keys by checking with the main app's database.
 4. **HLS not playing:** Check browser console for CORS errors, ensure `allow_origin: "*"` in config
 
 
+

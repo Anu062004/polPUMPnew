@@ -157,7 +157,11 @@ export default function OGImageUploader({ onImageUploaded, className = "" }: OGI
           console.log('✅ File reused from network:', result.rootHash);
           setIsReused(true);
         } else {
-          console.log('✅ Direct upload successful:', result.rootHash);
+          const source = result.source === 'pinata' ? 'IPFS (Pinata)' : result.source === 'backend' ? 'Backend Storage' : 'Local Storage'
+          console.log(`✅ Upload successful (${source}):`, result.rootHash);
+          if (result.pinataUrl) {
+            console.log('📌 Pinata URL:', result.pinataUrl);
+          }
         }
         setSuccess(result.rootHash);
         setUploads((u) => [{ cid: result.rootHash, name: file?.name || '', type: file?.type || '' }, ...u]);

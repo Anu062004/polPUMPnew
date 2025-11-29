@@ -38,17 +38,25 @@ export default function PremiumTokenCard({ token, index = 0 }: PremiumTokenCardP
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`
   }
 
+  const tokenLinkTarget = token.tokenAddress || token.id || token.symbol
+  const hasOnChainAddress = Boolean(token.tokenAddress)
+  const href = tokenLinkTarget ? `/token/${tokenLinkTarget}` : '#'
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.1, duration: 0.5 }}
       whileHover={{ y: -8, scale: 1.02 }}
-      className="glass-card group cursor-pointer relative z-10"
+      className={`glass-card group relative z-10 ${
+        tokenLinkTarget ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'
+      }`}
     >
-      <Link 
-        href={token.tokenAddress ? `/token/${token.tokenAddress}` : '#'}
+      <Link
+        href={href}
         className="block w-full h-full"
+        aria-disabled={!tokenLinkTarget}
+        tabIndex={tokenLinkTarget ? 0 : -1}
       >
         <div className="space-y-4">
           {/* Header */}
@@ -78,6 +86,12 @@ export default function PremiumTokenCard({ token, index = 0 }: PremiumTokenCardP
           {token.description && (
             <p className="text-sm text-[#E3E4E8]/70 line-clamp-2">
               {token.description}
+            </p>
+          )}
+
+          {!hasOnChainAddress && (
+            <p className="text-xs text-yellow-300">
+              Pending on-chain address - finalizing bonding curve
             </p>
           )}
 

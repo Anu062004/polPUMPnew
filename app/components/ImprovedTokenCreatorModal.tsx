@@ -11,6 +11,7 @@ import { useAccount } from 'wagmi'
 import ImprovedImageUploader from './ImprovedImageUploader'
 import { InfoTooltip } from '@/components/InfoTooltip'
 import { newFactoryService } from '../../lib/newFactoryService'
+import { newBondingCurveTradingService } from '../../lib/newBondingCurveTradingService'
 import { CONTRACT_CONFIG } from '../../lib/contract-config'
 
 interface ImprovedTokenCreatorModalProps {
@@ -194,34 +195,119 @@ export default function ImprovedTokenCreatorModal({ isOpen, onClose, onTokenCrea
         throw new Error(result.error || 'Failed to create token')
       }
 
+      // Resolve token/curve addresses - MUST have both before proceeding
       let tokenAddr = result.tokenAddress
       let curveAddr = result.curveAddress
       
+      // If addresses are missing, resolve them aggressively
       if (!tokenAddr || !curveAddr) {
-        for (let attempt = 0; attempt < 3; attempt++) {
+        console.log('⏳ Resolving bonding curve addresses from transaction...')
+        setStatus('⏳ Resolving bonding curve addresses (this may take 30-60 seconds)...')
+        
+        // Try up to 10 times with increasing delays (total ~2 minutes max)
+        let resolved = false
+        for (let attempt = 0; attempt < 10; attempt++) {
           if (attempt > 0) {
-            await new Promise(r => setTimeout(r, 2000 * attempt))
+            const delay = Math.min(3000 * attempt, 10000) // 3s, 6s, 9s, 10s, 10s...
+            setStatus(`⏳ Resolving addresses... (attempt ${attempt + 1}/10, waiting ${delay/1000}s)`)
+            await new Promise(r => setTimeout(r, delay))
           }
 
-          const respResolve = await fetch('/api/resolvePair', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              txHash: result.txHash,
-              creator: address,
-              factory: FACTORY_ADDRESS
+          try {
+            const respResolve = await fetch('/api/resolvePair', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                txHash: result.txHash,
+                creator: address,
+                factory: FACTORY_ADDRESS
+              })
             })
-          })
 
-          if (respResolve.ok) {
-            const rj = await respResolve.json()
-            if (rj.tokenAddress && rj.curveAddress) {
-              tokenAddr = rj.tokenAddress
-              curveAddr = rj.curveAddress
-              break
+            if (respResolve.ok) {
+              const rj = await respResolve.json()
+              if (rj.tokenAddress && rj.curveAddress) {
+                tokenAddr = rj.tokenAddress
+                curveAddr = rj.curveAddress
+                console.log('✅ Successfully resolved addresses:', { tokenAddr, curveAddr })
+                resolved = true
+                break
+              }
+            }
+          } catch (e) {
+            console.warn(`Resolve attempt ${attempt + 1} failed:`, e)
+          }
+        }
+
+        if (!resolved) {
+          // Last resort: try to get from token's minter() function
+          if (tokenAddr && !curveAddr) {
+            try {
+              setStatus('⏳ Trying alternative method to find bonding curve...')
+              const curveRes = await fetch(`/api/token/curve?tokenAddress=${tokenAddr}`)
+              const curveData = await curveRes.json()
+              if (curveData.success && curveData.curveAddress) {
+                curveAddr = curveData.curveAddress
+                console.log('✅ Found curve via token lookup:', curveAddr)
+                resolved = true
+              }
+            } catch (e) {
+              console.warn('Alternative curve lookup failed:', e)
             }
           }
         }
+
+        if (!tokenAddr || !curveAddr) {
+          throw new Error(
+            'Could not resolve bonding curve addresses after multiple attempts. The transaction was successful, but Polygon indexing may be delayed. Please wait 1-2 minutes and refresh the page, or check PolygonScan for the transaction.'
+          )
+        }
+      }
+
+      // Final validation - addresses must be valid before proceeding
+      if (!tokenAddr || !curveAddr || !ethers.isAddress(tokenAddr) || !ethers.isAddress(curveAddr)) {
+        throw new Error(
+          'Invalid addresses after resolution. Token: ' + tokenAddr + ', Curve: ' + curveAddr + '. Please try creating the token again.'
+        )
+      }
+
+      // Final validation - addresses must be valid before proceeding
+      if (!tokenAddr || !curveAddr || !ethers.isAddress(tokenAddr) || !ethers.isAddress(curveAddr)) {
+        throw new Error(
+          'Invalid addresses after resolution. Token: ' + tokenAddr + ', Curve: ' + curveAddr + '. Please try creating the token again.'
+        )
+      }
+
+      console.log('✅ Final addresses validated:', { 
+        tokenAddress: tokenAddr, 
+        curveAddress: curveAddr,
+        txHash: result.txHash 
+      })
+
+      // Verify bonding curve is seeded and ready for trading
+      setStatus('⏳ Verifying bonding curve is ready for trading...')
+      try {
+        const rpcUrl = process.env.NEXT_PUBLIC_EVM_RPC || 'https://polygon-amoy.infura.io/v3/b4f237515b084d4bad4e5de070b0452f'
+        const readProvider = new ethers.JsonRpcProvider(rpcUrl)
+        const curveInfo = await newBondingCurveTradingService.getCurveInfo(curveAddr, readProvider)
+        
+        if (!curveInfo) {
+          throw new Error('Could not verify bonding curve. Please check the curve address.')
+        }
+        
+        if (!curveInfo.seeded) {
+          console.warn('⚠️ Bonding curve not seeded yet, but addresses are valid')
+          setStatus('⚠️ Bonding curve is being initialized. Trading will be available shortly.')
+        } else {
+          console.log('✅ Bonding curve verified and ready for trading:', {
+            ogReserve: curveInfo.ogReserve,
+            tokenReserve: curveInfo.tokenReserve,
+            currentPrice: curveInfo.currentPrice
+          })
+        }
+      } catch (verifyError: any) {
+        console.warn('Curve verification warning (non-fatal):', verifyError.message)
+        // Don't fail creation if verification fails - addresses are valid
       }
 
       setCreationResult({ ...result, tokenAddress: tokenAddr, curveAddress: curveAddr })
@@ -234,8 +320,8 @@ export default function ImprovedTokenCreatorModal({ isOpen, onClose, onTokenCrea
         symbol,
         supply: supply.replace(/_/g, ''),
         imageHash,
-        tokenAddress: tokenAddr || undefined,
-        curveAddress: curveAddr || undefined,
+        tokenAddress: tokenAddr, // Already validated
+        curveAddress: curveAddr, // Already validated
         txHash: result.txHash || 'Transaction submitted',
         description: meta.description,
         metadataRootHash,
@@ -244,6 +330,14 @@ export default function ImprovedTokenCreatorModal({ isOpen, onClose, onTokenCrea
         discordUrl: discordUrl || undefined,
         websiteUrl: websiteUrl || undefined
       }
+
+      console.log('📤 Calling onTokenCreated with data:', {
+        name: tokenData.name,
+        symbol: tokenData.symbol,
+        tokenAddress: tokenData.tokenAddress,
+        curveAddress: tokenData.curveAddress,
+        txHash: tokenData.txHash
+      })
 
       if (onTokenCreated) onTokenCreated(tokenData)
 
@@ -263,7 +357,7 @@ export default function ImprovedTokenCreatorModal({ isOpen, onClose, onTokenCrea
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+          className="fixed inset-0 bg-[#1a0b2e]/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
           onClick={onClose}
           style={{ zIndex: 100 }}
         >
@@ -582,7 +676,7 @@ export default function ImprovedTokenCreatorModal({ isOpen, onClose, onTokenCrea
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="absolute inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+                className="absolute inset-0 bg-[#1a0b2e]/90 backdrop-blur-sm flex items-center justify-center p-4"
                 onClick={() => setShowReviewModal(false)}
               >
                 <motion.div

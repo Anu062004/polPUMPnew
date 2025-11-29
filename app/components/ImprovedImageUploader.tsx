@@ -118,7 +118,8 @@ export default function ImprovedImageUploader({
 
       if (result.success && result.rootHash) {
         setProgress(100)
-        setUploadStatus('Upload complete!')
+        const source = result.source === 'pinata' ? 'IPFS (Pinata)' : result.source === 'backend' ? 'Backend Storage' : 'Local Storage'
+        setUploadStatus(`Upload complete! (${source})`)
         setSuccess(result.rootHash)
         
         if (onImageUploaded) {

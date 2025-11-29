@@ -60,6 +60,14 @@ export default function CoinImage({
         } else {
           setImageSrc(coinData.imageUrl)
         }
+      } else if (coinData.imageUrl.includes('ipfs') || coinData.imageUrl.includes('pinata')) {
+        // IPFS/Pinata URL - route through proxy for CORS
+        const ipfsHashMatch = coinData.imageUrl.match(/ipfs\/([^/?]+)/)
+        if (ipfsHashMatch && ipfsHashMatch[1]) {
+          setImageSrc(`/api/image/${ipfsHashMatch[1]}`)
+        } else {
+          setImageSrc(coinData.imageUrl)
+        }
       } else if (coinData.imageUrl.startsWith('http')) {
         // External URL - use directly
         setImageSrc(coinData.imageUrl)

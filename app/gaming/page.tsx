@@ -181,14 +181,23 @@ export default function GamingPage() {
         
         if (response && response.ok) {
           const data = await response.json()
-          setRounds(data.rounds || [])
+          // Ensure timeRemaining is a valid number
+          const roundsWithTime = (data.rounds || []).map((round: any) => ({
+            ...round,
+            timeRemaining: typeof round.timeRemaining === 'number' && !isNaN(round.timeRemaining) 
+              ? round.timeRemaining 
+              : round.endTime 
+                ? Math.max(0, new Date(round.endTime).getTime() - Date.now())
+                : 0
+          }))
+          setRounds(roundsWithTime)
         }
       } catch (e) {
         console.warn('Failed to load rounds:', e)
       }
     }
     loadRounds()
-    const interval = setInterval(loadRounds, 10000)
+    const interval = setInterval(loadRounds, 5000) // Update every 5 seconds for timer
     return () => clearInterval(interval)
   }, [activeTab, backend])
 
@@ -584,7 +593,8 @@ export default function GamingPage() {
     }
   }
 
-  const formatTime = (ms: number) => {
+  const formatTime = (ms: number | undefined | null) => {
+    if (!ms || isNaN(ms) || ms < 0) return '0:00'
     const minutes = Math.floor(ms / 60000)
     const seconds = Math.floor((ms % 60000) / 1000)
     return `${minutes}:${seconds.toString().padStart(2, '0')}`
@@ -595,62 +605,72 @@ export default function GamingPage() {
       <BlobBackground />
       <div className="relative z-10 p-6">
         <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-6">
-          <div>
-            <h1 className="text-5xl font-black bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500 text-transparent bg-clip-text drop-shadow-[0_0_30px_rgba(168,85,247,0.5)] animate-pulse">
-              🎮 GAMING ARENA 🎮
-            </h1>
-            <div className="flex gap-2 mt-3">
-              <span className="bg-gradient-to-r from-green-400 to-emerald-600 text-white text-xs px-3 py-1.5 rounded-full border-2 border-green-300 shadow-[0_0_15px_rgba(34,197,94,0.5)] font-bold animate-bounce">
-                ✅ POL PUMP AI
-              </span>
-              <span className="bg-gradient-to-r from-blue-400 to-cyan-600 text-white text-xs px-3 py-1.5 rounded-full border-2 border-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.5)] font-bold animate-bounce animation-delay-200">
-                🔒 POLYGON AMOY VERIFIED
-              </span>
+        {/* Improved Header Section */}
+        <div className="mb-8">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+            <div className="flex-1">
+              <div className="flex items-center gap-3 mb-2">
+                <h1 className="text-4xl md:text-5xl font-black bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500 text-transparent bg-clip-text drop-shadow-[0_0_30px_rgba(168,85,247,0.5)]">
+                  🎮 GAMING ARENA
+                </h1>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <span className="bg-gradient-to-r from-green-400 to-emerald-600 text-white text-xs px-3 py-1.5 rounded-full border border-green-300 shadow-lg font-semibold">
+                  ✅ POL PUMP AI
+                </span>
+                <span className="bg-gradient-to-r from-blue-400 to-cyan-600 text-white text-xs px-3 py-1.5 rounded-full border border-cyan-300 shadow-lg font-semibold">
+                  🔒 POLYGON AMOY VERIFIED
+                </span>
+              </div>
             </div>
-          </div>
-          
-          {/* Wallet Connect & Balance Display - Neon Style */}
-          <div className="flex items-center gap-4">
-            {address && (
-              <div className="bg-gradient-to-br from-purple-600/20 to-pink-600/20 backdrop-blur-xl border-2 border-purple-400 rounded-2xl px-6 py-4 shadow-[0_0_30px_rgba(168,85,247,0.4)] hover:shadow-[0_0_50px_rgba(168,85,247,0.6)] transition-all duration-300">
-                <div className="flex items-center gap-4">
-                  <div>
-                    <div className="text-xs text-cyan-300 font-bold tracking-wider">CONNECTED WALLET</div>
-                    <div className="text-sm font-mono text-white font-black bg-gradient-to-r from-yellow-300 to-orange-400 text-transparent bg-clip-text">
-                      {address.slice(0, 6)}...{address.slice(-4)}
+            
+            {/* Improved Wallet & Balance Display */}
+            <div className="flex flex-col md:flex-row items-end md:items-center gap-3">
+              {address && (
+                <div className="bg-gradient-to-br from-[#1a0b2e]/80 to-[#16213e]/80 backdrop-blur-xl border border-purple-500/30 rounded-xl px-4 py-3 shadow-xl">
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <div className="text-xs text-purple-300/80 font-semibold mb-0.5">Wallet</div>
+                      <div className="text-sm font-mono text-white font-bold">
+                        {address.slice(0, 6)}...{address.slice(-4)}
+                      </div>
                     </div>
-                  </div>
-                  <div className="h-12 w-px bg-gradient-to-b from-pink-500 to-cyan-500"></div>
-                  <div>
-                    <div className="text-xs text-pink-300 font-bold tracking-wider">MATIC BALANCE</div>
-                    <div className="text-xl font-black text-green-400 flex items-center gap-1 drop-shadow-[0_0_10px_rgba(34,197,94,0.8)]">
-                      {isLoadingBalance ? (
-                        <span className="animate-pulse">...</span>
-                      ) : (
-                        <>
-                          <span>{parseFloat(nativeBalance).toFixed(4)}</span>
-                          <span className="text-sm text-green-300">MATIC</span>
-                        </>
-                      )}
+                    <div className="h-8 w-px bg-purple-500/30"></div>
+                    <div className="text-right">
+                      <div className="text-xs text-purple-300/80 font-semibold mb-0.5">Balance</div>
+                      <div className="text-lg font-bold text-green-400 flex items-center gap-1">
+                        {isLoadingBalance ? (
+                          <span className="animate-pulse text-sm">...</span>
+                        ) : (
+                          <>
+                            <span>{parseFloat(nativeBalance).toFixed(2)}</span>
+                            <span className="text-xs text-green-300/80">MATIC</span>
+                          </>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <div className="h-12 w-px bg-gradient-to-b from-cyan-500 to-purple-500"></div>
-                  <div>
-                    <div className="text-xs text-purple-300 font-bold tracking-wider">TOKENS HELD</div>
-                    <div className="text-xl font-black text-cyan-400 drop-shadow-[0_0_10px_rgba(6,182,212,0.8)]">
-                      {userCoins.length}
+                    <div className="h-8 w-px bg-purple-500/30"></div>
+                    <div className="text-right">
+                      <div className="text-xs text-purple-300/80 font-semibold mb-0.5">Tokens</div>
+                      <div className="text-lg font-bold text-cyan-400">
+                        {userCoins.length}
+                      </div>
                     </div>
                   </div>
                 </div>
+              )}
+              
+              <div className="flex items-center gap-2">
+                <div className="[&>button]:bg-gradient-to-r [&>button]:from-purple-600 [&>button]:to-pink-600 [&>button]:border [&>button]:border-purple-400/50 [&>button]:shadow-lg [&>button]:hover:shadow-xl [&>button]:transition-all">
+                  <ConnectButton />
+                </div>
+                <a 
+                  href="/" 
+                  className="px-4 py-2 bg-[#1a0b2e]/60 hover:bg-[#1a0b2e]/80 border border-purple-500/30 rounded-lg text-purple-300 hover:text-purple-200 font-semibold text-sm transition-all"
+                >
+                  ← Home
+                </a>
               </div>
-            )}
-            
-            <div className="flex flex-col gap-2">
-              <div className="[&>button]:bg-gradient-to-r [&>button]:from-pink-500 [&>button]:to-purple-600 [&>button]:border-2 [&>button]:border-pink-400 [&>button]:shadow-[0_0_20px_rgba(236,72,153,0.5)] [&>button]:hover:shadow-[0_0_35px_rgba(236,72,153,0.8)]">
-                <ConnectButton />
-              </div>
-              <a href="/" className="text-cyan-400 hover:text-pink-400 font-bold text-sm text-center transition-colors duration-300 drop-shadow-[0_0_5px_rgba(6,182,212,0.5)]">← HOME</a>
             </div>
           </div>
         </div>
@@ -686,39 +706,39 @@ export default function GamingPage() {
           </div>
         )}
 
-        {/* Platform Coins & Holdings Display - Neon Style */}
-        <div className="bg-gradient-to-br from-purple-900/40 to-pink-900/40 backdrop-blur-xl border-2 border-pink-500 rounded-2xl p-6 mb-6 shadow-[0_0_30px_rgba(236,72,153,0.3)]">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-black text-transparent bg-gradient-to-r from-yellow-400 via-pink-400 to-purple-400 bg-clip-text drop-shadow-[0_0_10px_rgba(251,191,36,0.5)]">
-              🎮 GAMING WITH PLATFORM COINS
-            </h2>
-            <div className="flex items-center gap-4">
-              <div className="text-sm text-cyan-300 font-bold">
-                {allCoins.length} COINS AVAILABLE • {userCoins.length} YOU HOLD
-              </div>
-              {address && (
-                <button
-                  onClick={() => setIsCreateCoinModalOpen(true)}
-                  className="px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold rounded-lg shadow-lg transform hover:scale-105 transition-all duration-200 border-2 border-green-400 text-sm"
-                >
-                  ➕ Create Coin
-                </button>
-              )}
+        {/* Improved Platform Coins & Holdings Section */}
+        <div className="bg-gradient-to-br from-[#1a0b2e]/60 to-[#16213e]/60 backdrop-blur-xl border border-purple-500/30 rounded-2xl p-6 mb-6 shadow-xl">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+            <div>
+              <h2 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-purple-400 via-pink-400 to-cyan-400 text-transparent bg-clip-text mb-2">
+                🎮 Gaming with Platform Coins
+              </h2>
+              <p className="text-sm text-purple-300/80">
+                {allCoins.length} coins available • {userCoins.length} in your wallet
+              </p>
             </div>
+            {address && (
+              <button
+                onClick={() => setIsCreateCoinModalOpen(true)}
+                className="px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold rounded-lg shadow-lg transform hover:scale-105 transition-all duration-200 border border-green-400/50"
+              >
+                ➕ Create Coin
+              </button>
+            )}
           </div>
           
-          {/* Global Coin Selector */}
+          {/* Improved Global Coin Selector */}
           {address && allCoins.length > 0 && (
-            <div className="mb-4 p-4 bg-black/30 rounded-xl border-2 border-purple-400/50">
-              <label className="block text-sm font-bold text-purple-300 mb-2">
-                🎯 Select Coin for Gaming
+            <div className="mb-6 p-5 bg-[#1a0b2e]/40 rounded-xl border border-purple-500/30 backdrop-blur-sm">
+              <label className="block text-sm font-bold text-purple-300 mb-3 flex items-center gap-2">
+                <span>🎯</span>
+                <span>Select Coin for Gaming</span>
               </label>
-              <div className="flex gap-3 items-center">
+              <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
                 <select
                   value={selectedCoin}
                   onChange={(e) => {
                     setSelectedCoin(e.target.value)
-                    // Auto-set token for all games when coin is selected
                     if (e.target.value) {
                       const coin = userCoins.find(c => c.tokenAddress === e.target.value) || 
                                   allCoins.find(c => c.tokenAddress === e.target.value)
@@ -730,24 +750,24 @@ export default function GamingPage() {
                       }
                     }
                   }}
-                  className="flex-1 border-2 border-purple-400 rounded-lg px-4 py-2 font-medium bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className="flex-1 border border-purple-400/50 rounded-lg px-4 py-3 font-medium bg-[#1a0b2e]/60 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all"
                 >
-                  <option value="">-- Select a coin to play with --</option>
+                  <option value="" className="bg-[#1a0b2e]">-- Select a coin to play with --</option>
                   {userCoins.length > 0 && (
-                    <optgroup label="Your Coins (You Hold)">
+                    <optgroup label="Your Coins (You Hold)" className="bg-[#1a0b2e]">
                       {userCoins.map((c) => (
-                        <option key={c.tokenAddress || c.id} value={c.tokenAddress || c.id}>
+                        <option key={c.tokenAddress || c.id} value={c.tokenAddress || c.id} className="bg-[#1a0b2e]">
                           {c.symbol || 'UNKNOWN'} ({parseFloat(c.balance || '0').toFixed(4)}) - {c.name || 'Unknown Token'}
                         </option>
                       ))}
                     </optgroup>
                   )}
                   {allCoins.filter(c => !userCoins.find(uc => (uc.tokenAddress || uc.id) === (c.tokenAddress || c.id))).length > 0 && (
-                    <optgroup label="All Platform Coins">
+                    <optgroup label="All Platform Coins" className="bg-[#1a0b2e]">
                       {allCoins
                         .filter(c => !userCoins.find(uc => (uc.tokenAddress || uc.id) === (c.tokenAddress || c.id)))
                         .map((c) => (
-                          <option key={c.tokenAddress || c.id} value={c.tokenAddress || c.id}>
+                          <option key={c.tokenAddress || c.id} value={c.tokenAddress || c.id} className="bg-[#1a0b2e]">
                             {c.symbol || 'UNKNOWN'} (0.0000) - {c.name || 'Unknown Token'} - Buy first to play
                           </option>
                         ))}
@@ -755,36 +775,54 @@ export default function GamingPage() {
                   )}
                 </select>
                 {selectedCoin && (
-                  <div className="px-4 py-2 bg-green-500/20 border-2 border-green-400 rounded-lg">
-                    <span className="text-green-300 font-bold text-sm">✓ Selected</span>
+                  <div className="px-4 py-3 bg-green-500/20 border border-green-400/50 rounded-lg flex items-center gap-2">
+                    <span className="text-green-400 text-xl">✓</span>
+                    <span className="text-green-300 font-semibold text-sm">Selected</span>
                   </div>
                 )}
               </div>
               {selectedCoin && (
-                <p className="text-xs text-purple-300 mt-2">
-                  💡 This coin will be used for all games. Change it anytime above.
+                <p className="text-xs text-purple-300/70 mt-3 flex items-center gap-1">
+                  <span>💡</span>
+                  <span>This coin will be used for all games. Change it anytime above.</span>
                 </p>
               )}
             </div>
           )}
-          {!address && <p className="text-purple-300 font-semibold">CONNECT WALLET TO VIEW YOUR COINS</p>}
-          {address && loadingCoins && <p className="text-pink-300 animate-pulse font-semibold">LOADING PLATFORM COINS...</p>}
+          
+          {!address && (
+            <div className="text-center py-8">
+              <p className="text-purple-300 font-semibold mb-2">Connect wallet to view your coins</p>
+              <ConnectButton />
+            </div>
+          )}
+          
+          {address && loadingCoins && (
+            <div className="text-center py-8">
+              <p className="text-purple-300 animate-pulse font-semibold">Loading platform coins...</p>
+            </div>
+          )}
+          
           {address && !loadingCoins && allCoins.length === 0 && (
-            <div className="flex flex-col items-center gap-4 py-6">
-              <p className="text-gray-500 text-center mb-2">No coins created yet. Create the first coin on the platform!</p>
+            <div className="flex flex-col items-center gap-4 py-8">
+              <p className="text-purple-300/80 text-center">No coins created yet. Create the first coin on the platform!</p>
               <button
                 onClick={() => setIsCreateCoinModalOpen(true)}
-                className="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold rounded-xl shadow-lg transform hover:scale-105 transition-all duration-200 border-2 border-green-400"
+                className="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold rounded-xl shadow-lg transform hover:scale-105 transition-all duration-200 border border-green-400/50"
               >
                 ➕ Create Coin
               </button>
             </div>
           )}
+          
           {allCoins.length > 0 && (
-            <div>
+            <div className="space-y-4">
               {userCoins.length > 0 && (
-                <div className="mb-4">
-                  <h3 className="text-sm font-semibold text-green-700 mb-2">✅ Your Holdings ({userCoins.length})</h3>
+                <div>
+                  <h3 className="text-sm font-bold text-green-400 mb-3 flex items-center gap-2">
+                    <span>✅</span>
+                    <span>Your Holdings ({userCoins.length})</span>
+                  </h3>
                   <div className="flex flex-wrap gap-2">
                     {userCoins.map((c, i) => (
                       <div 
@@ -795,18 +833,21 @@ export default function GamingPage() {
                             router.push(`/token/${tokenAddress}`)
                           }
                         }}
-                        className="bg-green-50 border-2 border-green-400 rounded-lg px-3 py-2 cursor-pointer hover:bg-green-100 hover:border-green-500 transition-all duration-200 hover:scale-105"
+                        className="bg-green-500/10 border border-green-400/50 rounded-lg px-4 py-2.5 cursor-pointer hover:bg-green-500/20 hover:border-green-400 transition-all duration-200 hover:scale-105"
                       >
-                        <div className="font-bold text-sm">{c.symbol || 'UNKNOWN'}</div>
-                        <div className="text-xs text-gray-600">{parseFloat(c.balance || '0').toFixed(4)}</div>
+                        <div className="font-bold text-sm text-green-300">{c.symbol || 'UNKNOWN'}</div>
+                        <div className="text-xs text-green-400/80">{parseFloat(c.balance || '0').toFixed(4)}</div>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
               <div>
-                <h3 className="text-sm font-semibold text-blue-700 mb-2">📋 All Platform Coins ({allCoins.length})</h3>
-                <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+                <h3 className="text-sm font-bold text-purple-300 mb-3 flex items-center gap-2">
+                  <span>📋</span>
+                  <span>All Platform Coins ({allCoins.length})</span>
+                </h3>
+                <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
                   {allCoins.slice(0, 20).map((c, i) => {
                     const tokenAddress = c.tokenAddress || c.id
                     return (
@@ -817,128 +858,136 @@ export default function GamingPage() {
                             router.push(`/token/${tokenAddress}`)
                           }
                         }}
-                        className={`border rounded-lg px-3 py-1 text-xs cursor-pointer transition-all duration-200 hover:scale-105 ${
+                        className={`border rounded-lg px-3 py-2 text-xs cursor-pointer transition-all duration-200 hover:scale-105 ${
                           c.hasBalance 
-                            ? 'bg-blue-50 border-blue-300 hover:bg-blue-100 hover:border-blue-400' 
-                            : 'bg-slate-50 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
+                            ? 'bg-purple-500/10 border-purple-400/50 hover:bg-purple-500/20 text-purple-300' 
+                            : 'bg-[#1a0b2e]/40 border-purple-500/20 hover:border-purple-500/40 text-purple-300/70'
                         }`}
                       >
-                        <span className="font-semibold">{c.symbol || 'UNKNOWN'}</span> - {c.name || 'Unknown Token'}
+                        <span className="font-semibold">{c.symbol || 'UNKNOWN'}</span>
+                        <span className="text-purple-400/60 ml-1">- {c.name || 'Unknown'}</span>
                       </div>
                     )
                   })}
-                  {allCoins.length > 20 && <div className="text-xs text-gray-500 px-2">+{allCoins.length - 20} more...</div>}
+                  {allCoins.length > 20 && (
+                    <div className="text-xs text-purple-400/60 px-3 py-2">+{allCoins.length - 20} more...</div>
+                  )}
                 </div>
               </div>
             </div>
           )}
         </div>
 
-        {/* Tabs - Neon Gaming Style */}
-        <div className="flex gap-4 mb-6 flex-wrap">
+        {/* Improved Game Tabs */}
+        <div className="flex gap-3 mb-8 flex-wrap">
           <button
             onClick={() => setActiveTab('pumpplay')}
-            className={`px-8 py-4 rounded-2xl font-black text-lg transition-all duration-300 transform hover:scale-105 ${
+            className={`px-6 py-3 rounded-xl font-bold text-base transition-all duration-300 transform hover:scale-105 ${
               activeTab === 'pumpplay'
-                ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-[0_0_30px_rgba(59,130,246,0.6)] border-2 border-blue-400'
-                : 'bg-gray-800/50 text-purple-300 hover:bg-gray-700/70 border-2 border-purple-500/30 backdrop-blur-sm'
+                ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg border border-blue-400/50'
+                : 'bg-[#1a0b2e]/60 text-purple-300 hover:bg-[#1a0b2e]/80 border border-purple-500/30 backdrop-blur-sm'
             }`}
           >
-            🎯 PUMPPLAY
+            🎯 PumpPlay
           </button>
           <button
             onClick={() => setActiveTab('meme-royale')}
-            className={`px-8 py-4 rounded-2xl font-black text-lg transition-all duration-300 transform hover:scale-105 ${
+            className={`px-6 py-3 rounded-xl font-bold text-base transition-all duration-300 transform hover:scale-105 ${
               activeTab === 'meme-royale'
-                ? 'bg-gradient-to-r from-pink-500 to-red-600 text-white shadow-[0_0_30px_rgba(236,72,153,0.6)] border-2 border-pink-400'
-                : 'bg-gray-800/50 text-pink-300 hover:bg-gray-700/70 border-2 border-pink-500/30 backdrop-blur-sm'
+                ? 'bg-gradient-to-r from-pink-500 to-red-600 text-white shadow-lg border border-pink-400/50'
+                : 'bg-[#1a0b2e]/60 text-pink-300 hover:bg-[#1a0b2e]/80 border border-pink-500/30 backdrop-blur-sm'
             }`}
           >
-            ⚔️ MEME ROYALE
+            ⚔️ Meme Royale
           </button>
           <button
             onClick={() => setActiveTab('mines')}
-            className={`px-8 py-4 rounded-2xl font-black text-lg transition-all duration-300 transform hover:scale-105 ${
+            className={`px-6 py-3 rounded-xl font-bold text-base transition-all duration-300 transform hover:scale-105 ${
               activeTab === 'mines'
-                ? 'bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-[0_0_30px_rgba(249,115,22,0.6)] border-2 border-orange-400'
-                : 'bg-gray-800/50 text-orange-300 hover:bg-gray-700/70 border-2 border-orange-500/30 backdrop-blur-sm'
+                ? 'bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-lg border border-orange-400/50'
+                : 'bg-[#1a0b2e]/60 text-orange-300 hover:bg-[#1a0b2e]/80 border border-orange-500/30 backdrop-blur-sm'
             }`}
           >
-            💣 MINES
+            💣 Mines
           </button>
           <button
             onClick={() => setActiveTab('arcade')}
-            className={`px-8 py-4 rounded-2xl font-black text-lg transition-all duration-300 transform hover:scale-105 ${
+            className={`px-6 py-3 rounded-xl font-bold text-base transition-all duration-300 transform hover:scale-105 ${
               activeTab === 'arcade'
-                ? 'bg-gradient-to-r from-cyan-500 to-green-600 text-white shadow-[0_0_30px_rgba(6,182,212,0.6)] border-2 border-cyan-400'
-                : 'bg-gray-800/50 text-cyan-300 hover:bg-gray-700/70 border-2 border-cyan-500/30 backdrop-blur-sm'
+                ? 'bg-gradient-to-r from-cyan-500 to-green-600 text-white shadow-lg border border-cyan-400/50'
+                : 'bg-[#1a0b2e]/60 text-cyan-300 hover:bg-[#1a0b2e]/80 border border-cyan-500/30 backdrop-blur-sm'
             }`}
           >
-            🎰 COINFLIP
+            🎰 Coinflip
           </button>
         </div>
 
-        {/* PumpPlay Tab - Neon Style */}
+        {/* Improved PumpPlay Tab */}
         {activeTab === 'pumpplay' && (
-          <div className="bg-gradient-to-br from-blue-900/40 to-purple-900/40 backdrop-blur-xl border-2 border-blue-500 rounded-3xl p-8 shadow-[0_0_40px_rgba(59,130,246,0.4)]">
-            <h2 className="text-4xl font-black mb-6 bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 text-transparent bg-clip-text drop-shadow-[0_0_15px_rgba(147,51,234,0.8)]">
-              🎯 PUMPPLAY - BET ON THE PUMP
-            </h2>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-              <p className="text-blue-800 font-medium">
-                ⚡ <strong>How it works:</strong> Pick which coin will pump the most in the next 15 minutes. 
-                All bets go into a pool. Winners split the pool proportionally! Real tokens, real payouts.
-              </p>
+          <div className="bg-gradient-to-br from-[#1a0b2e]/60 to-[#16213e]/60 backdrop-blur-xl border border-blue-500/30 rounded-2xl p-6 md:p-8 shadow-xl">
+            <div className="mb-6">
+              <h2 className="text-3xl md:text-4xl font-bold mb-3 bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 text-transparent bg-clip-text">
+                🎯 PumpPlay - Bet on the Pump
+              </h2>
+              <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+                <p className="text-blue-300 font-medium text-sm md:text-base">
+                  <span className="font-bold">⚡ How it works:</span> Pick which coin will pump the most in the next 15 minutes. 
+                  All bets go into a pool. Winners split the pool proportionally! Real tokens, real payouts.
+                </p>
+              </div>
             </div>
 
             {rounds.length === 0 && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4 text-center">
-                <p className="text-yellow-800">⏳ Loading rounds or creating new one...</p>
+              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 mb-4 text-center">
+                <p className="text-yellow-300">⏳ Loading rounds or creating new one...</p>
               </div>
             )}
 
             {rounds.map((round) => (
               <div 
                 key={round.id} 
-                className={`border-2 rounded-lg p-5 mb-4 transition-all ${
+                className={`border rounded-xl p-5 mb-4 transition-all ${
                   selectedRound?.id === round.id 
-                    ? 'border-blue-500 bg-blue-50 shadow-lg' 
-                    : 'border-gray-200 hover:border-blue-300 cursor-pointer'
+                    ? 'border-blue-500/50 bg-blue-500/10 shadow-lg' 
+                    : 'border-purple-500/30 bg-[#1a0b2e]/40 hover:border-blue-500/50 hover:bg-[#1a0b2e]/60 cursor-pointer'
                 }`}
                 onClick={() => !selectedRound && setSelectedRound(round)}
               >
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="font-bold text-xl">Round #{round.id}</h3>
-                  <div className="flex gap-3 items-center">
-                    <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-semibold">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+                  <h3 className="font-bold text-xl text-white">Round #{round.id}</h3>
+                  <div className="flex gap-2 items-center flex-wrap">
+                    <span className="bg-green-500/20 text-green-400 border border-green-500/30 px-3 py-1 rounded-full text-xs font-semibold">
                       {round.status.toUpperCase()}
                     </span>
-                    <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-semibold">
+                    <span className="bg-purple-500/20 text-purple-400 border border-purple-500/30 px-3 py-1 rounded-full text-xs font-semibold">
                       ⏱ {formatTime(round.timeRemaining)}
                     </span>
                   </div>
                 </div>
                 
-                <div className="grid grid-cols-3 gap-4 mb-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
                   {round.coinDetails?.map((coin: any) => {
                     const totalBet = round.bets?.find((b: any) => b.coinId === coin.id)?.total || 0
                     const isSelected = betCoin == coin.id
                     return (
                       <div 
                         key={coin.id} 
-                        className={`border-2 rounded-lg p-4 transition-all cursor-pointer hover:scale-105 ${
-                          isSelected ? 'border-blue-500 bg-blue-100' : 'border-gray-200 bg-slate-50 hover:border-gray-300'
+                        className={`border rounded-lg p-4 transition-all cursor-pointer hover:scale-105 ${
+                          isSelected 
+                            ? 'border-blue-500/50 bg-blue-500/10' 
+                            : 'border-purple-500/30 bg-[#1a0b2e]/40 hover:border-purple-500/50'
                         }`}
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation()
                           const tokenAddress = coin.tokenAddress || coin.id
                           if (tokenAddress) {
                             router.push(`/token/${tokenAddress}`)
                           }
                         }}
                       >
-                        <div className="font-bold text-lg hover:underline">{coin.symbol}</div>
-                        <div className="text-xs text-gray-500 mb-2 hover:underline">{coin.name}</div>
-                        <div className="text-sm font-semibold text-green-600">
+                        <div className="font-bold text-lg text-white hover:text-blue-400 transition-colors">{coin.symbol}</div>
+                        <div className="text-xs text-purple-300/70 mb-2">{coin.name}</div>
+                        <div className="text-sm font-semibold text-green-400">
                           💰 Pool: {totalBet.toFixed(2)} tokens
                         </div>
                       </div>
@@ -947,60 +996,63 @@ export default function GamingPage() {
                 </div>
 
                 {selectedRound?.id === round.id && (
-                  <div className="bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-300 rounded-lg p-5 mt-4">
-                    <h4 className="font-bold text-lg mb-4">🎲 Place Your Bet</h4>
+                  <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-5 mt-4">
+                    <h4 className="font-bold text-lg mb-4 text-white flex items-center gap-2">
+                      <span>🎲</span>
+                      <span>Place Your Bet</span>
+                    </h4>
                     
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                       <div>
-                        <label className="block text-sm font-semibold mb-2">Which Coin Will Pump?</label>
+                        <label className="block text-sm font-semibold mb-2 text-purple-300">Which Coin Will Pump?</label>
                         <select
                           value={betCoin}
                           onChange={(e) => setBetCoin(e.target.value)}
-                          className="w-full border-2 rounded-lg px-3 py-2 font-medium"
+                          className="w-full border border-purple-500/30 rounded-lg px-3 py-2.5 font-medium bg-[#1a0b2e]/60 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                           disabled={isBetting}
                         >
-                          <option value="">Select coin...</option>
+                          <option value="" className="bg-[#1a0b2e]">Select coin...</option>
                           {round.coinDetails?.map((c: any) => (
-                            <option key={c.id} value={c.id}>{c.symbol} - {c.name}</option>
+                            <option key={c.id} value={c.id} className="bg-[#1a0b2e]">{c.symbol} - {c.name}</option>
                           ))}
                         </select>
                       </div>
                       
                       <div>
-                        <label className="block text-sm font-semibold mb-2">Token to Stake</label>
+                        <label className="block text-sm font-semibold mb-2 text-purple-300">Token to Stake</label>
                         <select
                           value={betToken || selectedCoin}
                           onChange={(e) => {
                             setBetToken(e.target.value)
                             setSelectedCoin(e.target.value)
                           }}
-                          className="w-full border-2 rounded-lg px-3 py-2 font-medium"
+                          className="w-full border border-purple-500/30 rounded-lg px-3 py-2.5 font-medium bg-[#1a0b2e]/60 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                           disabled={isBetting}
                         >
-                          <option value="">Select your coin...</option>
+                          <option value="" className="bg-[#1a0b2e]">Select your coin...</option>
                           {userCoins.map((c) => (
-                            <option key={c.tokenAddress || c.id} value={c.tokenAddress || c.id}>
+                            <option key={c.tokenAddress || c.id} value={c.tokenAddress || c.id} className="bg-[#1a0b2e]">
                               {c.symbol || 'UNKNOWN'} ({parseFloat(c.balance || '0').toFixed(4)}) - {c.name || 'Unknown Token'}
                             </option>
                           ))}
                         </select>
                         {userCoins.length === 0 && (
-                          <p className="text-xs text-red-600 mt-1">You don't hold any coins. Buy some first!</p>
+                          <p className="text-xs text-red-400 mt-1">You don't hold any coins. Buy some first!</p>
                         )}
                         {selectedCoin && (
-                          <p className="text-xs text-blue-600 mt-1">💡 Using globally selected coin</p>
+                          <p className="text-xs text-blue-400 mt-1">💡 Using globally selected coin</p>
                         )}
                       </div>
                       
                       <div>
-                        <label className="block text-sm font-semibold mb-2">Amount</label>
+                        <label className="block text-sm font-semibold mb-2 text-purple-300">Amount</label>
                         <input
                           type="number"
                           value={betAmount}
                           onChange={(e) => setBetAmount(e.target.value)}
                           step="0.1"
                           min="0.1"
-                          className="w-full border-2 rounded-lg px-3 py-2 font-medium"
+                          className="w-full border border-purple-500/30 rounded-lg px-3 py-2.5 font-medium bg-[#1a0b2e]/60 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                           disabled={isBetting}
                         />
                       </div>
@@ -1010,7 +1062,7 @@ export default function GamingPage() {
                       <button
                         onClick={placeBet}
                         disabled={!address || !betCoin || !betToken || isBetting}
-                        className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-3 rounded-lg hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed font-bold shadow-lg"
+                        className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed font-bold shadow-lg transition-all transform hover:scale-105"
                       >
                         {isBetting ? '🔄 Placing Bet...' : '🎲 Place Bet Now!'}
                       </button>
@@ -1020,7 +1072,7 @@ export default function GamingPage() {
                           setBetCoin('')
                           setBetToken('')
                         }}
-                        className="bg-gray-300 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-400 font-semibold"
+                        className="px-6 py-3 bg-[#1a0b2e]/60 text-purple-300 border border-purple-500/30 rounded-lg hover:bg-[#1a0b2e]/80 font-semibold transition-all"
                         disabled={isBetting}
                       >
                         Cancel
@@ -1031,48 +1083,71 @@ export default function GamingPage() {
               </div>
             ))}
 
-            <div className="mt-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <h3 className="font-semibold text-yellow-900 mb-2">ℹ️ How Payouts Work</h3>
-              <ul className="text-sm text-yellow-800 space-y-1">
-                <li>• All bets go into a shared pool</li>
-                <li>• When round ends, the coin that pumped most wins</li>
-                <li>• Winners split the entire pool based on their bet size</li>
-                <li>• Automatic payouts sent to your wallet</li>
+            <div className="mt-6 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+              <h3 className="font-semibold text-yellow-400 mb-3 flex items-center gap-2">
+                <span>ℹ️</span>
+                <span>How Payouts Work</span>
+              </h3>
+              <ul className="text-sm text-yellow-300/80 space-y-2">
+                <li className="flex items-start gap-2">
+                  <span>•</span>
+                  <span>All bets go into a shared pool</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span>•</span>
+                  <span>When round ends, the coin that pumped most wins</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span>•</span>
+                  <span>Winners split the entire pool based on their bet size</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span>•</span>
+                  <span>Automatic payouts sent to your wallet</span>
+                </li>
               </ul>
             </div>
           </div>
         )}
 
-        {/* Meme Royale Tab */}
+        {/* Improved Meme Royale Tab */}
         {activeTab === 'meme-royale' && (
-          <div className="bg-white border rounded-xl p-6 shadow-sm">
-            <h2 className="text-2xl font-semibold mb-4">⚔️ Meme Royale - AI Battle Arena</h2>
-            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6">
-              <p className="text-purple-800 font-medium">
-                ⚡ <strong>How it works:</strong> Pick two coins to battle. AI judges them on virality, trend fit, and creativity. 
-                Stake tokens on your pick - win = 1.8x payout! Powered by POL Pump AI.
-              </p>
+          <div className="bg-gradient-to-br from-[#1a0b2e]/60 to-[#16213e]/60 backdrop-blur-xl border border-pink-500/30 rounded-2xl p-6 md:p-8 shadow-xl">
+            <div className="mb-6">
+              <h2 className="text-3xl md:text-4xl font-bold mb-3 bg-gradient-to-r from-pink-400 via-purple-400 to-red-400 text-transparent bg-clip-text">
+                ⚔️ Meme Royale - AI Battle Arena
+              </h2>
+              <div className="bg-pink-500/10 border border-pink-500/30 rounded-lg p-4">
+                <p className="text-pink-300 font-medium text-sm md:text-base">
+                  <span className="font-bold">⚡ How it works:</span> Pick two coins to battle. AI judges them on virality, trend fit, and creativity. 
+                  Stake tokens on your pick - win = 1.8x payout! Powered by POL Pump AI.
+                </p>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              <div className={`border-2 rounded-lg p-5 ${stakeSide === 'left' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
-                <h3 className="font-bold text-lg mb-3">🥊 Left Fighter</h3>
+              <div className={`border rounded-xl p-5 transition-all ${
+                stakeSide === 'left' 
+                  ? 'border-blue-500/50 bg-blue-500/10' 
+                  : 'border-purple-500/30 bg-[#1a0b2e]/40'
+              }`}>
+                <h3 className="font-bold text-lg mb-3 text-white">🥊 Left Fighter</h3>
                 <select
                   value={leftCoin?.id || ''}
                   onChange={(e) => {
                     const coin = allCoins.find(c => c.id === parseInt(e.target.value))
                     setLeftCoin(coin ? {...coin, id: coin.id} : null)
                   }}
-                  className="w-full border-2 rounded-lg px-3 py-2 mb-3 font-medium"
+                  className="w-full border border-purple-500/30 rounded-lg px-3 py-2.5 mb-3 font-medium bg-[#1a0b2e]/60 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   disabled={isBattling}
                 >
-                  <option value="">Select fighter...</option>
+                  <option value="" className="bg-[#1a0b2e]">Select fighter...</option>
                   {allCoins.map((c) => (
-                    <option key={c.id} value={c.id}>{c.symbol} - {c.name} {c.hasBalance ? '✓' : ''}</option>
+                    <option key={c.id} value={c.id} className="bg-[#1a0b2e]">{c.symbol} - {c.name} {c.hasBalance ? '✓' : ''}</option>
                   ))}
                 </select>
                 {leftCoin && (
-                  <div className="bg-white border-2 rounded-lg p-4">
+                  <div className="bg-[#1a0b2e]/60 border border-purple-500/30 rounded-lg p-4">
                     <div 
                       onClick={() => {
                         const tokenAddress = leftCoin.tokenAddress || leftCoin.id
@@ -1080,7 +1155,7 @@ export default function GamingPage() {
                           router.push(`/token/${tokenAddress}`)
                         }
                       }}
-                      className="font-bold text-xl text-blue-600 cursor-pointer hover:text-blue-800 hover:underline transition-colors"
+                      className="font-bold text-xl text-blue-400 cursor-pointer hover:text-blue-300 hover:underline transition-colors mb-2"
                     >
                       {leftCoin.symbol}
                     </div>
@@ -1091,17 +1166,17 @@ export default function GamingPage() {
                           router.push(`/token/${tokenAddress}`)
                         }
                       }}
-                      className="text-sm text-gray-600 mb-2 cursor-pointer hover:text-gray-800 hover:underline transition-colors"
+                      className="text-sm text-purple-300/70 mb-3 cursor-pointer hover:text-purple-300 hover:underline transition-colors"
                     >
                       {leftCoin.name}
                     </div>
                     <button
                       onClick={() => setStakeSide('left')}
                       disabled={isBattling}
-                      className={`w-full py-2 rounded-lg font-semibold ${
+                      className={`w-full py-2.5 rounded-lg font-semibold transition-all ${
                         stakeSide === 'left' 
-                          ? 'bg-blue-600 text-white' 
-                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          ? 'bg-blue-600 text-white shadow-lg' 
+                          : 'bg-[#1a0b2e]/60 text-purple-300 border border-purple-500/30 hover:bg-[#1a0b2e]/80'
                       }`}
                     >
                       {stakeSide === 'left' ? '✅ Betting on LEFT' : 'Bet on LEFT'}
@@ -1110,24 +1185,28 @@ export default function GamingPage() {
                 )}
               </div>
 
-              <div className={`border-2 rounded-lg p-5 ${stakeSide === 'right' ? 'border-purple-500 bg-purple-50' : 'border-gray-200'}`}>
-                <h3 className="font-bold text-lg mb-3">🥊 Right Fighter</h3>
+              <div className={`border rounded-xl p-5 transition-all ${
+                stakeSide === 'right' 
+                  ? 'border-pink-500/50 bg-pink-500/10' 
+                  : 'border-purple-500/30 bg-[#1a0b2e]/40'
+              }`}>
+                <h3 className="font-bold text-lg mb-3 text-white">🥊 Right Fighter</h3>
                 <select
                   value={rightCoin?.id || ''}
                   onChange={(e) => {
                     const coin = allCoins.find(c => c.id === parseInt(e.target.value))
                     setRightCoin(coin ? {...coin, id: coin.id} : null)
                   }}
-                  className="w-full border-2 rounded-lg px-3 py-2 mb-3 font-medium"
+                  className="w-full border border-purple-500/30 rounded-lg px-3 py-2.5 mb-3 font-medium bg-[#1a0b2e]/60 text-white focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
                   disabled={isBattling}
                 >
-                  <option value="">Select fighter...</option>
+                  <option value="" className="bg-[#1a0b2e]">Select fighter...</option>
                   {allCoins.map((c) => (
-                    <option key={c.id} value={c.id}>{c.symbol} - {c.name} {c.hasBalance ? '✓' : ''}</option>
+                    <option key={c.id} value={c.id} className="bg-[#1a0b2e]">{c.symbol} - {c.name} {c.hasBalance ? '✓' : ''}</option>
                   ))}
                 </select>
                 {rightCoin && (
-                  <div className="bg-white border-2 rounded-lg p-4">
+                  <div className="bg-[#1a0b2e]/60 border border-purple-500/30 rounded-lg p-4">
                     <div 
                       onClick={() => {
                         const tokenAddress = rightCoin.tokenAddress || rightCoin.id
@@ -1135,7 +1214,7 @@ export default function GamingPage() {
                           router.push(`/token/${tokenAddress}`)
                         }
                       }}
-                      className="font-bold text-xl text-purple-600 cursor-pointer hover:text-purple-800 hover:underline transition-colors"
+                      className="font-bold text-xl text-pink-400 cursor-pointer hover:text-pink-300 hover:underline transition-colors mb-2"
                     >
                       {rightCoin.symbol}
                     </div>
@@ -1146,17 +1225,17 @@ export default function GamingPage() {
                           router.push(`/token/${tokenAddress}`)
                         }
                       }}
-                      className="text-sm text-gray-600 mb-2 cursor-pointer hover:text-gray-800 hover:underline transition-colors"
+                      className="text-sm text-purple-300/70 mb-3 cursor-pointer hover:text-purple-300 hover:underline transition-colors"
                     >
                       {rightCoin.name}
                     </div>
                     <button
                       onClick={() => setStakeSide('right')}
                       disabled={isBattling}
-                      className={`w-full py-2 rounded-lg font-semibold ${
+                      className={`w-full py-2.5 rounded-lg font-semibold transition-all ${
                         stakeSide === 'right' 
-                          ? 'bg-purple-600 text-white' 
-                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          ? 'bg-pink-600 text-white shadow-lg' 
+                          : 'bg-[#1a0b2e]/60 text-purple-300 border border-purple-500/30 hover:bg-[#1a0b2e]/80'
                       }`}
                     >
                       {stakeSide === 'right' ? '✅ Betting on RIGHT' : 'Bet on RIGHT'}
@@ -1168,40 +1247,40 @@ export default function GamingPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               <div>
-                <label className="block text-sm font-semibold mb-2">Token to Stake</label>
+                <label className="block text-sm font-semibold mb-2 text-purple-300">Token to Stake</label>
                 <select
                   value={stakeToken || selectedCoin}
                   onChange={(e) => {
                     setStakeToken(e.target.value)
                     setSelectedCoin(e.target.value)
                   }}
-                  className="w-full border-2 rounded-lg px-3 py-2 font-medium"
+                  className="w-full border border-purple-500/30 rounded-lg px-3 py-2.5 font-medium bg-[#1a0b2e]/60 text-white focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
                   disabled={isBattling}
                 >
-                  <option value="">Select your coin...</option>
+                  <option value="" className="bg-[#1a0b2e]">Select your coin...</option>
                   {userCoins.map((c) => (
-                    <option key={c.tokenAddress || c.id} value={c.tokenAddress || c.id}>
+                    <option key={c.tokenAddress || c.id} value={c.tokenAddress || c.id} className="bg-[#1a0b2e]">
                       {c.symbol || 'UNKNOWN'} ({parseFloat(c.balance || '0').toFixed(4)}) - {c.name || 'Unknown Token'}
                     </option>
                   ))}
                 </select>
                 {userCoins.length === 0 && (
-                  <p className="text-xs text-red-600 mt-1">You don't hold any coins. Buy some first!</p>
+                  <p className="text-xs text-red-400 mt-1">You don't hold any coins. Buy some first!</p>
                 )}
                 {selectedCoin && (
-                  <p className="text-xs text-blue-600 mt-1">💡 Using globally selected coin</p>
+                  <p className="text-xs text-blue-400 mt-1">💡 Using globally selected coin</p>
                 )}
               </div>
               
               <div>
-                <label className="block text-sm font-semibold mb-2">Stake Amount</label>
+                <label className="block text-sm font-semibold mb-2 text-purple-300">Stake Amount</label>
                 <input
                   type="number"
                   value={stakeAmount}
                   onChange={(e) => setStakeAmount(e.target.value)}
                   step="0.1"
                   min="0.1"
-                  className="w-full border-2 rounded-lg px-3 py-2 font-medium"
+                  className="w-full border border-purple-500/30 rounded-lg px-3 py-2.5 font-medium bg-[#1a0b2e]/60 text-white focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
                   disabled={isBattling}
                 />
               </div>
@@ -1210,17 +1289,21 @@ export default function GamingPage() {
             <button
               onClick={startBattle}
               disabled={!address || !leftCoin || !rightCoin || !stakeSide || !stakeToken || isBattling}
-              className="bg-gradient-to-r from-red-600 to-purple-600 text-white px-10 py-4 rounded-lg hover:from-red-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed font-bold text-lg shadow-lg mb-6"
+              className="w-full bg-gradient-to-r from-red-600 to-purple-600 text-white px-10 py-4 rounded-lg hover:from-red-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed font-bold text-lg shadow-lg mb-6 transition-all transform hover:scale-105"
             >
               {isBattling ? '🔄 AI Judging Battle...' : '⚔️ START BATTLE!'}
             </button>
 
             {battleResult && battleResult.judged && (
-              <div className="bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-400 rounded-lg p-6 mb-6">
-                <h3 className="text-2xl font-bold mb-4 text-center">🏆 Battle Results - AI Judge</h3>
+              <div className="bg-gradient-to-br from-green-500/10 to-blue-500/10 border border-green-500/30 rounded-xl p-6 mb-6">
+                <h3 className="text-2xl font-bold mb-4 text-center text-white">🏆 Battle Results - AI Judge</h3>
                 
-                <div className="grid grid-cols-2 gap-6 mb-4">
-                  <div className={`border-2 rounded-lg p-4 ${battleResult.winner === 'left' ? 'border-green-500 bg-green-50' : 'border-gray-300'}`}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+                  <div className={`border rounded-xl p-4 transition-all ${
+                    battleResult.winner === 'left' 
+                      ? 'border-green-500/50 bg-green-500/10' 
+                      : 'border-purple-500/30 bg-[#1a0b2e]/40'
+                  }`}>
                     <div 
                       onClick={() => {
                         const tokenAddress = leftCoin.tokenAddress || leftCoin.id
@@ -1228,22 +1311,26 @@ export default function GamingPage() {
                           router.push(`/token/${tokenAddress}`)
                         }
                       }}
-                      className="font-bold text-xl mb-2 cursor-pointer hover:underline transition-colors"
+                      className="font-bold text-xl mb-2 text-blue-400 cursor-pointer hover:text-blue-300 hover:underline transition-colors"
                     >
                       {leftCoin.symbol}
                     </div>
-                    <div className="text-4xl font-bold text-blue-600 mb-2">{battleResult.judged.left?.total || 0}/30</div>
-                    <div className="text-xs space-y-1 text-gray-700">
+                    <div className="text-4xl font-bold text-blue-400 mb-2">{battleResult.judged.left?.total || 0}/30</div>
+                    <div className="text-xs space-y-1 text-purple-300/80">
                       <div>Virality: {battleResult.judged.left?.virality || 0}/10</div>
                       <div>Trend: {battleResult.judged.left?.trend || 0}/10</div>
                       <div>Creativity: {battleResult.judged.left?.creativity || 0}/10</div>
                     </div>
-                    <div className="text-sm text-gray-600 mt-3 italic">
+                    <div className="text-sm text-purple-300/70 mt-3 italic">
                       "{battleResult.judged.left?.reasons || 'No reasons'}"
                     </div>
                   </div>
                   
-                  <div className={`border-2 rounded-lg p-4 ${battleResult.winner === 'right' ? 'border-green-500 bg-green-50' : 'border-gray-300'}`}>
+                  <div className={`border rounded-xl p-4 transition-all ${
+                    battleResult.winner === 'right' 
+                      ? 'border-green-500/50 bg-green-500/10' 
+                      : 'border-purple-500/30 bg-[#1a0b2e]/40'
+                  }`}>
                     <div 
                       onClick={() => {
                         const tokenAddress = rightCoin.tokenAddress || rightCoin.id
@@ -1251,120 +1338,156 @@ export default function GamingPage() {
                           router.push(`/token/${tokenAddress}`)
                         }
                       }}
-                      className="font-bold text-xl mb-2 cursor-pointer hover:underline transition-colors"
+                      className="font-bold text-xl mb-2 text-pink-400 cursor-pointer hover:text-pink-300 hover:underline transition-colors"
                     >
                       {rightCoin.symbol}
                     </div>
-                    <div className="text-4xl font-bold text-purple-600 mb-2">{battleResult.judged.right?.total || 0}/30</div>
-                    <div className="text-xs space-y-1 text-gray-700">
+                    <div className="text-4xl font-bold text-pink-400 mb-2">{battleResult.judged.right?.total || 0}/30</div>
+                    <div className="text-xs space-y-1 text-purple-300/80">
                       <div>Virality: {battleResult.judged.right?.virality || 0}/10</div>
                       <div>Trend: {battleResult.judged.right?.trend || 0}/10</div>
                       <div>Creativity: {battleResult.judged.right?.creativity || 0}/10</div>
                     </div>
-                    <div className="text-sm text-gray-600 mt-3 italic">
+                    <div className="text-sm text-purple-300/70 mt-3 italic">
                       "{battleResult.judged.right?.reasons || 'No reasons'}"
                     </div>
                   </div>
                 </div>
 
-                <div className="text-center bg-white border-2 border-green-500 rounded-lg p-4">
-                  <div className="text-2xl font-bold mb-2">
-                    🏆 WINNER: <span className="text-green-600">
+                <div className="text-center bg-[#1a0b2e]/60 border border-green-500/30 rounded-xl p-4">
+                  <div className="text-2xl font-bold mb-2 text-white">
+                    🏆 WINNER: <span className="text-green-400">
                       {battleResult.winner === 'left' ? leftCoin.symbol : rightCoin.symbol}
                     </span>
                   </div>
                   {battleResult.payoutTx && (
-                    <div className="text-green-700 font-semibold">
+                    <div className="text-green-400 font-semibold">
                       💰 You won {parseFloat(stakeAmount) * 1.8} tokens!
-                      <div className="text-xs text-gray-600 font-mono mt-1">
+                      <div className="text-xs text-purple-300/70 font-mono mt-1">
                         Tx: {battleResult.payoutTx.slice(0, 10)}...{battleResult.payoutTx.slice(-8)}
                       </div>
                     </div>
                   )}
-                  <div className="text-xs text-gray-500 mt-2">Judged by POL Pump AI</div>
+                  <div className="text-xs text-purple-300/70 mt-2">Judged by POL Pump AI</div>
                 </div>
               </div>
             )}
 
             <div>
-              <h3 className="font-semibold mb-3 text-lg">📜 Recent Battles</h3>
+              <h3 className="font-semibold mb-3 text-lg text-white">📜 Recent Battles</h3>
               <div className="space-y-2">
                 {battles.map((b) => (
-                  <div key={b.id} className="bg-slate-50 border rounded-lg p-3 flex justify-between items-center">
+                  <div key={b.id} className="bg-[#1a0b2e]/40 border border-purple-500/30 rounded-lg p-3 flex justify-between items-center hover:bg-[#1a0b2e]/60 transition-all">
                     <div className="flex items-center gap-3">
-                      <span className="font-semibold">{b.leftSymbol}</span>
-                      <span className="text-gray-400">vs</span>
-                      <span className="font-semibold">{b.rightSymbol}</span>
+                      <span className="font-semibold text-white">{b.leftSymbol}</span>
+                      <span className="text-purple-400">vs</span>
+                      <span className="font-semibold text-white">{b.rightSymbol}</span>
                     </div>
                     <div className="text-sm flex items-center gap-3">
-                      <span className={b.leftScore > b.rightScore ? 'text-green-600 font-bold' : 'text-gray-500'}>
+                      <span className={b.leftScore > b.rightScore ? 'text-green-400 font-bold' : 'text-purple-300/70'}>
                         {b.leftScore}
                       </span>
-                      <span className="text-gray-400">-</span>
-                      <span className={b.rightScore > b.leftScore ? 'text-green-600 font-bold' : 'text-gray-500'}>
+                      <span className="text-purple-400">-</span>
+                      <span className={b.rightScore > b.leftScore ? 'text-green-400 font-bold' : 'text-purple-300/70'}>
                         {b.rightScore}
                       </span>
-                      <span className="text-xs text-gray-500">
+                      <span className="text-xs text-purple-300/70">
                         🏆 {b.leftScore > b.rightScore ? b.leftSymbol : b.rightSymbol}
                       </span>
                     </div>
                   </div>
                 ))}
-                {battles.length === 0 && <p className="text-gray-500 text-center py-4">No battles yet - be the first!</p>}
+                {battles.length === 0 && <p className="text-purple-300/70 text-center py-4">No battles yet - be the first!</p>}
               </div>
             </div>
 
-            <div className="mt-6 bg-purple-50 border border-purple-200 rounded-lg p-4">
-              <h3 className="font-semibold text-purple-900 mb-2">ℹ️ Battle Rules</h3>
-              <ul className="text-sm text-purple-800 space-y-1">
-                <li>• AI judges coins on 3 criteria: Virality, Trend Fit, Creativity (each 0-10)</li>
-                <li>• Highest total score wins the battle</li>
-                <li>• Win your bet = 1.8x payout (house takes 10% fee)</li>
-                <li>• Powered by POL Pump AI - decentralized trading platform</li>
+            <div className="mt-6 bg-purple-500/10 border border-purple-500/30 rounded-lg p-4">
+              <h3 className="font-semibold text-purple-400 mb-3 flex items-center gap-2">
+                <span>ℹ️</span>
+                <span>Battle Rules</span>
+              </h3>
+              <ul className="text-sm text-purple-300/80 space-y-2">
+                <li className="flex items-start gap-2">
+                  <span>•</span>
+                  <span>AI judges coins on 3 criteria: Virality, Trend Fit, Creativity (each 0-10)</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span>•</span>
+                  <span>Highest total score wins the battle</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span>•</span>
+                  <span>Win your bet = 1.8x payout (house takes 10% fee)</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span>•</span>
+                  <span>Powered by POL Pump AI - decentralized trading platform</span>
+                </li>
               </ul>
             </div>
           </div>
         )}
 
-        {/* Mines Tab */}
+        {/* Improved Mines Tab */}
         {activeTab === 'mines' && (
-          <div className="bg-white border rounded-xl p-6 shadow-sm">
-            <h2 className="text-2xl font-semibold mb-4">💣 Mines - Reveal & Win</h2>
-            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6">
-              <p className="text-orange-800 font-medium">
-                ⚡ <strong>How it works:</strong> Click tiles to reveal gems 💎. Avoid bombs 💣! Cash out anytime with progressive multipliers. More mines = higher risk & reward!
-              </p>
+          <div className="bg-gradient-to-br from-[#1a0b2e]/60 to-[#16213e]/60 backdrop-blur-xl border border-orange-500/30 rounded-2xl p-6 md:p-8 shadow-xl">
+            <div className="mb-6">
+              <h2 className="text-3xl md:text-4xl font-bold mb-3 bg-gradient-to-r from-orange-400 via-red-400 to-pink-400 text-transparent bg-clip-text">
+                💣 Mines - Reveal & Win
+              </h2>
+              <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-4">
+                <p className="text-orange-300 font-medium text-sm md:text-base">
+                  <span className="font-bold">⚡ How it works:</span> Click tiles to reveal gems 💎. Avoid bombs 💣! Cash out anytime with progressive multipliers. More mines = higher risk & reward!
+                </p>
+              </div>
             </div>
 
             {gameStatus === 'idle' && (
               <div className="max-w-2xl mx-auto">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                   <div>
-                    <label className="block text-sm font-semibold mb-2">Mines Count</label>
-                    <select value={minesCount} onChange={(e) => setMinesCount(parseInt(e.target.value))} className="w-full border-2 rounded-lg px-3 py-2 font-medium">
-                      {[1, 3, 5, 10, 15, 20, 24].map(n => (<option key={n} value={n}>{n} Mines ({(n/25*100).toFixed(0)}%)</option>))}
+                    <label className="block text-sm font-semibold mb-2 text-purple-300">Mines Count</label>
+                    <select 
+                      value={minesCount} 
+                      onChange={(e) => setMinesCount(parseInt(e.target.value))} 
+                      className="w-full border border-purple-500/30 rounded-lg px-3 py-2.5 font-medium bg-[#1a0b2e]/60 text-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    >
+                      {[1, 3, 5, 10, 15, 20, 24].map(n => (
+                        <option key={n} value={n} className="bg-[#1a0b2e]">{n} Mines ({(n/25*100).toFixed(0)}%)</option>
+                      ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold mb-2">Token to Stake</label>
+                    <label className="block text-sm font-semibold mb-2 text-purple-300">Token to Stake</label>
                     <select 
                       value={minesToken || selectedCoin} 
                       onChange={(e) => {
                         setMinesToken(e.target.value)
                         setSelectedCoin(e.target.value)
                       }} 
-                      className="w-full border-2 rounded-lg px-3 py-2 font-medium"
+                      className="w-full border border-purple-500/30 rounded-lg px-3 py-2.5 font-medium bg-[#1a0b2e]/60 text-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                     >
-                      <option value="">Select coin...</option>
-                      {userCoins.map((c) => (<option key={c.tokenAddress || c.id} value={c.tokenAddress || c.id}>{c.symbol || 'UNKNOWN'} ({parseFloat(c.balance || '0').toFixed(4)})</option>))}
+                      <option value="" className="bg-[#1a0b2e]">Select coin...</option>
+                      {userCoins.map((c) => (
+                        <option key={c.tokenAddress || c.id} value={c.tokenAddress || c.id} className="bg-[#1a0b2e]">
+                          {c.symbol || 'UNKNOWN'} ({parseFloat(c.balance || '0').toFixed(4)})
+                        </option>
+                      ))}
                     </select>
                     {selectedCoin && (
-                      <p className="text-xs text-blue-600 mt-1">💡 Using globally selected coin</p>
+                      <p className="text-xs text-blue-400 mt-1">💡 Using globally selected coin</p>
                     )}
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold mb-2">Bet Amount</label>
-                    <input type="number" value={minesBet} onChange={(e) => setMinesBet(e.target.value)} step="0.1" min="0.1" className="w-full border-2 rounded-lg px-3 py-2 font-medium" />
+                    <label className="block text-sm font-semibold mb-2 text-purple-300">Bet Amount</label>
+                    <input 
+                      type="number" 
+                      value={minesBet} 
+                      onChange={(e) => setMinesBet(e.target.value)} 
+                      step="0.1" 
+                      min="0.1" 
+                      className="w-full border border-purple-500/30 rounded-lg px-3 py-2.5 font-medium bg-[#1a0b2e]/60 text-white focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500" 
+                    />
                   </div>
                 </div>
                 <button 
@@ -1435,6 +1558,10 @@ export default function GamingPage() {
                         })
                       }
                       
+                      if (!res || !res.ok) {
+                        throw new Error('Failed to start game. Please try again.')
+                      }
+                      
                       let data
                       try {
                         data = await res.json()
@@ -1452,86 +1579,294 @@ export default function GamingPage() {
                         alert(data.error || 'Failed to start game')
                       }
                     } catch (e: any) {
-                      alert(e.message || 'Failed')
+                      console.error('Start game error:', e)
+                      alert(e.message || 'Failed to start game. Please check your connection and try again.')
                     }
                   }}
                   disabled={!address || !minesToken}
-                  className="w-full bg-gradient-to-r from-orange-600 to-red-600 text-white px-8 py-4 rounded-lg hover:from-orange-700 hover:to-red-700 disabled:opacity-50 font-bold text-lg shadow-lg"
+                  className="w-full bg-gradient-to-r from-orange-600 to-red-600 text-white px-8 py-4 rounded-lg hover:from-orange-700 hover:to-red-700 disabled:opacity-50 font-bold text-lg shadow-lg transition-all transform hover:scale-105"
                 >
                   💣 Start Game
                 </button>
               </div>
             )}
 
-            {gameStatus === 'active' && (<div><div className="flex justify-between items-center mb-6 bg-gradient-to-r from-orange-50 to-red-50 border-2 border-orange-300 rounded-lg p-4"><div><div className="text-sm text-gray-600">Multiplier</div><div className="text-3xl font-bold text-orange-600">{currentMultiplier.toFixed(2)}x</div></div><div><div className="text-sm text-gray-600">Potential Win</div><div className="text-2xl font-bold text-green-600">{(parseFloat(minesBet) * currentMultiplier).toFixed(4)}</div></div><button onClick={async () => { try { const res = await fetch(`${backend}/gaming/mines/cashout`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({gameId: minesGame.gameId})}); const data = await res.json(); if (data.success) { setGameStatus('cashed'); alert(`💰 Cashed out ${data.cashoutAmount.toFixed(4)} tokens!`); setTimeout(() => loadCoinsData(), 2000); } } catch (e: any) { alert(e.message) } }} disabled={revealedTiles.length === 0} className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 disabled:opacity-50 font-bold">💰 Cash Out</button></div><div className="grid grid-cols-5 gap-2 mb-4">{Array.from({ length: 25 }, (_, i) => { const isRevealed = revealedTiles.includes(i); const isMine = minePositions.includes(i); return (<button key={i} onClick={async () => { if (isRevealed) return; try { const res = await fetch(`${backend}/gaming/mines/reveal`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({gameId: minesGame.gameId, tileIndex: i})}); const data = await res.json(); if (data.hitMine) { setRevealedTiles(data.revealedTiles); setMinePositions(data.minePositions); setGameStatus('lost'); alert('💥 BOOM!'); } else { setRevealedTiles(data.revealedTiles); setCurrentMultiplier(data.currentMultiplier); if (data.status === 'won') { setMinePositions(data.minePositions); setGameStatus('won'); alert('🎉 WON!'); } } } catch (e: any) { alert(e.message) } }} disabled={isRevealed} className={`aspect-square text-2xl font-bold rounded-lg transition-all ${isRevealed ? (isMine ? 'bg-red-500 text-white' : 'bg-green-500 text-white') : 'bg-gray-200 hover:bg-gray-300 active:scale-95'}`}>{isRevealed ? (isMine ? '💣' : '💎') : '?'}</button>); })}</div><div className="text-center text-sm text-gray-600">{revealedTiles.length} / {25 - minesCount} revealed</div></div>)}
+            {gameStatus === 'active' && (
+              <div>
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6 bg-orange-500/10 border border-orange-500/30 rounded-lg p-4">
+                  <div>
+                    <div className="text-sm text-orange-300/80">Multiplier</div>
+                    <div className="text-3xl font-bold text-orange-400">{currentMultiplier.toFixed(2)}x</div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-orange-300/80">Potential Win</div>
+                    <div className="text-2xl font-bold text-green-400">{(parseFloat(minesBet) * currentMultiplier).toFixed(4)}</div>
+                  </div>
+                  <button 
+                    onClick={async () => { 
+                      if (!address) {
+                        alert('Please connect your wallet first')
+                        return
+                      }
+                      try { 
+                        // Try backend first
+                        let res = await fetch(`${backend}/gaming/mines/cashout`, {
+                          method: 'POST', 
+                          headers: {'Content-Type': 'application/json'}, 
+                          body: JSON.stringify({
+                            gameId: minesGame.gameId,
+                            userAddress: address
+                          }),
+                          signal: AbortSignal.timeout(5000)
+                        }).catch(() => null)
+                        
+                        // Fallback to Next.js API
+                        if (!res || !res.ok) {
+                          res = await fetch('/api/gaming/mines/cashout', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                              gameId: minesGame.gameId,
+                              userAddress: address
+                            })
+                          })
+                        }
+                        
+                        if (!res || !res.ok) {
+                          throw new Error('Failed to cash out. Please try again.')
+                        }
+                        
+                        const data = await res.json(); 
+                        if (data.success) { 
+                          setGameStatus('cashed'); 
+                          alert(`💰 Cashed out ${data.cashoutAmount.toFixed(4)} tokens!`); 
+                          setTimeout(() => loadCoinsData(), 2000); 
+                        } else {
+                          alert(data.error || 'Failed to cash out')
+                        }
+                      } catch (e: any) { 
+                        console.error('Cashout error:', e)
+                        alert(e.message || 'Failed to cash out. Please try again.')
+                      } 
+                    }} 
+                    disabled={revealedTiles.length === 0 || !address} 
+                    className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 disabled:opacity-50 font-bold transition-all"
+                  >
+                    💰 Cash Out
+                  </button>
+                </div>
+                <div className="grid grid-cols-5 gap-2 mb-4">
+                  {Array.from({ length: 25 }, (_, i) => {
+                    const isRevealed = revealedTiles.includes(i);
+                    const isMine = minePositions.includes(i);
+                    return (
+                      <button 
+                        key={i} 
+                        onClick={async () => {
+                          if (isRevealed || !address) return;
+                          try {
+                            // Try backend first
+                            let res = await fetch(`${backend}/gaming/mines/reveal`, {
+                              method: 'POST',
+                              headers: {'Content-Type': 'application/json'},
+                              body: JSON.stringify({
+                                gameId: minesGame.gameId, 
+                                tileIndex: i,
+                                userAddress: address
+                              }),
+                              signal: AbortSignal.timeout(5000)
+                            }).catch(() => null)
+                            
+                            // Fallback to Next.js API
+                            if (!res || !res.ok) {
+                              res = await fetch('/api/gaming/mines/reveal', {
+                                method: 'POST',
+                                headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify({
+                                  gameId: minesGame.gameId,
+                                  tileIndex: i,
+                                  userAddress: address
+                                })
+                              })
+                            }
+                            
+                            if (!res || !res.ok) {
+                              throw new Error('Failed to reveal tile. Please try again.')
+                            }
+                            
+                            const data = await res.json();
+                            
+                            if (!data.success) {
+                              throw new Error(data.error || 'Failed to reveal tile')
+                            }
+                            
+                            // Handle game over (hit mine)
+                            if (data.gameOver && data.isMine) {
+                              // Extract all mine positions from gridState
+                              const allMines = data.gridState?.filter((t: any) => t.isMine).map((t: any) => t.index) || []
+                              setRevealedTiles(data.revealedTiles || []);
+                              setMinePositions(allMines);
+                              setGameStatus('lost');
+                              alert('💥 BOOM!');
+                            } else if (data.gameOver && data.won) {
+                              // Game won - all safe tiles revealed
+                              const allMines = data.gridState?.filter((t: any) => t.isMine).map((t: any) => t.index) || []
+                              setRevealedTiles(data.revealedTiles || []);
+                              setMinePositions(allMines);
+                              setGameStatus('won');
+                              alert('🎉 WON!');
+                            } else {
+                              // Continue playing
+                              setRevealedTiles(data.revealedTiles || []);
+                              if (data.currentMultiplier) {
+                                setCurrentMultiplier(data.currentMultiplier);
+                              }
+                            }
+                          } catch (e: any) {
+                            console.error('Reveal error:', e)
+                            alert(e.message || 'Failed to reveal tile. Please try again.')
+                          }
+                        }}
+                        disabled={isRevealed || !address}
+                        className={`aspect-square text-2xl font-bold rounded-lg transition-all ${
+                          isRevealed 
+                            ? (isMine ? 'bg-red-500 text-white' : 'bg-green-500 text-white') 
+                            : 'bg-[#1a0b2e]/60 border border-purple-500/30 hover:bg-[#1a0b2e]/80 hover:border-purple-500/50 active:scale-95 text-white'
+                        }`}
+                      >
+                        {isRevealed ? (isMine ? '💣' : '💎') : '?'}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="text-center text-sm text-purple-300/70">{revealedTiles.length} / {25 - minesCount} revealed</div>
+              </div>
+            )}
 
-            {(gameStatus === 'lost' || gameStatus === 'won' || gameStatus === 'cashed') && (<div className="text-center"><div className={`text-4xl font-bold mb-4 ${gameStatus === 'won' || gameStatus === 'cashed' ? 'text-green-600' : 'text-red-600'}`}>{gameStatus === 'won' && '🎉 PERFECT!'}{gameStatus === 'lost' && '💥 BOOM!'}{gameStatus === 'cashed' && '💰 Cashed Out!'}</div><div className="grid grid-cols-5 gap-2 mb-6">{Array.from({ length: 25 }, (_, i) => (<div key={i} className={`aspect-square text-2xl font-bold rounded-lg flex items-center justify-center ${minePositions.includes(i) ? 'bg-red-500 text-white' : 'bg-green-500 text-white opacity-40'}`}>{minePositions.includes(i) ? '💣' : revealedTiles.includes(i) ? '💎' : ''}</div>))}</div><button onClick={() => { setGameStatus('idle'); setMinesGame(null); setRevealedTiles([]); setMinePositions([]); setCurrentMultiplier(1.0); }} className="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 font-bold">Play Again</button></div>)}
+            {(gameStatus === 'lost' || gameStatus === 'won' || gameStatus === 'cashed') && (
+              <div className="text-center">
+                <div className={`text-4xl font-bold mb-4 ${gameStatus === 'won' || gameStatus === 'cashed' ? 'text-green-400' : 'text-red-400'}`}>
+                  {gameStatus === 'won' && '🎉 PERFECT!'}
+                  {gameStatus === 'lost' && '💥 BOOM!'}
+                  {gameStatus === 'cashed' && '💰 Cashed Out!'}
+                </div>
+                <div className="grid grid-cols-5 gap-2 mb-6">
+                  {Array.from({ length: 25 }, (_, i) => (
+                    <div 
+                      key={i} 
+                      className={`aspect-square text-2xl font-bold rounded-lg flex items-center justify-center ${
+                        minePositions.includes(i) 
+                          ? 'bg-red-500 text-white' 
+                          : 'bg-green-500 text-white opacity-40'
+                      }`}
+                    >
+                      {minePositions.includes(i) ? '💣' : revealedTiles.includes(i) ? '💎' : ''}
+                    </div>
+                  ))}
+                </div>
+                <button 
+                  onClick={() => { 
+                    setGameStatus('idle'); 
+                    setMinesGame(null); 
+                    setRevealedTiles([]); 
+                    setMinePositions([]); 
+                    setCurrentMultiplier(1.0); 
+                  }} 
+                  className="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 font-bold transition-all"
+                >
+                  Play Again
+                </button>
+              </div>
+            )}
 
-            <div className="mt-8 bg-orange-50 border border-orange-200 rounded-lg p-4"><h3 className="font-semibold text-orange-900 mb-2">ℹ️ How It Works</h3><ul className="text-sm text-orange-800 space-y-1"><li>• Progressive multipliers: Each safe tile increases your payout</li><li>• More mines = Higher multipliers but higher risk</li><li>• Cash out anytime to secure winnings!</li></ul></div>
+            <div className="mt-8 bg-orange-500/10 border border-orange-500/30 rounded-lg p-4">
+              <h3 className="font-semibold text-orange-400 mb-3 flex items-center gap-2">
+                <span>ℹ️</span>
+                <span>How It Works</span>
+              </h3>
+              <ul className="text-sm text-orange-300/80 space-y-2">
+                <li className="flex items-start gap-2">
+                  <span>•</span>
+                  <span>Progressive multipliers: Each safe tile increases your payout</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span>•</span>
+                  <span>More mines = Higher multipliers but higher risk</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span>•</span>
+                  <span>Cash out anytime to secure winnings!</span>
+                </li>
+              </ul>
+            </div>
           </div>
         )}
 
-        {/* AI Arcade Tab */}
+        {/* Improved Coinflip Tab */}
         {activeTab === 'arcade' && (
-          <div className="bg-white border rounded-xl p-6 shadow-sm">
-            <h2 className="text-2xl font-semibold mb-4">🎰 AI Arcade - Coinflip</h2>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-              <p className="text-blue-800 font-medium">
-                ⚡ <strong>How it works:</strong> Stake your tokens, pick heads or tails. 
-                Win = Auto 2x payout sent directly to your wallet! 
-                Results verified with Polygon Amoy chain blockhash entropy.
-              </p>
+          <div className="bg-gradient-to-br from-[#1a0b2e]/60 to-[#16213e]/60 backdrop-blur-xl border border-cyan-500/30 rounded-2xl p-6 md:p-8 shadow-xl">
+            <div className="mb-6">
+              <h2 className="text-3xl md:text-4xl font-bold mb-3 bg-gradient-to-r from-cyan-400 via-green-400 to-blue-400 text-transparent bg-clip-text">
+                🎰 Coinflip
+              </h2>
+              <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-4">
+                <p className="text-cyan-300 font-medium text-sm md:text-base">
+                  <span className="font-bold">⚡ How it works:</span> Stake your tokens, pick heads or tails. 
+                  Win = Auto 2x payout sent directly to your wallet! 
+                  Results verified with Polygon Amoy chain blockhash entropy.
+                </p>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <div>
-                <label className="block text-sm font-medium mb-1">Pick Side</label>
+                <label className="block text-sm font-semibold mb-2 text-purple-300">Pick Side</label>
                 <select
                   value={flipGuess}
                   onChange={(e) => setFlipGuess(e.target.value as 'heads'|'tails')}
-                  className="w-full border rounded px-3 py-2"
+                  className="w-full border border-purple-500/30 rounded-lg px-3 py-2.5 font-medium bg-[#1a0b2e]/60 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
                   disabled={isFlipping}
                 >
-                  <option value="heads">🪙 Heads</option>
-                  <option value="tails">🎯 Tails</option>
+                  <option value="heads" className="bg-[#1a0b2e]">🪙 Heads</option>
+                  <option value="tails" className="bg-[#1a0b2e]">🎯 Tails</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Token to Stake</label>
+                <label className="block text-sm font-semibold mb-2 text-purple-300">Token to Stake</label>
                 <select
                   value={flipToken || selectedCoin}
                   onChange={(e) => {
                     setFlipToken(e.target.value)
                     setSelectedCoin(e.target.value)
                   }}
-                  className="w-full border rounded px-3 py-2"
+                  className="w-full border border-purple-500/30 rounded-lg px-3 py-2.5 font-medium bg-[#1a0b2e]/60 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
                   disabled={isFlipping}
                 >
-                  <option value="">Select your coin...</option>
+                  <option value="" className="bg-[#1a0b2e]">Select your coin...</option>
                   {userCoins.map((c) => (
-                    <option key={c.tokenAddress || c.id} value={c.tokenAddress || c.id}>
+                    <option key={c.tokenAddress || c.id} value={c.tokenAddress || c.id} className="bg-[#1a0b2e]">
                       {c.symbol || 'UNKNOWN'} ({parseFloat(c.balance || '0').toFixed(4)}) - {c.name || 'Unknown Token'}
                     </option>
                   ))}
                 </select>
                 {selectedCoin && (
-                  <p className="text-xs text-blue-600 mt-1">💡 Using globally selected coin</p>
+                  <p className="text-xs text-blue-400 mt-1">💡 Using globally selected coin</p>
                 )}
                 {userCoins.length === 0 && (
-                  <p className="text-xs text-red-600 mt-1">Buy some coins first!</p>
+                  <p className="text-xs text-red-400 mt-1">Buy some coins first!</p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Wager Amount</label>
+                <label className="block text-sm font-semibold mb-2 text-purple-300">Wager Amount</label>
                 <input
                   type="number"
                   value={flipWager}
                   onChange={(e) => setFlipWager(e.target.value)}
                   step="0.1"
                   min="0.1"
-                  className="w-full border rounded px-3 py-2"
+                  className="w-full border border-purple-500/30 rounded-lg px-3 py-2.5 font-medium bg-[#1a0b2e]/60 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
                   disabled={isFlipping}
                 />
               </div>
@@ -1540,36 +1875,40 @@ export default function GamingPage() {
             <button
               onClick={playCoinflip}
               disabled={!address || !flipToken || isFlipping}
-              className="bg-gradient-to-r from-green-600 to-blue-600 text-white px-8 py-3 rounded-lg hover:from-green-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed mb-6 font-bold text-lg shadow-lg"
+              className="w-full bg-gradient-to-r from-green-600 to-blue-600 text-white px-8 py-3 rounded-lg hover:from-green-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed mb-6 font-bold text-lg shadow-lg transition-all transform hover:scale-105"
             >
               {isFlipping ? '🔄 Flipping...' : '🪙 Flip Now!'}
             </button>
 
             {coinflipResult && (
-              <div className={`border-2 rounded-lg p-6 mb-6 ${coinflipResult.outcome === 'win' ? 'bg-green-50 border-green-400' : 'bg-red-50 border-red-400'}`}>
+              <div className={`border rounded-xl p-6 mb-6 ${
+                coinflipResult.outcome === 'win' 
+                  ? 'bg-green-500/10 border-green-500/30' 
+                  : 'bg-red-500/10 border-red-500/30'
+              }`}>
                 <div className="text-center">
-                  <h3 className="text-3xl font-bold mb-2">
+                  <h3 className="text-3xl font-bold mb-2 text-white">
                     {coinflipResult.outcome === 'win' ? '🎉 YOU WON! 🎉' : '😢 You Lost'}
                   </h3>
                   <div className="text-6xl my-4">
                     {coinflipResult.result === 'heads' ? '🪙' : '🎯'}
                   </div>
-                  <div className="text-2xl font-bold mb-2">
-                    Result: <span className="text-purple-600">{coinflipResult.result.toUpperCase()}</span>
+                  <div className="text-2xl font-bold mb-2 text-white">
+                    Result: <span className="text-purple-400">{coinflipResult.result.toUpperCase()}</span>
                   </div>
                   {coinflipResult.outcome === 'win' && (
-                    <div className="bg-white border-2 border-green-500 rounded-lg p-4 mt-4">
-                      <div className="text-lg font-semibold text-green-700">
+                    <div className="bg-[#1a0b2e]/60 border border-green-500/30 rounded-lg p-4 mt-4">
+                      <div className="text-lg font-semibold text-green-400">
                         💰 Payout: {parseFloat(flipWager) * 2} tokens
                       </div>
                       {coinflipResult.payoutTx && (
-                        <div className="text-sm text-gray-600 mt-2">
+                        <div className="text-sm text-purple-300/70 mt-2">
                           Tx: <span className="font-mono">{coinflipResult.payoutTx.slice(0, 10)}...{coinflipResult.payoutTx.slice(-8)}</span>
                         </div>
                       )}
                     </div>
                   )}
-                  <div className="text-sm text-gray-600 mt-4">
+                  <div className="text-sm text-purple-300/70 mt-4">
                     <div>Block #{coinflipResult.blockNumber}</div>
                     <div className="font-mono text-xs">Hash: {coinflipResult.blockHash?.slice(0, 20)}...</div>
                   </div>
@@ -1579,45 +1918,60 @@ export default function GamingPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
               <div>
-                <h3 className="font-semibold mb-2 text-lg">🏆 Leaderboard</h3>
-                <div className="text-sm bg-slate-50 p-3 rounded border max-h-64 overflow-auto">
+                <h3 className="font-semibold mb-3 text-lg text-white">🏆 Leaderboard</h3>
+                <div className="text-sm bg-[#1a0b2e]/40 border border-purple-500/30 p-3 rounded-lg max-h-64 overflow-auto">
                   {leaderboard.map((r,i)=> (
-                    <div key={i} className={`flex justify-between py-2 ${i < 3 ? 'font-bold' : ''}`}>
+                    <div key={i} className={`flex justify-between py-2 ${i < 3 ? 'font-bold' : ''} text-white`}>
                       <span>
                         {i === 0 && '🥇 '}
                         {i === 1 && '🥈 '}
                         {i === 2 && '🥉 '}
-                        <span className="font-mono">{r.userAddress.slice(0,6)}…{r.userAddress.slice(-4)}</span>
+                        <span className="font-mono text-purple-300">{r.userAddress.slice(0,6)}…{r.userAddress.slice(-4)}</span>
                       </span>
-                      <span className="text-green-600">{r.wins}W / <span className="text-red-600">{r.losses}L</span> ({r.plays})</span>
+                      <span className="text-green-400">{r.wins}W / <span className="text-red-400">{r.losses}L</span> <span className="text-purple-300/70">({r.plays})</span></span>
                     </div>
                   ))}
-                  {leaderboard.length===0 && <div className="text-slate-500 py-4 text-center">No plays yet - be the first!</div>}
+                  {leaderboard.length===0 && <div className="text-purple-300/70 py-4 text-center">No plays yet - be the first!</div>}
                 </div>
               </div>
               <div>
-                <h3 className="font-semibold mb-2 text-lg">📜 Recent Plays</h3>
-                <div className="text-sm bg-slate-50 p-3 rounded border max-h-64 overflow-auto">
+                <h3 className="font-semibold mb-3 text-lg text-white">📜 Recent Plays</h3>
+                <div className="text-sm bg-[#1a0b2e]/40 border border-purple-500/30 p-3 rounded-lg max-h-64 overflow-auto">
                   {recent.map((r,i)=> (
-                    <div key={i} className="flex justify-between py-2">
-                      <span className="font-mono">{r.userAddress.slice(0,6)}…{r.userAddress.slice(-4)}</span>
-                      <span className={r.outcome === 'win' ? 'text-green-600 font-semibold' : 'text-red-600'}>
+                    <div key={i} className="flex justify-between py-2 text-white">
+                      <span className="font-mono text-purple-300">{r.userAddress.slice(0,6)}…{r.userAddress.slice(-4)}</span>
+                      <span className={r.outcome === 'win' ? 'text-green-400 font-semibold' : 'text-red-400'}>
                         {r.outcome.toUpperCase()} • {r.wager}
                       </span>
                     </div>
                   ))}
-                  {recent.length===0 && <div className="text-slate-500 py-4 text-center">No recent plays</div>}
+                  {recent.length===0 && <div className="text-purple-300/70 py-4 text-center">No recent plays</div>}
                 </div>
               </div>
             </div>
 
-            <div className="mt-8 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <h3 className="font-semibold text-yellow-900 mb-2">ℹ️ Fair Play Guarantee</h3>
-              <ul className="text-sm text-yellow-800 space-y-1">
-                <li>• Results determined by Polygon Amoy blockchain blockhash (verifiable)</li>
-                <li>• Automatic 2x payout on wins - sent directly to your wallet</li>
-                <li>• No house edge - pure 50/50 odds</li>
-                <li>• All transactions on-chain and transparent</li>
+            <div className="mt-8 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+              <h3 className="font-semibold text-yellow-400 mb-3 flex items-center gap-2">
+                <span>ℹ️</span>
+                <span>Fair Play Guarantee</span>
+              </h3>
+              <ul className="text-sm text-yellow-300/80 space-y-2">
+                <li className="flex items-start gap-2">
+                  <span>•</span>
+                  <span>Results determined by Polygon Amoy blockchain blockhash (verifiable)</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span>•</span>
+                  <span>Automatic 2x payout on wins - sent directly to your wallet</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span>•</span>
+                  <span>No house edge - pure 50/50 odds</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span>•</span>
+                  <span>All transactions on-chain and transparent</span>
+                </li>
               </ul>
             </div>
           </div>

@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { existsSync } from 'fs'
+import { pinataService } from '../../../lib/pinataService'
 
-// Handle image uploads
+// Handle image uploads to Pinata IPFS
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
@@ -34,7 +35,34 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Try backend first if available
+    // Try Pinata IPFS upload first
+    if (pinataService.isConfigured()) {
+      try {
+        console.log('📤 Uploading to Pinata IPFS...')
+        const pinataResult = await pinataService.uploadFile(file, file.name)
+        
+        if (pinataResult.success && pinataResult.ipfsHash) {
+          console.log('✅ Uploaded to Pinata IPFS:', pinataResult.ipfsHash)
+          return NextResponse.json({
+            success: true,
+            rootHash: pinataResult.ipfsHash,
+            ipfsHash: pinataResult.ipfsHash,
+            pinataUrl: pinataResult.pinataUrl,
+            gatewayUrl: pinataService.getGatewayUrl(pinataResult.ipfsHash),
+            reused: false,
+            source: 'pinata'
+          })
+        } else {
+          console.warn('⚠️ Pinata upload failed, falling back to local storage:', pinataResult.error)
+        }
+      } catch (pinataError: any) {
+        console.warn('⚠️ Pinata upload error, falling back to local storage:', pinataError.message)
+      }
+    } else {
+      console.log('⚠️ Pinata not configured, using local storage fallback')
+    }
+
+    // Try backend first if available (fallback)
     const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000'
     
     try {
@@ -58,7 +86,8 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({
             success: true,
             rootHash: backendResult.rootHash,
-            reused: backendResult.reused || false
+            reused: backendResult.reused || false,
+            source: 'backend'
           })
         }
       }
@@ -66,13 +95,11 @@ export async function POST(request: NextRequest) {
       console.log('Backend upload not available, using local storage:', backendError?.message || backendError)
     }
 
-    // Fallback: Store locally and generate a hash
-    // For now, we'll use a simple approach - store in public/uploads and return a hash
+    // Final fallback: Store locally and generate a hash
     const bytes = await file.arrayBuffer()
     const buffer = Buffer.from(bytes)
 
-    // Generate a simple hash from file content (for demo purposes)
-    // In production, you'd want to use a proper content-addressable hash
+    // Generate a simple hash from file content
     const crypto = await import('crypto')
     const hash = crypto.createHash('sha256').update(buffer).digest('hex')
     
@@ -100,7 +127,8 @@ export async function POST(request: NextRequest) {
       success: true,
       rootHash: hash,
       reused: reused,
-      url: `/uploads/${fileName}`
+      url: `/uploads/${fileName}`,
+      source: 'local'
     })
 
   } catch (error: any) {

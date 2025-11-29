@@ -210,3 +210,4 @@ npx hardhat test test/BondingCurvePool.test.js
 - Curve can be closed when migrating liquidity to DEX
 - All fees go to the treasury address
 
+

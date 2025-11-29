@@ -139,7 +139,7 @@ export default function TokenPriceChart({
       </div>
 
       {comment && (
-        <div className="mt-3 rounded-lg bg-black/40 p-3 text-xs text-gray-200">
+        <div className="mt-3 rounded-lg bg-[#8C52FF]/15 p-3 text-xs text-gray-200">
           <span className="font-semibold text-orange-300">PumpAI:</span>{' '}
           {comment}
         </div>
@@ -147,6 +147,10 @@ export default function TokenPriceChart({
     </div>
   )
 }
+
+
+
+
 
 
 

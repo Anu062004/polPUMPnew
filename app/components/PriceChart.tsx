@@ -16,7 +16,7 @@ interface PriceChartProps {
 export default function PriceChart({ data, compact = false }: PriceChartProps) {
   if (!data || data.length === 0) {
     return (
-      <div className="w-full h-32 flex items-center justify-center bg-black/20 rounded-lg">
+      <div className="w-full h-32 flex items-center justify-center bg-[#8C52FF]/10 rounded-lg">
         <p className="text-sm text-gray-400">No price data yet</p>
       </div>
     )
@@ -45,7 +45,7 @@ export default function PriceChart({ data, compact = false }: PriceChartProps) {
   }
 
   return (
-    <div className={`w-full ${compact ? 'h-32' : 'h-48'} bg-black/20 rounded-lg p-2`}>
+    <div className={`w-full ${compact ? 'h-32' : 'h-48'} bg-[#8C52FF]/10 rounded-lg p-2`}>
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={chartData}>
           <defs>

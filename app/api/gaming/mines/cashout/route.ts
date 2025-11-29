@@ -13,8 +13,48 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    await databaseManager.initialize()
-    const db = await databaseManager.getConnection()
+    try {
+      await databaseManager.initialize()
+    } catch (dbError: any) {
+      console.error('Database initialization error:', dbError)
+      return NextResponse.json(
+        { success: false, error: 'Database not available. Please try again later.' },
+        { status: 503 }
+      )
+    }
+
+    let db
+    try {
+      db = await databaseManager.getConnection()
+    } catch (dbError: any) {
+      console.error('Database connection error:', dbError)
+      return NextResponse.json(
+        { success: false, error: 'Database connection failed. Please try again.' },
+        { status: 503 }
+      )
+    }
+
+    // Ensure table exists
+    try {
+      await db.run(`
+        CREATE TABLE IF NOT EXISTS gaming_mines (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          userAddress TEXT NOT NULL,
+          betAmount REAL NOT NULL,
+          tokenAddress TEXT NOT NULL,
+          minesCount INTEGER NOT NULL,
+          gridState TEXT NOT NULL,
+          revealedTiles TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'active',
+          currentMultiplier REAL NOT NULL DEFAULT 1.0,
+          cashoutAmount REAL,
+          createdAt INTEGER NOT NULL,
+          completedAt INTEGER
+        )
+      `)
+    } catch (tableError: any) {
+      console.warn('Table creation warning (may already exist):', tableError.message)
+    }
 
     const game = await db.get('SELECT * FROM gaming_mines WHERE id = ? AND userAddress = ?', [gameId, userAddress.toLowerCase()])
 

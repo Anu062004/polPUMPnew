@@ -60,23 +60,31 @@ export default function EnhancedTradingCard({
           
           if (!resolvedCurveAddress || resolvedCurveAddress === '' || resolvedCurveAddress === 'undefined') {
             console.log('🔍 Resolving curve address for token:', tokenAddress)
-            try {
-              const res = await fetch(`/api/token/curve?tokenAddress=${tokenAddress}`)
-              const data = await res.json()
-              
-              if (data.success && data.curveAddress) {
-                console.log('✅ Found curve address:', data.curveAddress)
-                resolvedCurveAddress = data.curveAddress
-              } else {
-                console.warn('⚠️ Could not resolve curve address')
-                setError('Curve address not found. This token may not have been created with the factory.')
-                setCurveAddressState(null)
-                setIsLoading(false)
-                return
+            // Try multiple times with delays - Polygon indexing can be slow
+            let found = false
+            for (let attempt = 0; attempt < 5; attempt++) {
+              if (attempt > 0) {
+                await new Promise(r => setTimeout(r, 2000 * attempt)) // 2s, 4s, 6s, 8s
               }
-            } catch (e) {
-              console.warn('Failed to resolve curve address:', e)
-              setError('Failed to resolve curve address. Trading unavailable.')
+              
+              try {
+                const res = await fetch(`/api/token/curve?tokenAddress=${tokenAddress}`)
+                const data = await res.json()
+                
+                if (data.success && data.curveAddress) {
+                  console.log('✅ Found curve address:', data.curveAddress)
+                  resolvedCurveAddress = data.curveAddress
+                  found = true
+                  break
+                }
+              } catch (e) {
+                console.warn(`Resolve attempt ${attempt + 1} failed:`, e)
+              }
+            }
+            
+            if (!found) {
+              console.warn('⚠️ Could not resolve curve address after multiple attempts')
+              setError('Curve address not found. This token may not have been created with the factory.')
               setCurveAddressState(null)
               setIsLoading(false)
               return
@@ -348,8 +356,30 @@ export default function EnhancedTradingCard({
             </div>
           )}
 
+          {/* Curve Status Warning */}
+          {curveInfo && !curveInfo.seeded && (
+            <div className="bg-yellow-500/20 border border-yellow-500/50 rounded-xl p-4 flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-yellow-400" />
+              <div>
+                <div className="text-yellow-300 font-semibold">Bonding Curve Initializing</div>
+                <div className="text-yellow-400/80 text-sm">The bonding curve is being set up. Trading will be available shortly.</div>
+              </div>
+            </div>
+          )}
+
+          {/* No Curve Address Message */}
+          {!curveAddressState && !isLoading && (
+            <div className="bg-red-500/20 border border-red-500/50 rounded-xl p-4 flex items-center gap-3">
+              <XCircle className="w-5 h-5 text-red-400" />
+              <div>
+                <div className="text-red-300 font-semibold">Bonding Curve Not Found</div>
+                <div className="text-red-400/80 text-sm">This token was not created with the bonding curve factory. Trading is unavailable.</div>
+              </div>
+            </div>
+          )}
+
           {/* Trading Interface */}
-          {isConnected && curveAddressState ? (
+          {isConnected && curveAddressState && curveInfo?.seeded ? (
             <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-6 border border-white/10 space-y-4">
               {/* Trade Type Toggle */}
               <div className="flex gap-2 bg-white/5 rounded-xl p-1">

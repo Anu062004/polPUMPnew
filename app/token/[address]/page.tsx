@@ -135,9 +135,18 @@ export default function TokenDetailPage() {
           }
         }
         
+        // Ensure we have a valid token address
+        const tokenAddr = tokenData.address || address
+        if (!tokenAddr || tokenAddr === 'undefined' || tokenAddr === 'null') {
+          console.error('❌ Invalid token address:', tokenAddr)
+          setToken(null)
+          setIsLoading(false)
+          return
+        }
+
         const mappedToken: TokenDetail = {
           id: 0,
-          token_address: tokenData.address || address,
+          token_address: tokenAddr,
           curve_address: curveAddress,
           name: tokenData.name,
           symbol: tokenData.symbol,
@@ -147,6 +156,13 @@ export default function TokenDetailPage() {
           seed_tokens: tokenData.supply || '0',
           imageHash: tokenData.imageHash,
         }
+
+        console.log('✅ Token loaded successfully:', {
+          name: mappedToken.name,
+          symbol: mappedToken.symbol,
+          token_address: mappedToken.token_address,
+          curve_address: mappedToken.curve_address
+        })
 
         setToken(mappedToken)
 
@@ -189,9 +205,19 @@ export default function TokenDetailPage() {
         )
         if (found) {
           console.log('✅ Token found in localStorage:', found.name)
+          
+          // Ensure we have a valid token address
+          const tokenAddr = found.tokenAddress || address
+          if (!tokenAddr || tokenAddr === 'undefined' || tokenAddr === 'null') {
+            console.error('❌ Invalid token address in localStorage:', tokenAddr)
+            setToken(null)
+            setIsLoading(false)
+            return
+          }
+
           const mappedToken: TokenDetail = {
             id: 0,
-            token_address: found.tokenAddress || address,
+            token_address: tokenAddr,
             curve_address: found.curveAddress || '',
             name: found.name,
             symbol: found.symbol,
@@ -378,32 +404,39 @@ export default function TokenDetailPage() {
             {/* Contract Addresses */}
             <div className="mt-6 pt-6 border-t border-white/10">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-[#E3E4E8]/60 text-sm mb-2">Token Address</p>
-                  <div className="flex items-center gap-2">
-                    <code className="text-[#E3E4E8] font-mono text-sm">
-                      {shortenAddress(token.token_address)}
-                    </code>
-                    <button
-                      onClick={() => copyToClipboard(token.token_address)}
-                      className="p-2 hover:bg-white/10 rounded-lg transition-colors"
-                    >
-                      {copied ? (
-                        <Check className="w-4 h-4 text-[#12D9C8]" />
-                      ) : (
-                        <Copy className="w-4 h-4 text-[#E3E4E8]" />
-                      )}
-                    </button>
-                    <a
-                      href={`https://amoy.polygonscan.com/address/${token.token_address}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-2 hover:bg-white/10 rounded-lg transition-colors"
-                    >
-                      <ExternalLink className="w-4 h-4 text-[#E3E4E8]" />
-                    </a>
+                {token.token_address && token.token_address !== 'undefined' && token.token_address !== 'null' ? (
+                  <div>
+                    <p className="text-[#E3E4E8]/60 text-sm mb-2">Token Address</p>
+                    <div className="flex items-center gap-2">
+                      <code className="text-[#E3E4E8] font-mono text-sm">
+                        {shortenAddress(token.token_address)}
+                      </code>
+                      <button
+                        onClick={() => copyToClipboard(token.token_address)}
+                        className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                      >
+                        {copied ? (
+                          <Check className="w-4 h-4 text-[#12D9C8]" />
+                        ) : (
+                          <Copy className="w-4 h-4 text-[#E3E4E8]" />
+                        )}
+                      </button>
+                      <a
+                        href={`https://amoy.polygonscan.com/address/${token.token_address}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                      >
+                        <ExternalLink className="w-4 h-4 text-[#E3E4E8]" />
+                      </a>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div>
+                    <p className="text-[#E3E4E8]/60 text-sm mb-2">Token Address</p>
+                    <p className="text-yellow-300 text-sm">Pending on-chain address - finalizing bonding curve</p>
+                  </div>
+                )}
                 <div>
                   <p className="text-[#E3E4E8]/60 text-sm mb-2">Creator</p>
                   <div className="flex items-center gap-2">
@@ -448,7 +481,7 @@ export default function TokenDetailPage() {
                     <LiveStreamPlayer streamUrl={playbackUrl} />
                   </div>
                 ) : (
-                  <div className="mb-6 rounded-xl bg-black/50 aspect-video flex items-center justify-center">
+                  <div className="mb-6 rounded-xl bg-[#1a0b2e]/60 aspect-video flex items-center justify-center">
                     <div className="text-center text-gray-400">
                       <p className="text-lg mb-2">Creator is currently offline</p>
                       <p className="text-sm">The livestream will appear here when the creator goes live</p>
@@ -482,26 +515,49 @@ export default function TokenDetailPage() {
             </motion.div>
           )}
 
-          {/* Trading Card */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2, duration: 0.6 }}
-            className="mb-8"
-          >
-            <EnhancedTradingCard
-              tokenAddress={token.token_address}
-              tokenName={token.name}
-              tokenSymbol={token.symbol}
-              description={`${token.name} (${token.symbol}) - A memecoin on Polygon Amoy`}
-              imageUrl=""
-              metadataUrl=""
-              creator={token.creator}
-              createdAt={token.created_at}
-              supply={token.seed_tokens}
-              curveAddress={token.curve_address}
-            />
-          </motion.div>
+          {/* Trading Card - Only show if we have a valid token address */}
+          {token.token_address && token.token_address !== 'undefined' && token.token_address !== 'null' ? (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2, duration: 0.6 }}
+              className="mb-8"
+            >
+              <EnhancedTradingCard
+                tokenAddress={token.token_address}
+                tokenName={token.name}
+                tokenSymbol={token.symbol}
+                description={`${token.name} (${token.symbol}) - A memecoin on Polygon Amoy`}
+                imageUrl=""
+                metadataUrl=""
+                creator={token.creator}
+                createdAt={token.created_at}
+                supply={token.seed_tokens}
+                curveAddress={token.curve_address}
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2, duration: 0.6 }}
+              className="mb-8"
+            >
+              <div className="glass-card p-8 text-center">
+                <div className="text-6xl mb-4">⏳</div>
+                <h3 className="text-2xl font-bold text-white mb-2">Token Address Pending</h3>
+                <p className="text-[#E3E4E8]/70 mb-4">
+                  This token's on-chain address is still being finalized. Please wait a moment and refresh the page.
+                </p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="btn-primary"
+                >
+                  Refresh Page
+                </button>
+              </div>
+            </motion.div>
+          )}
 
           {/* Recent Trades */}
           {token.recentTrades && token.recentTrades.length > 0 && (

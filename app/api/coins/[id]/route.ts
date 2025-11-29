@@ -3,6 +3,7 @@ import { ethers } from 'ethers'
 import path from 'path'
 import sqlite3 from 'sqlite3'
 import { open } from 'sqlite'
+import { resolveCoinAddresses, updateCoinAddresses as saveCurveAddresses } from '../../../../lib/curveResolver'
 
 const RPC_URL = process.env.NEXT_PUBLIC_EVM_RPC || process.env.RPC_URL || 'https://polygon-amoy.infura.io/v3/b4f237515b084d4bad4e5de070b0452f'
 const DB_PATH = path.join(process.cwd(), 'data', 'coins.db')
@@ -204,9 +205,10 @@ export async function GET(
     // First, try database lookup
     const dbResult = await getFromDB(normalizedId)
     if (dbResult) {
+      const patchedResult = await maybeBackfillAddresses(dbResult)
       return NextResponse.json({ 
         found: true, 
-        data: dbResult 
+        data: patchedResult 
       })
     }
 
@@ -247,4 +249,46 @@ export async function GET(
       { status: 500 }
     )
   }
+}
+
+async function maybeBackfillAddresses(token: any) {
+  if (token?.address && token?.curveAddress) {
+    return token
+  }
+
+  const resolved = await resolveCoinAddresses({
+    id: token.id,
+    name: token.name,
+    symbol: token.symbol,
+    txHash: token.txHash,
+  })
+
+  try {
+    if (resolved?.tokenAddress && resolved?.curveAddress) {
+      await saveCurveAddresses(token.id, resolved.tokenAddress, resolved.curveAddress)
+      return {
+        ...token,
+        address: resolved.tokenAddress,
+        curveAddress: resolved.curveAddress
+      }
+    }
+  } catch (error) {
+    console.warn('Curve backfill failed for', token?.id, error)
+  }
+
+  return token
+}
+
+async function updateCoinAddresses(id: string, tokenAddress: string, curveAddress: string) {
+  const db = await open({
+    filename: DB_PATH,
+    driver: sqlite3.Database
+  })
+
+  await db.run(
+    'UPDATE coins SET tokenAddress = ?, curveAddress = ? WHERE id = ?',
+    [tokenAddress, curveAddress, id]
+  )
+
+  await db.close()
 }
