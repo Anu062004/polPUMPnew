@@ -713,8 +713,8 @@ export default function GamingPage() {
               <h2 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-purple-400 via-pink-400 to-cyan-400 text-transparent bg-clip-text mb-2">
                 🎮 Gaming with Platform Coins
               </h2>
-              <p className="text-sm text-purple-300/80">
-                {allCoins.length} coins available • {userCoins.length} in your wallet
+              <p className="text-sm text-purple-300/80" suppressHydrationWarning>
+                {typeof window !== 'undefined' ? `${allCoins.length} coins available • ${userCoins.length} in your wallet` : '0 coins available • 0 in your wallet'}
               </p>
             </div>
             {address && (
@@ -803,7 +803,7 @@ export default function GamingPage() {
             </div>
           )}
           
-          {address && !loadingCoins && allCoins.length === 0 && (
+          {address && !loadingCoins && allCoins.length === 0 && userCoins.length === 0 && (
             <div className="flex flex-col items-center gap-4 py-8">
               <p className="text-purple-300/80 text-center">No coins created yet. Create the first coin on the platform!</p>
               <button

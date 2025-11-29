@@ -50,6 +50,12 @@ export async function getDb() {
  */
 export async function initializeSchema() {
   try {
+    // Check if PostgreSQL is configured
+    if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
+      console.warn('⚠️ No PostgreSQL connection string found. Using fallback.')
+      return
+    }
+    
     const db = await getDb()
     
     // Check if we're using Vercel Postgres or standard pg

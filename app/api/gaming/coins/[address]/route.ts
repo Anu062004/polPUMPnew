@@ -36,6 +36,8 @@ async function getTokenBalance(
   }
 }
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { address: string } }
@@ -45,7 +47,7 @@ export async function GET(
 
     if (!userAddress || !ethers.isAddress(userAddress)) {
       return NextResponse.json(
-        { success: false, error: 'Invalid address' },
+        { success: false, error: 'Invalid address', coins: [], userHoldings: [], totalCoins: 0, coinsWithBalance: 0 },
         { status: 400 }
       )
     }
@@ -58,29 +60,41 @@ export async function GET(
     const provider = new ethers.JsonRpcProvider(rpcUrl)
 
     // Initialize PostgreSQL schema if needed
-    await initializeSchema()
+    try {
+      await initializeSchema()
+    } catch (schemaError: any) {
+      console.warn('Schema initialization warning (may already exist):', schemaError.message)
+    }
     
     // Get all coins from PostgreSQL database
-    const result = await sql`
-      SELECT * FROM coins 
-      WHERE token_address IS NOT NULL AND token_address != ''
-      ORDER BY created_at DESC
-      LIMIT 100
-    `
-    const coins = result.rows.map((coin: any) => ({
-      ...coin,
-      id: coin.id,
-      name: coin.name,
-      symbol: coin.symbol,
-      supply: coin.supply,
-      imageHash: coin.image_hash,
-      tokenAddress: coin.token_address,
-      curveAddress: coin.curve_address,
-      txHash: coin.tx_hash,
-      creator: coin.creator,
-      createdAt: coin.created_at,
-      description: coin.description
-    }))
+    let coins: any[] = []
+    try {
+      const result = await sql`
+        SELECT * FROM coins 
+        WHERE token_address IS NOT NULL AND token_address != ''
+        ORDER BY created_at DESC
+        LIMIT 100
+      `
+      coins = result.rows.map((coin: any) => ({
+        ...coin,
+        id: coin.id,
+        name: coin.name,
+        symbol: coin.symbol,
+        supply: coin.supply,
+        imageHash: coin.image_hash,
+        tokenAddress: coin.token_address,
+        curveAddress: coin.curve_address,
+        txHash: coin.tx_hash,
+        creator: coin.creator,
+        createdAt: coin.created_at,
+        description: coin.description
+      }))
+      console.log(`✅ Fetched ${coins.length} coins from PostgreSQL`)
+    } catch (dbError: any) {
+      console.error('❌ PostgreSQL query failed:', dbError)
+      // Return empty array instead of failing
+      coins = []
+    }
 
     // Fetch balances for all coins in parallel (with rate limiting)
     const userHoldings: any[] = []
@@ -211,6 +225,8 @@ export async function GET(
       console.log('Storage SDK fallback failed:', error)
     }
 
+    console.log(`✅ Gaming coins API: Returning ${coinsWithData.length} coins, ${userHoldings.length} user holdings`)
+    
     return NextResponse.json({
       success: true,
       coins: coinsWithData,
@@ -220,7 +236,10 @@ export async function GET(
     })
 
   } catch (error: any) {
-    console.error('Error fetching gaming coins:', error)
+    console.error('❌ Error fetching gaming coins:', error)
+    console.error('Error stack:', error.stack)
+    
+    // Return empty arrays instead of failing completely
     return NextResponse.json(
       {
         success: false,
@@ -230,7 +249,7 @@ export async function GET(
         totalCoins: 0,
         coinsWithBalance: 0
       },
-      { status: 500 }
+      { status: 200 } // Return 200 so frontend doesn't treat it as an error
     )
   }
 }
