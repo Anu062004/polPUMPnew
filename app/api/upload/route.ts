@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { writeFile, mkdir } from 'fs/promises'
-import { join } from 'path'
-import { existsSync } from 'fs'
 import { pinataService } from '../../../lib/pinataService'
+
+// Check if we're in a serverless environment (Vercel, etc.)
+const isServerless = process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NEXT_RUNTIME === 'nodejs'
 
 // Handle image uploads to Pinata IPFS
 export async function POST(request: NextRequest) {
@@ -35,7 +35,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Try Pinata IPFS upload first
+    // In serverless environments, Pinata is required (file system is read-only)
+    if (isServerless && !pinataService.isConfigured()) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Pinata IPFS is required for file uploads in production. Please configure PINATA_JWT environment variable.' 
+        },
+        { status: 500 }
+      )
+    }
+
+    // Try Pinata IPFS upload first (required in production, preferred in development)
     if (pinataService.isConfigured()) {
       try {
         console.log('📤 Uploading to Pinata IPFS...')
@@ -53,83 +64,97 @@ export async function POST(request: NextRequest) {
             source: 'pinata'
           })
         } else {
-          console.warn('⚠️ Pinata upload failed, falling back to local storage:', pinataResult.error)
+          // In serverless, fail if Pinata fails
+          if (isServerless) {
+            return NextResponse.json(
+              { 
+                success: false, 
+                error: `Pinata upload failed: ${pinataResult.error || 'Unknown error'}. Pinata is required in production environments.` 
+              },
+              { status: 500 }
+            )
+          }
+          console.warn('⚠️ Pinata upload failed, trying backend fallback:', pinataResult.error)
         }
       } catch (pinataError: any) {
-        console.warn('⚠️ Pinata upload error, falling back to local storage:', pinataError.message)
-      }
-    } else {
-      console.log('⚠️ Pinata not configured, using local storage fallback')
-    }
-
-    // Try backend first if available (fallback)
-    const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000'
-    
-    try {
-      const backendFormData = new FormData()
-      backendFormData.append('file', file)
-      
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
-      
-      const backendResponse = await fetch(`${backendBase}/upload`, {
-        method: 'POST',
-        body: backendFormData,
-        signal: controller.signal
-      })
-      
-      clearTimeout(timeoutId)
-
-      if (backendResponse.ok) {
-        const backendResult = await backendResponse.json()
-        if (backendResult.success && backendResult.rootHash) {
-          return NextResponse.json({
-            success: true,
-            rootHash: backendResult.rootHash,
-            reused: backendResult.reused || false,
-            source: 'backend'
-          })
+        // In serverless, fail if Pinata fails
+        if (isServerless) {
+          return NextResponse.json(
+            { 
+              success: false, 
+              error: `Pinata upload error: ${pinataError.message || 'Unknown error'}. Pinata is required in production environments.` 
+            },
+            { status: 500 }
+          )
         }
+        console.warn('⚠️ Pinata upload error, trying backend fallback:', pinataError.message)
       }
-    } catch (backendError: any) {
-      console.log('Backend upload not available, using local storage:', backendError?.message || backendError)
+    } else if (isServerless) {
+      // This should not happen due to check above, but just in case
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Pinata IPFS is required for file uploads in production. Please configure PINATA_JWT environment variable.' 
+        },
+        { status: 500 }
+      )
     }
 
-    // Final fallback: Store locally and generate a hash
-    const bytes = await file.arrayBuffer()
-    const buffer = Buffer.from(bytes)
+    // Try backend if available (only in non-serverless environments)
+    if (!isServerless) {
+      const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000'
+      
+      try {
+        const backendFormData = new FormData()
+        backendFormData.append('file', file)
+        
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+        
+        const backendResponse = await fetch(`${backendBase}/upload`, {
+          method: 'POST',
+          body: backendFormData,
+          signal: controller.signal
+        })
+        
+        clearTimeout(timeoutId)
 
-    // Generate a simple hash from file content
-    const crypto = await import('crypto')
-    const hash = crypto.createHash('sha256').update(buffer).digest('hex')
-    
-    // Store in public/uploads directory
-    const uploadsDir = join(process.cwd(), 'public', 'uploads')
-    if (!existsSync(uploadsDir)) {
-      await mkdir(uploadsDir, { recursive: true })
-    }
-    
-    const fileExt = file.name.split('.').pop() || 'png'
-    const fileName = `${hash}.${fileExt}`
-    const filePath = join(uploadsDir, fileName)
-    
-    // Only write if file doesn't exist
-    let reused = false
-    if (!existsSync(filePath)) {
-      await writeFile(filePath, buffer)
-    } else {
-      reused = true
-      console.log('File already exists, reusing:', fileName)
+        if (backendResponse.ok) {
+          const backendResult = await backendResponse.json()
+          if (backendResult.success && backendResult.rootHash) {
+            return NextResponse.json({
+              success: true,
+              rootHash: backendResult.rootHash,
+              reused: backendResult.reused || false,
+              source: 'backend'
+            })
+          }
+        }
+      } catch (backendError: any) {
+        console.log('Backend upload not available:', backendError?.message || backendError)
+      }
     }
 
-    // Return hash that can be used to access the image
-    return NextResponse.json({
-      success: true,
-      rootHash: hash,
-      reused: reused,
-      url: `/uploads/${fileName}`,
-      source: 'local'
-    })
+    // If we reach here in serverless, it means Pinata failed and we can't use local storage
+    if (isServerless) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'File upload failed. Pinata IPFS is required in production environments.' 
+        },
+        { status: 500 }
+      )
+    }
+
+    // Local storage fallback (only in development/non-serverless environments)
+    // Note: This should rarely be used as Pinata is preferred
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: 'File upload failed. Please configure Pinata IPFS (PINATA_JWT) for reliable file storage.' 
+      },
+      { status: 500 }
+    )
 
   } catch (error: any) {
     console.error('Upload error:', error)
