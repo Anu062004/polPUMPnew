@@ -131,33 +131,56 @@ async function getDatabase() {
 
 export async function GET() {
   try {
-    const db = await getDatabase()
+    // Use PostgreSQL instead of SQLite
+    const { sql } = await import('@vercel/postgres')
+    const { initializeSchema } = await import('../../../lib/postgresManager')
+    
+    // Initialize schema if needed
+    await initializeSchema()
 
     // Get all coins with additional blockchain data
     // We'll deduplicate in code to ensure we get the most recent version of each unique coin
-    const allCoins = await db.all(`
+    const result = await sql`
       SELECT * FROM coins 
-      ORDER BY createdAt DESC 
+      ORDER BY created_at DESC 
       LIMIT 100
-    `)
+    `
+    const allCoins = result.rows
     
     // Deduplicate: keep the most recent entry for each unique coin
     const coinMap = new Map<string, any>()
     for (const coin of allCoins) {
-      const key = coin.tokenAddress?.toLowerCase() || 
-                  coin.id?.toLowerCase() || 
-                  `${coin.symbol?.toLowerCase()}-${coin.name?.toLowerCase()}` || 
-                  coin.txHash?.toLowerCase() || 
+      // Map PostgreSQL column names to camelCase for compatibility
+      const mappedCoin = {
+        ...coin,
+        tokenAddress: coin.token_address,
+        curveAddress: coin.curve_address,
+        txHash: coin.tx_hash,
+        createdAt: coin.created_at,
+        imageHash: coin.image_hash,
+        telegramUrl: coin.telegram_url,
+        xUrl: coin.x_url,
+        discordUrl: coin.discord_url,
+        websiteUrl: coin.website_url,
+        marketCap: coin.market_cap,
+        volume24h: coin.volume_24h,
+        totalTransactions: coin.total_transactions,
+      }
+      
+      const key = mappedCoin.tokenAddress?.toLowerCase() || 
+                  mappedCoin.id?.toLowerCase() || 
+                  `${mappedCoin.symbol?.toLowerCase()}-${mappedCoin.name?.toLowerCase()}` || 
+                  mappedCoin.txHash?.toLowerCase() || 
                   ''
       
       if (key && !coinMap.has(key)) {
-        coinMap.set(key, coin)
+        coinMap.set(key, mappedCoin)
       }
     }
     
     const coins = Array.from(coinMap.values()).slice(0, 50)
 
-    await backfillCoinAddresses(db, coins)
+    await backfillCoinAddresses(sql, coins)
 
     // Deduplicate coins based on unique identifiers
     const seen = new Set<string>()
@@ -177,8 +200,6 @@ export async function GET() {
       }
     }
 
-    await db.close()
-
     return NextResponse.json({
       success: true,
       coins: uniqueCoins,
@@ -193,7 +214,7 @@ export async function GET() {
   }
 }
 
-async function backfillCoinAddresses(db: any, coins: any[]) {
+async function backfillCoinAddresses(sql: any, coins: any[]) {
   if (!coins?.length) return coins
 
   const unresolved = coins.filter(
@@ -240,10 +261,11 @@ async function backfillCoinAddresses(db: any, coins: any[]) {
       }
 
       if (resolved?.tokenAddress && resolved?.curveAddress) {
-        await db.run(
-          'UPDATE coins SET tokenAddress = ?, curveAddress = ? WHERE id = ?',
-          [resolved.tokenAddress, resolved.curveAddress, coin.id]
-        )
+        await sql`
+          UPDATE coins 
+          SET token_address = ${resolved.tokenAddress}, curve_address = ${resolved.curveAddress} 
+          WHERE id = ${coin.id}
+        `
         coin.tokenAddress = resolved.tokenAddress
         coin.curveAddress = resolved.curveAddress
         console.log('✅ Backfilled addresses for coin:', coin.id, resolved)

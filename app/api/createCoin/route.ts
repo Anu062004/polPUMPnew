@@ -87,64 +87,27 @@ export async function POST(request: NextRequest) {
         websiteUrl: null
       }
 
-      // Store in database directly (avoid circular fetch)
-      const { open } = await import('sqlite')
-      const sqlite3 = await import('sqlite3')
-      const path = await import('path')
-      const { promises: fs } = await import('fs')
+      // Store in database using PostgreSQL
+      const { sql } = await import('@vercel/postgres')
+      const { initializeSchema } = await import('../../../lib/postgresManager')
       
-      // Check if we're in a serverless environment (Vercel, AWS Lambda, etc.)
-      const isServerless = process.env.VERCEL === '1' || 
-                          process.env.AWS_LAMBDA_FUNCTION_NAME || 
-                          process.env.NEXT_RUNTIME === 'nodejs'
-      
-      // Use /tmp directory in serverless environments (only writable location)
-      let dbPath: string
-      if (isServerless) {
-        dbPath = '/tmp/data/coins.db'
-      } else {
-        dbPath = path.join(process.cwd(), 'data', 'coins.db')
-      }
-      
-      const dataDir = path.dirname(dbPath)
-      
-      // Ensure data directory exists
-      try {
-        await fs.access(dataDir)
-      } catch {
-        await fs.mkdir(dataDir, { recursive: true })
-      }
-      
-      const db = await open({
-        filename: dbPath,
-        driver: sqlite3.Database
-      })
-      
-      // Ensure table exists
-      await db.exec(`
-        CREATE TABLE IF NOT EXISTS coins (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL,
-          symbol TEXT NOT NULL,
-          supply TEXT NOT NULL,
-          imageHash TEXT,
-          tokenAddress TEXT,
-          txHash TEXT NOT NULL,
-          creator TEXT NOT NULL,
-          createdAt INTEGER NOT NULL,
-          description TEXT
-        )
-      `)
+      // Initialize schema if needed
+      await initializeSchema()
       
       const coinId = `${symbol.toLowerCase()}-${Date.now()}`
-      await db.run(`
-        INSERT INTO coins (id, name, symbol, supply, imageHash, tokenAddress, txHash, creator, createdAt, description)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [
-        coinId, name, symbol, supply, imageRootHash || null, null, coinData.txHash, creator, Date.now(), metadata.description
-      ])
+      const createdAt = Date.now()
       
-      await db.close()
+      // Insert coin into PostgreSQL
+      await sql`
+        INSERT INTO coins (
+          id, name, symbol, supply, image_hash, token_address, tx_hash, 
+          creator, created_at, description
+        )
+        VALUES (
+          ${coinId}, ${name}, ${symbol}, ${supply}, ${imageRootHash || null}, 
+          ${null}, ${coinData.txHash}, ${creator}, ${createdAt}, ${metadata.description}
+        )
+      `
       
       return NextResponse.json({
         success: true,
