@@ -9,7 +9,19 @@ import sqlite3 from 'sqlite3'
 import { open } from 'sqlite'
 import { buildLivestreamUrls } from './livestreamHelpers'
 
-const DB_PATH = path.join(process.cwd(), 'data', 'coins.db')
+// Helper function to get database path (handles serverless environments)
+function getDbPath() {
+  const isServerless = process.env.VERCEL === '1' || 
+                      process.env.AWS_LAMBDA_FUNCTION_NAME || 
+                      process.env.NEXT_RUNTIME === 'nodejs'
+  
+  if (isServerless) {
+    return '/tmp/data/coins.db'
+  }
+  return path.join(process.cwd(), 'data', 'coins.db')
+}
+
+const DB_PATH = getDbPath()
 
 export interface LivestreamRecord {
   tokenAddress: string

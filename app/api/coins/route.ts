@@ -6,8 +6,20 @@ import { open } from 'sqlite'
 import { ethers } from 'ethers'
 import { CONTRACT_CONFIG } from '../../../lib/contract-config'
 
+// Helper function to get database path (handles serverless environments)
+function getDbPath() {
+  const isServerless = process.env.VERCEL === '1' || 
+                      process.env.AWS_LAMBDA_FUNCTION_NAME || 
+                      process.env.NEXT_RUNTIME === 'nodejs'
+  
+  if (isServerless) {
+    return '/tmp/data/coins.db'
+  }
+  return path.join(process.cwd(), 'data', 'coins.db')
+}
+
 // Database file path + chain metadata
-const DB_PATH = path.join(process.cwd(), 'data', 'coins.db')
+const DB_PATH = getDbPath()
 const RPC_URL =
   process.env.NEXT_PUBLIC_EVM_RPC ||
   process.env.POLYGON_AMOY_RPC ||

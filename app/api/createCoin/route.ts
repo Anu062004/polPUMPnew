@@ -93,7 +93,19 @@ export async function POST(request: NextRequest) {
       const path = await import('path')
       const { promises: fs } = await import('fs')
       
-      const dbPath = path.join(process.cwd(), 'data', 'coins.db')
+      // Check if we're in a serverless environment (Vercel, AWS Lambda, etc.)
+      const isServerless = process.env.VERCEL === '1' || 
+                          process.env.AWS_LAMBDA_FUNCTION_NAME || 
+                          process.env.NEXT_RUNTIME === 'nodejs'
+      
+      // Use /tmp directory in serverless environments (only writable location)
+      let dbPath: string
+      if (isServerless) {
+        dbPath = '/tmp/data/coins.db'
+      } else {
+        dbPath = path.join(process.cwd(), 'data', 'coins.db')
+      }
+      
       const dataDir = path.dirname(dbPath)
       
       // Ensure data directory exists

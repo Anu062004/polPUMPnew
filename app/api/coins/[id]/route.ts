@@ -6,7 +6,20 @@ import { open } from 'sqlite'
 import { resolveCoinAddresses, updateCoinAddresses as saveCurveAddresses } from '../../../../lib/curveResolver'
 
 const RPC_URL = process.env.NEXT_PUBLIC_EVM_RPC || process.env.RPC_URL || 'https://polygon-amoy.infura.io/v3/b4f237515b084d4bad4e5de070b0452f'
-const DB_PATH = path.join(process.cwd(), 'data', 'coins.db')
+
+// Helper function to get database path (handles serverless environments)
+function getDbPath() {
+  const isServerless = process.env.VERCEL === '1' || 
+                      process.env.AWS_LAMBDA_FUNCTION_NAME || 
+                      process.env.NEXT_RUNTIME === 'nodejs'
+  
+  if (isServerless) {
+    return '/tmp/data/coins.db'
+  }
+  return path.join(process.cwd(), 'data', 'coins.db')
+}
+
+const DB_PATH = getDbPath()
 
 // Get token from database
 async function getFromDB(id: string) {

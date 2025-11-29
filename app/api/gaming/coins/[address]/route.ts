@@ -21,9 +21,21 @@ const MEME_TOKEN_ABI = [
   'function name() view returns (string)'
 ]
 
+// Helper function to get database path (handles serverless environments)
+function getDbPath() {
+  const isServerless = process.env.VERCEL === '1' || 
+                      process.env.AWS_LAMBDA_FUNCTION_NAME || 
+                      process.env.NEXT_RUNTIME === 'nodejs'
+  
+  if (isServerless) {
+    return '/tmp/data/coins.db'
+  }
+  return path.join(process.cwd(), 'data', 'coins.db')
+}
+
 // Get database connection
 async function getDatabase() {
-  const dbPath = path.join(process.cwd(), 'data', 'coins.db')
+  const dbPath = getDbPath()
   const dataDir = path.dirname(dbPath)
 
   try {

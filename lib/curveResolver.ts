@@ -13,7 +13,19 @@ const FACTORY_ABI = [
   'event PairCreated(address indexed token, address indexed curve, address indexed creator, string name, string symbol, uint256 seedOg, uint256 seedTokens)',
 ]
 
-const DB_PATH = path.join(process.cwd(), 'data', 'coins.db')
+// Helper function to get database path (handles serverless environments)
+function getDbPath() {
+  const isServerless = process.env.VERCEL === '1' || 
+                      process.env.AWS_LAMBDA_FUNCTION_NAME || 
+                      process.env.NEXT_RUNTIME === 'nodejs'
+  
+  if (isServerless) {
+    return '/tmp/data/coins.db'
+  }
+  return path.join(process.cwd(), 'data', 'coins.db')
+}
+
+const DB_PATH = getDbPath()
 
 export interface CoinLike {
   id: string
