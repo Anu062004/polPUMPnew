@@ -413,24 +413,107 @@ export async function POST(request: NextRequest) {
     const isBytes32 = (v: any) => typeof v === 'string' && /^0x[0-9a-fA-F]{64}$/.test(v)
     const safeImageHash = isCid(coinData.imageHash) || isBytes32(coinData.imageHash) ? coinData.imageHash : null
     
-    const db = await getDatabase()
+    // Use PostgreSQL instead of SQLite
+    const { sql } = await import('@vercel/postgres')
+    const { initializeSchema } = await import('../../../lib/postgresManager')
     
-    // Prevent duplicate symbols (case-insensitive)
-    const existing = await db.get(
-      'SELECT 1 FROM coins WHERE lower(symbol) = lower(?) LIMIT 1',
-      coinData.symbol
-    )
-    if (existing) {
-      await db.close()
+    // Initialize schema if needed
+    await initializeSchema()
+    
+    // Check if coin already exists (by symbol or token_address)
+    const existingBySymbol = await sql`
+      SELECT id, token_address FROM coins 
+      WHERE LOWER(symbol) = LOWER(${coinData.symbol}) 
+      LIMIT 1
+    `
+    
+    const existingByToken = await sql`
+      SELECT id FROM coins 
+      WHERE LOWER(token_address) = LOWER(${normalizedTokenAddress})
+      LIMIT 1
+    `
+    
+    // If exists by token address, it's a duplicate
+    if (existingByToken.rows.length > 0) {
+      return NextResponse.json(
+        { success: false, error: 'Token address already exists in database' },
+        { status: 409 }
+      )
+    }
+    
+    const createdAt = Date.now()
+    const description = coinData.description || `${coinData.name} (${coinData.symbol}) - A memecoin created on Polygon Amoy`
+    
+    // If coin exists by symbol but has no token_address, update it
+    if (existingBySymbol.rows.length > 0 && !existingBySymbol.rows[0].token_address) {
+      const existingId = existingBySymbol.rows[0].id
+      
+      // Update existing coin with token addresses
+      await sql`
+        UPDATE coins 
+        SET 
+          token_address = ${normalizedTokenAddress},
+          curve_address = ${normalizedCurveAddress},
+          tx_hash = ${coinData.txHash},
+          image_hash = ${safeImageHash},
+          description = ${description},
+          telegram_url = ${coinData.telegramUrl || null},
+          x_url = ${coinData.xUrl || null},
+          discord_url = ${coinData.discordUrl || null},
+          website_url = ${coinData.websiteUrl || null},
+          updated_at = ${createdAt}
+        WHERE id = ${existingId}
+      `
+      
+      console.log(`✅ Updated existing coin ${existingId} with token address: ${normalizedTokenAddress}`)
+      
+      return NextResponse.json({
+        success: true,
+        coin: {
+          id: existingId,
+          name: coinData.name,
+          symbol: coinData.symbol,
+          supply: coinData.supply,
+          imageHash: safeImageHash,
+          tokenAddress: normalizedTokenAddress,
+          curveAddress: normalizedCurveAddress,
+          txHash: coinData.txHash,
+          creator: coinData.creator,
+          createdAt: new Date(createdAt).toISOString(),
+          description
+        },
+        message: 'Coin updated successfully'
+      })
+    }
+    
+    // If exists by symbol and already has token_address, it's a duplicate
+    if (existingBySymbol.rows.length > 0) {
       return NextResponse.json(
         { success: false, error: 'Symbol already exists' },
         { status: 409 }
       )
     }
     
-    // Create new coin with metadata
+    // Create new coin
+    const coinId = `${coinData.symbol.toLowerCase()}-${createdAt}`
+    
+    await sql`
+      INSERT INTO coins (
+        id, name, symbol, supply, image_hash, token_address, curve_address, tx_hash, 
+        creator, created_at, description, telegram_url, x_url, discord_url, website_url
+      ) VALUES (
+        ${coinId}, ${coinData.name}, ${coinData.symbol}, ${coinData.supply},
+        ${safeImageHash}, ${normalizedTokenAddress}, ${normalizedCurveAddress}, ${coinData.txHash},
+        ${coinData.creator}, ${createdAt}, ${description},
+        ${coinData.telegramUrl || null}, ${coinData.xUrl || null},
+        ${coinData.discordUrl || null}, ${coinData.websiteUrl || null}
+      )
+    `
+    
+    console.log(`✅ New coin added to PostgreSQL: ${coinId} with token address: ${normalizedTokenAddress}`)
+    
     const newCoin = {
-      id: `${coinData.symbol.toLowerCase()}-${Date.now()}`,
+      id: coinId,
       name: coinData.name,
       symbol: coinData.symbol,
       supply: coinData.supply,
@@ -439,39 +522,9 @@ export async function POST(request: NextRequest) {
       curveAddress: normalizedCurveAddress,
       txHash: coinData.txHash,
       creator: coinData.creator,
-      createdAt: Date.now(),
-      description: coinData.description || `${coinData.name} (${coinData.symbol}) - A memecoin created on Polygon Amoy`,
-      // Social media URLs
-      telegramUrl: coinData.telegramUrl || null,
-      xUrl: coinData.xUrl || null,
-      discordUrl: coinData.discordUrl || null,
-      websiteUrl: coinData.websiteUrl || null,
-      marketCap: null,
-      price: null,
-      volume24h: null,
-      holders: null,
-      totalTransactions: null
+      createdAt: new Date(createdAt).toISOString(),
+      description
     }
-    
-    // Insert into database
-    await db.run(`
-      INSERT INTO coins (
-        id, name, symbol, supply, imageHash, tokenAddress, curveAddress, txHash, 
-        creator, createdAt, description, telegramUrl, xUrl, discordUrl, websiteUrl,
-        marketCap, price, volume24h, holders, totalTransactions
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      newCoin.id, newCoin.name, newCoin.symbol, newCoin.supply,
-      newCoin.imageHash, newCoin.tokenAddress, newCoin.curveAddress, newCoin.txHash,
-      newCoin.creator, newCoin.createdAt, newCoin.description,
-      newCoin.telegramUrl, newCoin.xUrl, newCoin.discordUrl, newCoin.websiteUrl,
-      newCoin.marketCap, newCoin.price, newCoin.volume24h,
-      newCoin.holders, newCoin.totalTransactions
-    ])
-    
-    await db.close()
-    
-    console.log('New coin added to database:', newCoin)
     
     return NextResponse.json({
       success: true,

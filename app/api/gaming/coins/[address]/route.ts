@@ -67,14 +67,40 @@ export async function GET(
     }
     
     // Get all coins from PostgreSQL database
+    // Include coins with token_address (for gaming) and recently created coins without token_address yet
     let coins: any[] = []
     try {
-      const result = await sql`
+      // First, get coins with token_address (these are ready for gaming)
+      const resultWithAddress = await sql`
         SELECT * FROM coins 
         WHERE token_address IS NOT NULL AND token_address != ''
         ORDER BY created_at DESC
         LIMIT 100
       `
+      
+      // Also get recently created coins without token_address (created in last 24 hours)
+      // These might be pending on-chain creation
+      const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000)
+      const resultPending = await sql`
+        SELECT * FROM coins 
+        WHERE (token_address IS NULL OR token_address = '')
+        AND created_at > ${oneDayAgo}
+        ORDER BY created_at DESC
+        LIMIT 20
+      `
+      
+      // Combine results, prioritizing coins with token_address
+      const allResults = [...resultWithAddress.rows, ...resultPending.rows]
+      
+      // Deduplicate by id
+      const uniqueCoins = new Map()
+      for (const coin of allResults) {
+        if (!uniqueCoins.has(coin.id)) {
+          uniqueCoins.set(coin.id, coin)
+        }
+      }
+      
+      const result = { rows: Array.from(uniqueCoins.values()) }
       coins = result.rows.map((coin: any) => ({
         ...coin,
         id: coin.id,

@@ -1987,13 +1987,50 @@ export default function GamingPage() {
       <TokenCreatorModal
         isOpen={isCreateCoinModalOpen}
         onClose={() => setIsCreateCoinModalOpen(false)}
-        onTokenCreated={(tokenData) => {
+        onTokenCreated={async (tokenData) => {
           console.log('✅ Token created:', tokenData)
+          
+          // Save token to database via API
+          if (tokenData.tokenAddress && tokenData.curveAddress && tokenData.txHash) {
+            try {
+              const saveResponse = await fetch('/api/coins', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  name: tokenData.name,
+                  symbol: tokenData.symbol,
+                  supply: tokenData.supply,
+                  description: tokenData.description,
+                  imageHash: tokenData.imageHash,
+                  tokenAddress: tokenData.tokenAddress,
+                  curveAddress: tokenData.curveAddress,
+                  txHash: tokenData.txHash,
+                  creator: address || 'Unknown',
+                  telegramUrl: tokenData.telegramUrl,
+                  xUrl: tokenData.xUrl,
+                  discordUrl: tokenData.discordUrl,
+                  websiteUrl: tokenData.websiteUrl,
+                }),
+              })
+              
+              if (saveResponse.ok) {
+                const result = await saveResponse.json()
+                if (result.success) {
+                  console.log('✅ Token saved to database')
+                } else {
+                  console.warn('⚠️ Token save warning:', result.error)
+                }
+              }
+            } catch (saveError: any) {
+              console.error('❌ Failed to save token to database:', saveError)
+            }
+          }
+          
           // Refresh coins list after creation
           if (address) {
             setTimeout(() => {
               loadCoinsData()
-            }, 2000) // Wait 2 seconds for backend to index
+            }, 2000) // Wait 2 seconds for database to update
           }
           setIsCreateCoinModalOpen(false)
         }}
