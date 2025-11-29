@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ethers } from 'ethers'
-import { promises as fs } from 'fs'
-import path from 'path'
-import { open } from 'sqlite'
-import sqlite3 from 'sqlite3'
+import { sql } from '@vercel/postgres'
+import { initializeSchema } from '../../../../lib/postgresManager'
 
 // ERC20 ABI for balance checking
 const ERC20_ABI = [
@@ -20,54 +18,6 @@ const MEME_TOKEN_ABI = [
   'function symbol() view returns (string)',
   'function name() view returns (string)'
 ]
-
-// Helper function to get database path (handles serverless environments)
-function getDbPath() {
-  const isServerless = process.env.VERCEL === '1' || 
-                      process.env.AWS_LAMBDA_FUNCTION_NAME || 
-                      process.env.NEXT_RUNTIME === 'nodejs'
-  
-  if (isServerless) {
-    return '/tmp/data/coins.db'
-  }
-  return path.join(process.cwd(), 'data', 'coins.db')
-}
-
-// Get database connection
-async function getDatabase() {
-  const dbPath = getDbPath()
-  const dataDir = path.dirname(dbPath)
-
-  try {
-    await fs.access(dataDir)
-  } catch {
-    await fs.mkdir(dataDir, { recursive: true })
-  }
-
-  const db = await open({
-    filename: dbPath,
-    driver: sqlite3.Database
-  })
-
-  // Ensure table exists
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS coins (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      symbol TEXT NOT NULL,
-      supply TEXT NOT NULL,
-      imageHash TEXT,
-      tokenAddress TEXT,
-      curveAddress TEXT,
-      txHash TEXT NOT NULL,
-      creator TEXT NOT NULL,
-      createdAt INTEGER NOT NULL,
-      description TEXT
-    )
-  `)
-
-  return db
-}
 
 // Get token balance for a user
 async function getTokenBalance(
@@ -107,15 +57,30 @@ export async function GET(
     
     const provider = new ethers.JsonRpcProvider(rpcUrl)
 
-    // Get all coins from database
-    const db = await getDatabase()
-    const coins = await db.all(`
+    // Initialize PostgreSQL schema if needed
+    await initializeSchema()
+    
+    // Get all coins from PostgreSQL database
+    const result = await sql`
       SELECT * FROM coins 
-      WHERE tokenAddress IS NOT NULL AND tokenAddress != ''
-      ORDER BY createdAt DESC
+      WHERE token_address IS NOT NULL AND token_address != ''
+      ORDER BY created_at DESC
       LIMIT 100
-    `)
-    await db.close()
+    `
+    const coins = result.rows.map((coin: any) => ({
+      ...coin,
+      id: coin.id,
+      name: coin.name,
+      symbol: coin.symbol,
+      supply: coin.supply,
+      imageHash: coin.image_hash,
+      tokenAddress: coin.token_address,
+      curveAddress: coin.curve_address,
+      txHash: coin.tx_hash,
+      creator: coin.creator,
+      createdAt: coin.created_at,
+      description: coin.description
+    }))
 
     // Fetch balances for all coins in parallel (with rate limiting)
     const userHoldings: any[] = []
