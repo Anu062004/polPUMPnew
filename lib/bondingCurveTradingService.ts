@@ -137,15 +137,15 @@ class BondingCurveTradingService {
 
       return {
         address: curveAddress,
-        basePrice: ethers.utils.formatEther(basePrice),
-        stepSize: ethers.utils.formatEther(stepSize),
+        basePrice: ethers.formatEther(basePrice),
+        stepSize: ethers.formatEther(stepSize),
         stepQty: stepQty.toString(),
         curveCap: curveCap.toString(),
         feeBps: feeBps.toNumber(),
-        currentPrice: ethers.utils.formatEther(currentPrice),
+        currentPrice: ethers.formatEther(currentPrice),
         currentStep: currentStep.toNumber(),
         tokensSold: tokensSold.toString(),
-        nativeReserve: ethers.utils.formatEther(nativeReserve),
+        nativeReserve: ethers.formatEther(nativeReserve),
         isGraduated,
         remainingTokens: remainingTokens.toString()
       }
@@ -167,9 +167,9 @@ class BondingCurveTradingService {
     
     return {
       currentStep: stats.currentStep.toNumber(),
-        currentPrice: ethers.utils.formatEther(stats.currentPrice),
+        currentPrice: ethers.formatEther(stats.currentPrice),
         tokensSold: stats.tokensSold.toString(),
-        nativeReserve: ethers.utils.formatEther(stats.nativeReserve),
+        nativeReserve: ethers.formatEther(stats.nativeReserve),
       isGraduated: stats.isGraduated,
         remainingTokens: stats.remainingTokens.toString()
       }
@@ -189,7 +189,7 @@ class BondingCurveTradingService {
     const curveContract = new ethers.Contract(curveAddress, BONDING_CURVE_ABI, this.provider)
       
       // Convert token amount to wei
-      const tokenAmountWei = ethers.utils.parseEther(tokenAmount)
+      const tokenAmountWei = ethers.parseEther(tokenAmount)
     
       // Get quote
       const costWei = await curveContract.quoteBuy(tokenAmountWei)
@@ -201,15 +201,15 @@ class BondingCurveTradingService {
       
       // Calculate slippage (price impact)
       const totalCost = costWei.add(feeAmount)
-      const avgPrice = totalCost.mul(ethers.utils.parseEther('1')).div(tokenAmountWei)
+      const avgPrice = totalCost.mul(ethers.parseEther('1')).div(tokenAmountWei)
       const slippage = avgPrice.sub(currentPrice).mul(10000).div(currentPrice)
     
     return {
-        inputAmount: ethers.utils.formatEther(totalCost),
+        inputAmount: ethers.formatEther(totalCost),
         outputAmount: tokenAmount,
-        price: ethers.utils.formatEther(currentPrice),
+        price: ethers.formatEther(currentPrice),
         slippage: slippage.toString(),
-        fee: ethers.utils.formatEther(feeAmount)
+        fee: ethers.formatEther(feeAmount)
       }
     } catch (error) {
       console.error('Error getting buy quote:', error)
@@ -227,7 +227,7 @@ class BondingCurveTradingService {
     const curveContract = new ethers.Contract(curveAddress, BONDING_CURVE_ABI, this.provider)
       
       // Convert token amount to wei
-      const tokenAmountWei = ethers.utils.parseEther(tokenAmount)
+      const tokenAmountWei = ethers.parseEther(tokenAmount)
       
       // Get quote
       const returnWei = await curveContract.quoteSell(tokenAmountWei)
@@ -239,15 +239,15 @@ class BondingCurveTradingService {
       
       // Calculate slippage (price impact)
       const netReturn = returnWei.sub(feeAmount)
-      const avgPrice = netReturn.mul(ethers.utils.parseEther('1')).div(tokenAmountWei)
+      const avgPrice = netReturn.mul(ethers.parseEther('1')).div(tokenAmountWei)
       const slippage = currentPrice.sub(avgPrice).mul(10000).div(currentPrice)
       
       return {
         inputAmount: tokenAmount,
-        outputAmount: ethers.utils.formatEther(netReturn),
-        price: ethers.utils.formatEther(currentPrice),
+        outputAmount: ethers.formatEther(netReturn),
+        price: ethers.formatEther(currentPrice),
         slippage: slippage.toString(),
-        fee: ethers.utils.formatEther(feeAmount)
+        fee: ethers.formatEther(feeAmount)
       }
     } catch (error) {
       console.error('Error getting sell quote:', error)
@@ -270,8 +270,8 @@ class BondingCurveTradingService {
       const curveContract = new ethers.Contract(curveAddress, BONDING_CURVE_ABI, this.signer)
       
       // Convert amounts to wei
-      const tokenAmountWei = ethers.utils.parseEther(tokenAmount)
-      const maxCostWei = ethers.utils.parseEther(maxCost)
+      const tokenAmountWei = ethers.parseEther(tokenAmount)
+      const maxCostWei = ethers.parseEther(maxCost)
       
       // Get current quote to calculate slippage
       const quote = await this.getBuyQuote(curveAddress, tokenAmount)
@@ -302,9 +302,9 @@ class BondingCurveTradingService {
       
       if (buyEvent) {
         details = {
-          inputAmount: ethers.utils.formatEther(buyEvent.args.ogIn),
+          inputAmount: ethers.formatEther(buyEvent.args.ogIn),
           outputAmount: buyEvent.args.tokensOut.toString(),
-          price: ethers.utils.formatEther(buyEvent.args.virtualPrice),
+          price: ethers.formatEther(buyEvent.args.virtualPrice),
           step: 0 // Would need to get from StepAdvanced event
         }
       }
@@ -339,8 +339,8 @@ class BondingCurveTradingService {
       const curveContract = new ethers.Contract(curveAddress, BONDING_CURVE_ABI, this.signer)
       
       // Convert amounts to wei
-      const tokenAmountWei = ethers.utils.parseEther(tokenAmount)
-      const minReturnWei = ethers.utils.parseEther(minReturn)
+      const tokenAmountWei = ethers.parseEther(tokenAmount)
+      const minReturnWei = ethers.parseEther(minReturn)
       
       // Get current quote to calculate slippage
       const quote = await this.getSellQuote(curveAddress, tokenAmount)
@@ -370,8 +370,8 @@ class BondingCurveTradingService {
       if (sellEvent) {
         details = {
           inputAmount: sellEvent.args.tokensIn.toString(),
-          outputAmount: ethers.utils.formatEther(sellEvent.args.ogOut),
-          price: ethers.utils.formatEther(sellEvent.args.virtualPrice),
+          outputAmount: ethers.formatEther(sellEvent.args.ogOut),
+          price: ethers.formatEther(sellEvent.args.virtualPrice),
           step: 0 // Would need to get from StepAdvanced event
         }
       }
@@ -400,7 +400,7 @@ class BondingCurveTradingService {
     try {
       const tokenContract = new ethers.Contract(tokenAddress, PROJECT_TOKEN_ABI, this.provider)
       const balance = await tokenContract.balanceOf(userAddress)
-      return ethers.utils.formatEther(balance)
+      return ethers.formatEther(balance)
     } catch (error) {
       console.error('Error getting token balance:', error)
       return '0'
@@ -415,7 +415,7 @@ class BondingCurveTradingService {
 
     try {
       const balance = await this.provider.getBalance(userAddress)
-      return ethers.utils.formatEther(balance)
+      return ethers.formatEther(balance)
     } catch (error) {
       console.error('Error getting native balance:', error)
       return '0'
@@ -444,9 +444,9 @@ class BondingCurveTradingService {
       curveContract.on('Buy', (buyer: string, ogIn: ethers.BigNumber, tokensOut: ethers.BigNumber, price: ethers.BigNumber) => {
         callbacks.onBuy!(
           buyer,
-          ethers.utils.formatEther(ogIn),
+          ethers.formatEther(ogIn),
           tokensOut.toString(),
-          ethers.utils.formatEther(price)
+          ethers.formatEther(price)
         )
       })
     }
@@ -456,8 +456,8 @@ class BondingCurveTradingService {
         callbacks.onSell!(
           seller,
           tokensIn.toString(),
-          ethers.utils.formatEther(ogOut),
-          ethers.utils.formatEther(price)
+          ethers.formatEther(ogOut),
+          ethers.formatEther(price)
         )
       })
     }
@@ -465,16 +465,16 @@ class BondingCurveTradingService {
     if (callbacks.onPriceUpdate) {
       curveContract.on('PriceUpdated', (price: ethers.BigNumber, supply: ethers.BigNumber, ogReserve: ethers.BigNumber) => {
         callbacks.onPriceUpdate!(
-          ethers.utils.formatEther(price),
+          ethers.formatEther(price),
           supply.toString(),
-          ethers.utils.formatEther(ogReserve)
+          ethers.formatEther(ogReserve)
         )
       })
     }
     
     if (callbacks.onStepAdvance) {
       curveContract.on('StepAdvanced', (step: ethers.BigNumber, price: ethers.BigNumber) => {
-        callbacks.onStepAdvance!(step.toNumber(), ethers.utils.formatEther(price))
+        callbacks.onStepAdvance!(step.toNumber(), ethers.formatEther(price))
       })
     }
     
@@ -482,7 +482,7 @@ class BondingCurveTradingService {
       curveContract.on('Graduated', (tokensSold: ethers.BigNumber, ogReserve: ethers.BigNumber, timestamp: ethers.BigNumber) => {
         callbacks.onGraduation!(
           tokensSold.toString(),
-          ethers.utils.formatEther(ogReserve),
+          ethers.formatEther(ogReserve),
           timestamp.toNumber()
         )
       })

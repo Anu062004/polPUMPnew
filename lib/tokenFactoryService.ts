@@ -138,8 +138,8 @@ class TokenFactoryService {
         )
       } else {
         // Use custom curve parameters
-        const basePrice = params.basePrice || ethers.utils.parseEther('0.001').toString()
-        const stepSize = params.stepSize || ethers.utils.parseEther('0.000001').toString()
+        const basePrice = params.basePrice || ethers.parseEther('0.001').toString()
+        const stepSize = params.stepSize || ethers.parseEther('0.000001').toString()
         const stepQty = params.stepQty || '1000'
         const curveCap = params.curveCap || '1000000'
         const feeBps = params.feeBps || '500'
@@ -285,7 +285,7 @@ class TokenFactoryService {
 
     try {
       const curveAddress = await this.factoryContract.getCurveForToken(tokenAddress)
-      return curveAddress === ethers.constants.AddressZero ? null : curveAddress.toLowerCase()
+      return curveAddress === ethers.ZeroAddress ? null : curveAddress.toLowerCase()
     } catch (error) {
       console.error('Error getting curve for token:', error)
       return null

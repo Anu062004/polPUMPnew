@@ -12,6 +12,8 @@ const FACTORY_ABI = [
 // Any MemeToken created by our factories has a `minter` which is the bonding curve.
 const MEME_TOKEN_ABI = ['function minter() external view returns (address)']
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { pinataService } from '../../../lib/pinataService'
+import { pinataService } from '../../../../lib/pinataService'
 
 // Proxy image download through Next API to avoid mixed content/CORS
 // Supports IPFS hashes (Pinata) and local storage
