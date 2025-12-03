@@ -138,11 +138,14 @@ export async function GET(
     try {
       await initializeSchema()
     } catch (schemaError: any) {
-      // If it's a connection string error, log it but don't break - we'll use SQLite fallback
+      // If it's a connection/client error, log it but don't break - we'll use SQLite fallback
       if (schemaError.code === 'invalid_connection_string' || 
           schemaError.message?.includes('connection string') ||
-          schemaError.message?.includes('POSTGRES_PRISMA_URL')) {
-        console.warn('⚠️ PostgreSQL connection issue, will use SQLite fallback:', schemaError.message)
+          schemaError.message?.includes('POSTGRES_PRISMA_URL') ||
+          schemaError.message?.includes('not properly initialized') ||
+          schemaError.message?.includes('Cannot read properties')) {
+        console.warn('⚠️ PostgreSQL connection/client issue, will use SQLite fallback:', schemaError.message)
+        console.warn('⚠️ Error type:', schemaError.constructor?.name || typeof schemaError)
       } else {
         console.warn('⚠️ Schema initialization warning (may already exist):', schemaError.message)
       }

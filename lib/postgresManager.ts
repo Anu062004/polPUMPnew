@@ -39,6 +39,34 @@ export async function getDb() {
         // createClient() automatically reads from POSTGRES_PRISMA_URL environment variable
         // Don't pass connectionString explicitly - let it read from env
         vercelClient = createClient()
+        
+        // Verify the client was created and has sql property
+        if (!vercelClient) {
+          throw new Error('createClient() returned undefined')
+        }
+        
+        // Check if sql exists and is callable
+        if (!vercelClient.sql) {
+          console.error('❌ Client object:', Object.keys(vercelClient))
+          throw new Error('createClient() returned client without sql property. Available properties: ' + Object.keys(vercelClient).join(', '))
+        }
+        
+        // Test that sql is actually a function
+        if (typeof vercelClient.sql !== 'function') {
+          throw new Error(`createClient().sql is not a function, it's a ${typeof vercelClient.sql}`)
+        }
+        
+        // Try a simple test query to verify the client is properly initialized
+        // This will catch issues early before we try to use it in schema initialization
+        try {
+          await vercelClient.sql`SELECT 1 as test`
+          console.log('✅ Vercel Postgres client initialized and tested successfully')
+        } catch (testError: any) {
+          console.error('❌ Vercel Postgres client test query failed:', testError.message)
+          // Don't throw here - let it fail later with better context
+          // But log it so we know the client isn't working
+        }
+        
         console.log('✅ Using Vercel Postgres client (POSTGRES_PRISMA_URL from env)')
       } catch (error: any) {
         // Don't log as error if it's just missing pooled connection - this is expected fallback
@@ -51,6 +79,12 @@ export async function getDb() {
         throw error
       }
     }
+    
+    // Double-check client and sql are available
+    if (!vercelClient || !vercelClient.sql) {
+      throw new Error('Vercel Postgres client is not properly initialized')
+    }
+    
     return { type: 'vercel', client: vercelClient, sql: vercelClient.sql }
   }
 
@@ -394,6 +428,11 @@ export async function getSql() {
   try {
     const db = await getDb()
     if (db.type === 'vercel') {
+      // Verify sql is available
+      if (!db.sql || typeof db.sql !== 'function') {
+        console.error('❌ sql template tag is not available or not a function')
+        return null
+      }
       return db.sql
     }
     return null
@@ -401,10 +440,12 @@ export async function getSql() {
     // If connection fails, return null so caller can use SQLite fallback
     if (error.code === 'invalid_connection_string' || 
         error.message?.includes('connection string') ||
-        error.message?.includes('POSTGRES_PRISMA_URL')) {
+        error.message?.includes('POSTGRES_PRISMA_URL') ||
+        error.message?.includes('not properly initialized')) {
       console.warn('⚠️ Cannot get Postgres SQL client, will use SQLite fallback:', error.message)
       return null
     }
+    console.error('❌ Unexpected error getting SQL client:', error)
     throw error
   }
 }
