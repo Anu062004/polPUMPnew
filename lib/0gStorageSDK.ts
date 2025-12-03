@@ -239,6 +239,17 @@ class OGStorageSDK {
 
   // Download data from storage
   async downloadData(rootHash: string): Promise<any> {
+    // Skip backend download on serverless environments (Vercel)
+    // Backend server doesn't exist on Vercel, so this will always fail
+    const isServerless = (typeof process !== 'undefined' && (process as any).env && 
+                         ((process as any).env.VERCEL === '1' || 
+                          (process as any).env.AWS_LAMBDA_FUNCTION_NAME || 
+                          (process as any).env.NEXT_RUNTIME === 'nodejs'))
+    
+    if (isServerless) {
+      console.log('Skipping backend download on serverless environment (Vercel)')
+      return null
+    }
     try {
       console.log(`📥 Downloading data with rootHash: ${rootHash}`);
       

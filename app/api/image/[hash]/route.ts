@@ -51,40 +51,52 @@ export async function GET(
       }
     }
 
-    // Try backend first if available
-    const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000'
-    const url = `${backendBase}/download/${encodeURIComponent(hash)}`
+    // Try backend only if not on Vercel (serverless) and backend URL is explicitly set
+    // On Vercel, localhost:4000 doesn't exist, so skip this step
+    const isServerless = process.env.VERCEL === '1' || 
+                        process.env.AWS_LAMBDA_FUNCTION_NAME || 
+                        process.env.NEXT_RUNTIME === 'nodejs'
+    
+    if (!isServerless) {
+      const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL
+      // Only try backend if URL is explicitly set (not localhost default)
+      if (backendBase && !backendBase.includes('localhost') && !backendBase.includes('127.0.0.1')) {
+        const url = `${backendBase}/download/${encodeURIComponent(hash)}`
 
-    let timeoutId: NodeJS.Timeout | null = null
-    try {
-      // Create timeout controller for compatibility
-      const controller = new AbortController()
-      timeoutId = setTimeout(() => controller.abort(), 5000)
-      
-      const res = await fetch(url, { 
-        cache: 'no-store',
-        signal: controller.signal
-      })
-      
-      if (timeoutId) clearTimeout(timeoutId)
-      
-      if (res.ok) {
-        // Stream the body back with content-type/length if provided
-        const headers: Record<string, string> = {
-          'Cache-Control': 'public, max-age=31536000, immutable'
+        let timeoutId: NodeJS.Timeout | null = null
+        try {
+          // Create timeout controller for compatibility
+          const controller = new AbortController()
+          timeoutId = setTimeout(() => controller.abort(), 5000)
+          
+          const res = await fetch(url, { 
+            cache: 'no-store',
+            signal: controller.signal
+          })
+          
+          if (timeoutId) clearTimeout(timeoutId)
+          
+          if (res.ok) {
+            // Stream the body back with content-type/length if provided
+            const headers: Record<string, string> = {
+              'Cache-Control': 'public, max-age=31536000, immutable'
+            }
+            const ct = res.headers.get('content-type')
+            const cl = res.headers.get('content-length')
+            if (ct) headers['Content-Type'] = ct
+            if (cl) headers['Content-Length'] = cl
+
+            const buffer = Buffer.from(await res.arrayBuffer())
+            return new NextResponse(buffer, { headers })
+          }
+        } catch (backendError: any) {
+          // Clear timeout if it was set
+          if (timeoutId) clearTimeout(timeoutId)
+          console.log('Backend not available, trying other sources:', backendError?.message || backendError)
         }
-        const ct = res.headers.get('content-type')
-        const cl = res.headers.get('content-length')
-        if (ct) headers['Content-Type'] = ct
-        if (cl) headers['Content-Length'] = cl
-
-        const buffer = Buffer.from(await res.arrayBuffer())
-        return new NextResponse(buffer, { headers })
       }
-    } catch (backendError: any) {
-      // Clear timeout if it was set
-      if (timeoutId) clearTimeout(timeoutId)
-      console.log('Backend not available, trying direct storage access:', backendError?.message || backendError)
+    } else {
+      console.log('Skipping backend fetch on serverless environment (Vercel)')
     }
 
     // Fallback: Try to check local uploads directory
@@ -113,25 +125,32 @@ export async function GET(
       console.log('Local uploads check failed:', localError)
     }
 
-    // Fallback: Try to use Storage SDK if available
-    try {
-      const { ogStorageSDK } = await import('@/lib/0gStorageSDK')
-      const imageData = await ogStorageSDK.downloadData(hash)
-      
-      if (imageData && typeof imageData === 'object') {
-        // If it's a JSON object, try to extract image data
-        if (imageData.data || imageData.image) {
-          const imageBuffer = Buffer.from(imageData.data || imageData.image, 'base64')
-          return new NextResponse(imageBuffer, {
-            headers: {
-              'Content-Type': 'image/png',
-              'Cache-Control': 'public, max-age=31536000, immutable'
-            }
-          })
+    // Fallback: Try to use Storage SDK if available (only if not serverless)
+    // Storage SDK might try to connect to localhost, so skip on Vercel
+    if (!isServerless) {
+      try {
+        const { ogStorageSDK } = await import('@/lib/0gStorageSDK')
+        const imageData = await ogStorageSDK.downloadData(hash)
+        
+        if (imageData && typeof imageData === 'object') {
+          // If it's a JSON object, try to extract image data
+          if (imageData.data || imageData.image) {
+            const imageBuffer = Buffer.from(imageData.data || imageData.image, 'base64')
+            return new NextResponse(imageBuffer, {
+              headers: {
+                'Content-Type': 'image/png',
+                'Cache-Control': 'public, max-age=31536000, immutable'
+              }
+            })
+          }
+        }
+      } catch (storageError: any) {
+        // Don't log if it's a connection refused error (expected on Vercel)
+        if (!storageError?.message?.includes('ECONNREFUSED') && 
+            !storageError?.message?.includes('localhost')) {
+          console.log('Storage SDK not available:', storageError?.message || storageError)
         }
       }
-    } catch (storageError) {
-      console.log('Storage SDK not available:', storageError)
     }
 
     // Final fallback: Return 404 with helpful message
