@@ -196,16 +196,16 @@ export async function GET(
       coins = await loadCoinsFromSqlite()
     }
 
-    // If Postgres succeeded but returned no rows, also try SQLite as a fallback
-    // This ensures we get coins from SQLite if Postgres is empty
+    // If Postgres succeeded but returned no rows, try SQLite fallback (local dev only)
+    // Note: On Vercel, SQLite is ephemeral and won't persist data
     if (usedPostgres && coins.length === 0) {
-      console.log('📊 PostgreSQL returned 0 rows, trying SQLite fallback...')
+      console.log('📊 PostgreSQL returned 0 rows, trying SQLite fallback (local dev only)...')
       const sqliteCoins = await loadCoinsFromSqlite()
       if (sqliteCoins.length > 0) {
         console.log(`✅ SQLite fallback found ${sqliteCoins.length} coins`)
         coins = sqliteCoins
       } else {
-        console.log('⚠️ SQLite also returned 0 coins')
+        console.warn('⚠️ No coins found in Postgres or SQLite. On Vercel, ensure POSTGRES_PRISMA_URL is configured and coins are saved to Postgres when created.')
       }
     } else if (!usedPostgres && coins.length > 0) {
       console.log(`✅ Using SQLite data: ${coins.length} coins found`)

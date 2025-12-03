@@ -167,10 +167,14 @@ export async function GET() {
 
     try {
       // Try PostgreSQL first (used in production / when configured)
-      const { sql } = await import('@vercel/postgres')
-      const { initializeSchema } = await import('../../../lib/postgresManager')
+      const { initializeSchema, getSql } = await import('../../../lib/postgresManager')
       
       await initializeSchema()
+      
+      const sql = await getSql()
+      if (!sql) {
+        throw new Error('Postgres not available')
+      }
 
       const result = await sql`
         SELECT * FROM coins 
@@ -453,10 +457,14 @@ export async function POST(request: NextRequest) {
 
     // First try PostgreSQL (for production / when configured)
     try {
-      const { sql } = await import('@vercel/postgres')
-      const { initializeSchema } = await import('../../../lib/postgresManager')
+      const { initializeSchema, getSql } = await import('../../../lib/postgresManager')
       
       await initializeSchema()
+      
+      const sql = await getSql()
+      if (!sql) {
+        throw new Error('Postgres not available')
+      }
       
       const existingBySymbol = await sql`
         SELECT id, token_address FROM coins 
