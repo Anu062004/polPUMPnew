@@ -129,70 +129,105 @@ async function getDatabase() {
   return await initDatabase()
 }
 
+/**
+ * Helper: load coins from local SQLite database (used as a fallback when
+ * PostgreSQL isn't available or not configured in local development).
+ */
+async function loadCoinsFromSqlite(limit = 100) {
+  const db = await getDatabase()
+  try {
+    const rows = await db.all<any[]>(
+      'SELECT * FROM coins ORDER BY createdAt DESC LIMIT ?',
+      limit
+    )
+
+    return rows.map((coin: any) => ({
+      ...coin,
+      tokenAddress: coin.tokenAddress,
+      curveAddress: coin.curveAddress,
+      txHash: coin.txHash,
+      createdAt: new Date(coin.createdAt).toISOString(),
+      imageHash: coin.imageHash,
+      telegramUrl: coin.telegramUrl,
+      xUrl: coin.xUrl,
+      discordUrl: coin.discordUrl,
+      websiteUrl: coin.websiteUrl,
+      marketCap: coin.marketCap,
+      volume24h: coin.volume24h,
+      totalTransactions: coin.totalTransactions,
+    }))
+  } finally {
+    await db.close()
+  }
+}
+
 export async function GET() {
   try {
-    // Use PostgreSQL instead of SQLite
-    const { sql } = await import('@vercel/postgres')
-    const { initializeSchema } = await import('../../../lib/postgresManager')
-    
-    // Initialize schema if needed
-    await initializeSchema()
+    let coins: any[] = []
 
-    // Get all coins with additional blockchain data
-    // We'll deduplicate in code to ensure we get the most recent version of each unique coin
-    const result = await sql`
-      SELECT * FROM coins 
-      ORDER BY created_at DESC 
-      LIMIT 100
-    `
-    const allCoins = result.rows
-    
-    // Deduplicate: keep the most recent entry for each unique coin
-    const coinMap = new Map<string, any>()
-    for (const coin of allCoins) {
-      // Map PostgreSQL column names to camelCase for compatibility
-      const mappedCoin = {
-        ...coin,
-        tokenAddress: coin.token_address,
-        curveAddress: coin.curve_address,
-        txHash: coin.tx_hash,
-        createdAt: coin.created_at,
-        imageHash: coin.image_hash,
-        telegramUrl: coin.telegram_url,
-        xUrl: coin.x_url,
-        discordUrl: coin.discord_url,
-        websiteUrl: coin.website_url,
-        marketCap: coin.market_cap,
-        volume24h: coin.volume_24h,
-        totalTransactions: coin.total_transactions,
+    try {
+      // Try PostgreSQL first (used in production / when configured)
+      const { sql } = await import('@vercel/postgres')
+      const { initializeSchema } = await import('../../../lib/postgresManager')
+      
+      await initializeSchema()
+
+      const result = await sql`
+        SELECT * FROM coins 
+        ORDER BY created_at DESC 
+        LIMIT 100
+      `
+      const allCoins = result.rows
+      
+      const coinMap = new Map<string, any>()
+      for (const coin of allCoins) {
+        const mappedCoin = {
+          ...coin,
+          tokenAddress: coin.token_address,
+          curveAddress: coin.curve_address,
+          txHash: coin.tx_hash,
+          createdAt: coin.created_at,
+          imageHash: coin.image_hash,
+          telegramUrl: coin.telegram_url,
+          xUrl: coin.x_url,
+          discordUrl: coin.discord_url,
+          websiteUrl: coin.website_url,
+          marketCap: coin.market_cap,
+          volume24h: coin.volume_24h,
+          totalTransactions: coin.total_transactions,
+        }
+        
+        const key =
+          mappedCoin.tokenAddress?.toLowerCase() ||
+          mappedCoin.id?.toLowerCase() ||
+          `${mappedCoin.symbol?.toLowerCase()}-${mappedCoin.name?.toLowerCase()}` ||
+          mappedCoin.txHash?.toLowerCase() ||
+          ''
+        
+        if (key && !coinMap.has(key)) {
+          coinMap.set(key, mappedCoin)
+        }
       }
       
-      const key = mappedCoin.tokenAddress?.toLowerCase() || 
-                  mappedCoin.id?.toLowerCase() || 
-                  `${mappedCoin.symbol?.toLowerCase()}-${mappedCoin.name?.toLowerCase()}` || 
-                  mappedCoin.txHash?.toLowerCase() || 
-                  ''
-      
-      if (key && !coinMap.has(key)) {
-        coinMap.set(key, mappedCoin)
-      }
+      coins = Array.from(coinMap.values()).slice(0, 50)
+
+      await backfillCoinAddresses(sql, coins)
+    } catch (pgError: any) {
+      console.warn('PostgreSQL not available for /api/coins GET, using SQLite fallback:', pgError?.message || pgError)
+      coins = await loadCoinsFromSqlite(100)
     }
-    
-    const coins = Array.from(coinMap.values()).slice(0, 50)
-
-    await backfillCoinAddresses(sql, coins)
 
     // Deduplicate coins based on unique identifiers
     const seen = new Set<string>()
     const uniqueCoins: any[] = []
     
     for (const coin of coins) {
-      // Create unique key from tokenAddress, id, or symbol+name
-      const key = coin.tokenAddress?.toLowerCase() || 
-                  coin.id?.toLowerCase() || 
-                  `${coin.symbol?.toLowerCase()}-${coin.name?.toLowerCase()}` || 
-                  coin.txHash?.toLowerCase() || 
-                  ''
+      const key =
+        coin.tokenAddress?.toLowerCase() ||
+        coin.id?.toLowerCase() ||
+        `${coin.symbol?.toLowerCase()}-${coin.name?.toLowerCase()}` ||
+        coin.txHash?.toLowerCase() ||
+        ''
       
       if (key && !seen.has(key)) {
         seen.add(key)
@@ -203,7 +238,7 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       coins: uniqueCoins,
-      total: uniqueCoins.length
+      total: uniqueCoins.length,
     })
   } catch (error) {
     console.error('Failed to fetch coins:', error)
@@ -413,63 +448,178 @@ export async function POST(request: NextRequest) {
     const isBytes32 = (v: any) => typeof v === 'string' && /^0x[0-9a-fA-F]{64}$/.test(v)
     const safeImageHash = isCid(coinData.imageHash) || isBytes32(coinData.imageHash) ? coinData.imageHash : null
     
-    // Use PostgreSQL instead of SQLite
-    const { sql } = await import('@vercel/postgres')
-    const { initializeSchema } = await import('../../../lib/postgresManager')
-    
-    // Initialize schema if needed
-    await initializeSchema()
-    
-    // Check if coin already exists (by symbol or token_address)
-    const existingBySymbol = await sql`
-      SELECT id, token_address FROM coins 
-      WHERE LOWER(symbol) = LOWER(${coinData.symbol}) 
-      LIMIT 1
-    `
-    
-    const existingByToken = await sql`
-      SELECT id FROM coins 
-      WHERE LOWER(token_address) = LOWER(${normalizedTokenAddress})
-      LIMIT 1
-    `
-    
-    // If exists by token address, it's a duplicate
-    if (existingByToken.rows.length > 0) {
-      return NextResponse.json(
-        { success: false, error: 'Token address already exists in database' },
-        { status: 409 }
-      )
-    }
-    
     const createdAt = Date.now()
     const description = coinData.description || `${coinData.name} (${coinData.symbol}) - A memecoin created on Polygon Amoy`
-    
-    // If coin exists by symbol but has no token_address, update it
-    if (existingBySymbol.rows.length > 0 && !existingBySymbol.rows[0].token_address) {
-      const existingId = existingBySymbol.rows[0].id
+
+    // First try PostgreSQL (for production / when configured)
+    try {
+      const { sql } = await import('@vercel/postgres')
+      const { initializeSchema } = await import('../../../lib/postgresManager')
       
-      // Update existing coin with token addresses
-      await sql`
-        UPDATE coins 
-        SET 
-          token_address = ${normalizedTokenAddress},
-          curve_address = ${normalizedCurveAddress},
-          tx_hash = ${coinData.txHash},
-          image_hash = ${safeImageHash},
-          description = ${description},
-          telegram_url = ${coinData.telegramUrl || null},
-          x_url = ${coinData.xUrl || null},
-          discord_url = ${coinData.discordUrl || null},
-          website_url = ${coinData.websiteUrl || null},
-          updated_at = ${createdAt}
-        WHERE id = ${existingId}
+      await initializeSchema()
+      
+      const existingBySymbol = await sql`
+        SELECT id, token_address FROM coins 
+        WHERE LOWER(symbol) = LOWER(${coinData.symbol}) 
+        LIMIT 1
       `
       
-      console.log(`✅ Updated existing coin ${existingId} with token address: ${normalizedTokenAddress}`)
+      const existingByToken = await sql`
+        SELECT id FROM coins 
+        WHERE LOWER(token_address) = LOWER(${normalizedTokenAddress})
+        LIMIT 1
+      `
+      
+      if (existingByToken.rows.length > 0) {
+        return NextResponse.json(
+          { success: false, error: 'Token address already exists in database' },
+          { status: 409 }
+        )
+      }
+
+      if (existingBySymbol.rows.length > 0 && !existingBySymbol.rows[0].token_address) {
+        const existingId = existingBySymbol.rows[0].id
+        
+        await sql`
+          UPDATE coins 
+          SET 
+            token_address = ${normalizedTokenAddress},
+            curve_address = ${normalizedCurveAddress},
+            tx_hash = ${coinData.txHash},
+            image_hash = ${safeImageHash},
+            description = ${description},
+            telegram_url = ${coinData.telegramUrl || null},
+            x_url = ${coinData.xUrl || null},
+            discord_url = ${coinData.discordUrl || null},
+            website_url = ${coinData.websiteUrl || null},
+            updated_at = ${createdAt}
+          WHERE id = ${existingId}
+        `
+        
+        console.log(`✅ Updated existing coin ${existingId} with token address: ${normalizedTokenAddress}`)
+        
+        return NextResponse.json({
+          success: true,
+          coin: {
+            id: existingId,
+            name: coinData.name,
+            symbol: coinData.symbol,
+            supply: coinData.supply,
+            imageHash: safeImageHash,
+            tokenAddress: normalizedTokenAddress,
+            curveAddress: normalizedCurveAddress,
+            txHash: coinData.txHash,
+            creator: coinData.creator,
+            createdAt: new Date(createdAt).toISOString(),
+            description,
+          },
+          message: 'Coin updated successfully',
+        })
+      }
+      
+      if (existingBySymbol.rows.length > 0) {
+        return NextResponse.json(
+          { success: false, error: 'Symbol already exists' },
+          { status: 409 }
+        )
+      }
+      
+      const coinId = `${coinData.symbol.toLowerCase()}-${createdAt}`
+      
+      await sql`
+        INSERT INTO coins (
+          id, name, symbol, supply, image_hash, token_address, curve_address, tx_hash, 
+          creator, created_at, description, telegram_url, x_url, discord_url, website_url
+        ) VALUES (
+          ${coinId}, ${coinData.name}, ${coinData.symbol}, ${coinData.supply},
+          ${safeImageHash}, ${normalizedTokenAddress}, ${normalizedCurveAddress}, ${coinData.txHash},
+          ${coinData.creator}, ${createdAt}, ${description},
+          ${coinData.telegramUrl || null}, ${coinData.xUrl || null},
+          ${coinData.discordUrl || null}, ${coinData.websiteUrl || null}
+        )
+      `
+      
+      console.log(`✅ New coin added to PostgreSQL: ${coinId} with token address: ${normalizedTokenAddress}`)
+      
+      const newCoin = {
+        id: coinId,
+        name: coinData.name,
+        symbol: coinData.symbol,
+        supply: coinData.supply,
+        imageHash: safeImageHash,
+        tokenAddress: normalizedTokenAddress,
+        curveAddress: normalizedCurveAddress,
+        txHash: coinData.txHash,
+        creator: coinData.creator,
+        createdAt: new Date(createdAt).toISOString(),
+        description,
+      }
       
       return NextResponse.json({
         success: true,
-        coin: {
+        coin: newCoin,
+        message: 'Coin added successfully',
+      })
+    } catch (pgError: any) {
+      console.warn('PostgreSQL not available for /api/coins POST, using SQLite fallback:', pgError?.message || pgError)
+    }
+
+    // Fallback: store in local SQLite database for local development
+    try {
+      const db = await getDatabase()
+      
+      // Check for existing coin by token address
+      const existingByToken = await db.get(
+        'SELECT id FROM coins WHERE LOWER(tokenAddress) = LOWER(?) LIMIT 1',
+        [normalizedTokenAddress]
+      )
+      
+      if (existingByToken) {
+        await db.close()
+        return NextResponse.json(
+          { success: false, error: 'Token address already exists in database' },
+          { status: 409 }
+        )
+      }
+
+      // Check for existing coin by symbol
+      const existingBySymbol = await db.get(
+        'SELECT id, tokenAddress FROM coins WHERE LOWER(symbol) = LOWER(?) LIMIT 1',
+        [coinData.symbol.toLowerCase()]
+      )
+
+      if (existingBySymbol && !existingBySymbol.tokenAddress) {
+        const existingId = existingBySymbol.id
+        await db.run(
+          `UPDATE coins SET 
+            tokenAddress = ?, 
+            curveAddress = ?, 
+            txHash = ?, 
+            imageHash = ?, 
+            description = ?, 
+            telegramUrl = ?, 
+            xUrl = ?, 
+            discordUrl = ?, 
+            websiteUrl = ?
+          WHERE id = ?`,
+          [
+            normalizedTokenAddress,
+            normalizedCurveAddress,
+            coinData.txHash,
+            safeImageHash,
+            description,
+            coinData.telegramUrl || null,
+            coinData.xUrl || null,
+            coinData.discordUrl || null,
+            coinData.websiteUrl || null,
+            existingId
+          ]
+        )
+        
+        await db.close()
+        console.log(`✅ Updated existing coin ${existingId} in SQLite with token address: ${normalizedTokenAddress}`)
+
+        const updatedCoin = {
           id: existingId,
           name: coinData.name,
           symbol: coinData.symbol,
@@ -480,61 +630,90 @@ export async function POST(request: NextRequest) {
           txHash: coinData.txHash,
           creator: coinData.creator,
           createdAt: new Date(createdAt).toISOString(),
-          description
-        },
-        message: 'Coin updated successfully'
+          description,
+        }
+
+        return NextResponse.json({
+          success: true,
+          coin: updatedCoin,
+          message: 'Coin updated successfully (SQLite)',
+        })
+      }
+
+      if (existingBySymbol && existingBySymbol.tokenAddress) {
+        await db.close()
+        return NextResponse.json(
+          { success: false, error: 'Symbol already exists' },
+          { status: 409 }
+        )
+      }
+
+      const coinId = `${coinData.symbol.toLowerCase()}-${createdAt}`
+
+      await db.run(
+        `INSERT INTO coins (
+          id, name, symbol, supply, imageHash, tokenAddress, curveAddress, txHash,
+          creator, createdAt, description, telegramUrl, xUrl, discordUrl, websiteUrl
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          coinId,
+          coinData.name,
+          coinData.symbol,
+          coinData.supply,
+          safeImageHash,
+          normalizedTokenAddress,
+          normalizedCurveAddress,
+          coinData.txHash,
+          coinData.creator,
+          createdAt,
+          description,
+          coinData.telegramUrl || null,
+          coinData.xUrl || null,
+          coinData.discordUrl || null,
+          coinData.websiteUrl || null
+        ]
+      )
+
+      await db.close()
+      
+      console.log(`✅ New coin added to SQLite: ${coinId} with token address: ${normalizedTokenAddress}`)
+
+      const newCoin = {
+        id: coinId,
+        name: coinData.name,
+        symbol: coinData.symbol,
+        supply: coinData.supply,
+        imageHash: safeImageHash,
+        tokenAddress: normalizedTokenAddress,
+        curveAddress: normalizedCurveAddress,
+        txHash: coinData.txHash,
+        creator: coinData.creator,
+        createdAt: new Date(createdAt).toISOString(),
+        description,
+      }
+
+      return NextResponse.json({
+        success: true,
+        coin: newCoin,
+        message: 'Coin added successfully (SQLite)',
       })
-    }
-    
-    // If exists by symbol and already has token_address, it's a duplicate
-    if (existingBySymbol.rows.length > 0) {
+    } catch (sqliteError: any) {
+      console.error('❌ SQLite save failed:', sqliteError)
       return NextResponse.json(
-        { success: false, error: 'Symbol already exists' },
-        { status: 409 }
+        { 
+          success: false, 
+          error: `Failed to save coin to database: ${sqliteError?.message || 'Unknown error'}. Please check database configuration.` 
+        },
+        { status: 500 }
       )
     }
-    
-    // Create new coin
-    const coinId = `${coinData.symbol.toLowerCase()}-${createdAt}`
-    
-    await sql`
-      INSERT INTO coins (
-        id, name, symbol, supply, image_hash, token_address, curve_address, tx_hash, 
-        creator, created_at, description, telegram_url, x_url, discord_url, website_url
-      ) VALUES (
-        ${coinId}, ${coinData.name}, ${coinData.symbol}, ${coinData.supply},
-        ${safeImageHash}, ${normalizedTokenAddress}, ${normalizedCurveAddress}, ${coinData.txHash},
-        ${coinData.creator}, ${createdAt}, ${description},
-        ${coinData.telegramUrl || null}, ${coinData.xUrl || null},
-        ${coinData.discordUrl || null}, ${coinData.websiteUrl || null}
-      )
-    `
-    
-    console.log(`✅ New coin added to PostgreSQL: ${coinId} with token address: ${normalizedTokenAddress}`)
-    
-    const newCoin = {
-      id: coinId,
-      name: coinData.name,
-      symbol: coinData.symbol,
-      supply: coinData.supply,
-      imageHash: safeImageHash,
-      tokenAddress: normalizedTokenAddress,
-      curveAddress: normalizedCurveAddress,
-      txHash: coinData.txHash,
-      creator: coinData.creator,
-      createdAt: new Date(createdAt).toISOString(),
-      description
-    }
-    
-    return NextResponse.json({
-      success: true,
-      coin: newCoin,
-      message: 'Coin added successfully'
-    })
-  } catch (error) {
-    console.error('Failed to add coin:', error)
+  } catch (error: any) {
+    console.error('❌ Failed to add coin:', error)
     return NextResponse.json(
-      { success: false, error: 'Failed to add coin' },
+      { 
+        success: false, 
+        error: error.message || 'Failed to add coin' 
+      },
       { status: 500 }
     )
   }

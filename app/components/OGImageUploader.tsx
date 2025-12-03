@@ -20,8 +20,7 @@ export default function OGImageUploader({ onImageUploaded, className = "" }: OGI
   const [copied, setCopied] = useState(false);
   const [uploads, setUploads] = useState<Array<{ cid: string; name: string; type: string }>>([]);
   const [isReused, setIsReused] = useState(false);
-
-
+  const [viewUrl, setViewUrl] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const API_BASE = useMemo(() => {
@@ -42,6 +41,7 @@ export default function OGImageUploader({ onImageUploaded, className = "" }: OGI
     setFile(f);
     setError(null);
     setSuccess(null);
+    setViewUrl(null);
     setProgress(0);
     setCopied(false);
     if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -125,7 +125,9 @@ export default function OGImageUploader({ onImageUploaded, className = "" }: OGI
       if (existingHash) {
         // File already exists, use existing hash
         console.log('✅ Using existing file hash:', existingHash);
+        const url = `${API_BASE}/download/${existingHash}`;
         setSuccess(existingHash);
+        setViewUrl(url);
         setUploads((u) => [{ cid: existingHash, name: file?.name || '', type: file?.type || '' }, ...u]);
         if (onImageUploaded && file) {
           onImageUploaded(existingHash, file);
@@ -163,7 +165,13 @@ export default function OGImageUploader({ onImageUploaded, className = "" }: OGI
             console.log('📌 Pinata URL:', result.pinataUrl);
           }
         }
+        const url =
+          result.pinataUrl ||
+          result.gatewayUrl ||
+          `${API_BASE}/download/${result.rootHash}`;
+
         setSuccess(result.rootHash);
+        setViewUrl(url);
         setUploads((u) => [{ cid: result.rootHash, name: file?.name || '', type: file?.type || '' }, ...u]);
         
         // Store in local cache for future checks
@@ -210,6 +218,7 @@ export default function OGImageUploader({ onImageUploaded, className = "" }: OGI
     });
     setError(null);
     setSuccess(null);
+    setViewUrl(null);
     setCopied(false);
     setProgress(0);
     setIsReused(false);
@@ -351,7 +360,7 @@ export default function OGImageUploader({ onImageUploaded, className = "" }: OGI
                       {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />} {copied ? "Copied" : "Copy CID"}
                     </button>
                     <a
-                      href={`${API_BASE}/download/${success}`}
+                      href={viewUrl || `${API_BASE}/download/${success}`}
                       target="_blank"
                       rel="noreferrer"
                       onClick={(e) => e.stopPropagation()}

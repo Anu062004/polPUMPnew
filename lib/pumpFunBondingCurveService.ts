@@ -243,7 +243,9 @@ export class PumpFunBondingCurveService {
       let tokensOut = minTokensOut
       if (boughtEvent) {
         const parsed = curve.interface.parseLog(boughtEvent)
-        tokensOut = formatEther(parsed.args.tokensOut)
+        if (parsed) {
+          tokensOut = formatEther(parsed.args.tokensOut)
+        }
       }
       
       return {
@@ -313,7 +315,9 @@ export class PumpFunBondingCurveService {
       let baseOut = minBaseOut
       if (soldEvent) {
         const parsed = curve.interface.parseLog(soldEvent)
-        baseOut = formatEther(parsed.args.baseOut)
+        if (parsed) {
+          baseOut = formatEther(parsed.args.baseOut)
+        }
       }
       
       return {

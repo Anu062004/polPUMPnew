@@ -48,18 +48,18 @@ export interface TokenInfo {
 }
 
 class TokenFactoryService {
-  private provider: ethers.providers.Web3Provider | null = null
-  private signer: ethers.Signer | null = null
+  private provider: ethers.BrowserProvider | null = null
+  private signer: ethers.JsonRpcSigner | null = null
   private factoryContract: ethers.Contract | null = null
   private factoryAddress: string = ''
 
   // Initialize the service
   async initialize(
-    provider: ethers.providers.Web3Provider,
+    provider: ethers.BrowserProvider,
     factoryAddress: string
   ) {
     this.provider = provider
-    this.signer = provider.getSigner()
+    this.signer = await provider.getSigner()
     this.factoryAddress = factoryAddress
 
     // Initialize factory contract
@@ -317,7 +317,7 @@ class TokenFactoryService {
       token: string,
       creator: string,
       metadataURI: string,
-      initialPrice: ethers.BigNumber,
+      initialPrice: bigint,
       event: any
     ) => {
       console.log(`🪙 New token created: ${token}`)

@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { ethers } from 'ethers'
 import { sql } from '@vercel/postgres'
 import { initializeSchema } from '@/lib/postgresManager'
+import sqlite3 from 'sqlite3'
+import { open } from 'sqlite'
+import path from 'path'
 
 // ERC20 ABI for balance checking
 const ERC20_ABI = [
@@ -38,14 +41,86 @@ async function getTokenBalance(
 
 export const dynamic = 'force-dynamic'
 
+async function loadCoinsFromSqlite() {
+  try {
+    // Use the same database path logic as the coins API
+    const isServerless = process.env.VERCEL === '1' || 
+                        process.env.AWS_LAMBDA_FUNCTION_NAME || 
+                        process.env.NEXT_RUNTIME === 'nodejs'
+    
+    const dbPath = isServerless 
+      ? '/tmp/data/coins.db'
+      : path.join(process.cwd(), 'data', 'coins.db')
+    
+    const fs = await import('fs/promises')
+    
+    // Check if database file exists
+    try {
+      await fs.access(dbPath)
+      console.log(`📂 Reading SQLite database from: ${dbPath}`)
+    } catch {
+      console.log('⚠️ SQLite database file does not exist:', dbPath)
+      // Try to create the directory if it doesn't exist
+      try {
+        await fs.mkdir(path.dirname(dbPath), { recursive: true })
+        console.log(`📁 Created data directory: ${path.dirname(dbPath)}`)
+      } catch (mkdirError) {
+        console.warn('⚠️ Could not create data directory:', mkdirError)
+      }
+      return []
+    }
+
+    const db = await open({
+      filename: dbPath,
+      driver: sqlite3.Database,
+    })
+
+    // Get all coins from SQLite - include ALL tokens regardless of status
+    // Get ALL coins from SQLite - no filtering, include everything
+    const rows = await db.all<any[]>(
+      `SELECT * FROM coins ORDER BY createdAt DESC LIMIT 200`
+    )
+
+    await db.close()
+
+    console.log(`📊 SQLite query returned ${rows.length} rows from ${dbPath}`)
+    if (rows.length > 0) {
+      console.log(`📋 SQLite coin symbols:`, rows.map((r: any) => r.symbol).join(', '))
+      console.log(`📋 SQLite coin names:`, rows.map((r: any) => r.name).join(', '))
+    }
+
+    return rows.map((coin: any) => ({
+      id: coin.id,
+      name: coin.name,
+      symbol: coin.symbol,
+      supply: coin.supply,
+      imageHash: coin.imageHash,
+      tokenAddress: coin.tokenAddress,
+      curveAddress: coin.curveAddress,
+      txHash: coin.txHash,
+      creator: coin.creator,
+      createdAt: coin.createdAt,
+      description: coin.description,
+    }))
+  } catch (error: any) {
+    console.error('❌ SQLite fallback for gaming coins failed:', error?.message || error)
+    return []
+  }
+}
+
 export async function GET(
   request: NextRequest,
-  { params }: { params: { address: string } }
+  { params }: { params: Promise<{ address: string }> | { address: string } }
 ) {
   try {
-    const userAddress = params.address
+    // Handle both sync and async params (Next.js 13+ uses async params)
+    const resolvedParams = params instanceof Promise ? await params : params
+    const userAddress = resolvedParams.address
+
+    console.log(`🔍 Gaming coins API called with address: ${userAddress}`)
 
     if (!userAddress || !ethers.isAddress(userAddress)) {
+      console.error(`❌ Invalid address provided: ${userAddress}`)
       return NextResponse.json(
         { success: false, error: 'Invalid address', coins: [], userHoldings: [], totalCoins: 0, coinsWithBalance: 0 },
         { status: 400 }
@@ -66,41 +141,19 @@ export async function GET(
       console.warn('Schema initialization warning (may already exist):', schemaError.message)
     }
     
-    // Get all coins from PostgreSQL database
-    // Include coins with token_address (for gaming) and recently created coins without token_address yet
+    // Get all coins from PostgreSQL database - show ALL created tokens
     let coins: any[] = []
+    let usedPostgres = false
     try {
-      // First, get coins with token_address (these are ready for gaming)
-      const resultWithAddress = await sql`
+      // Get all coins, regardless of token_address status
+      const result = await sql`
         SELECT * FROM coins 
-        WHERE token_address IS NOT NULL AND token_address != ''
         ORDER BY created_at DESC
-        LIMIT 100
+        LIMIT 200
       `
       
-      // Also get recently created coins without token_address (created in last 24 hours)
-      // These might be pending on-chain creation
-      const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000)
-      const resultPending = await sql`
-        SELECT * FROM coins 
-        WHERE (token_address IS NULL OR token_address = '')
-        AND created_at > ${oneDayAgo}
-        ORDER BY created_at DESC
-        LIMIT 20
-      `
+      console.log(`📊 PostgreSQL query returned ${result.rows.length} rows`)
       
-      // Combine results, prioritizing coins with token_address
-      const allResults = [...resultWithAddress.rows, ...resultPending.rows]
-      
-      // Deduplicate by id
-      const uniqueCoins = new Map()
-      for (const coin of allResults) {
-        if (!uniqueCoins.has(coin.id)) {
-          uniqueCoins.set(coin.id, coin)
-        }
-      }
-      
-      const result = { rows: Array.from(uniqueCoins.values()) }
       coins = result.rows.map((coin: any) => ({
         ...coin,
         id: coin.id,
@@ -115,11 +168,39 @@ export async function GET(
         createdAt: coin.created_at,
         description: coin.description
       }))
-      console.log(`✅ Fetched ${coins.length} coins from PostgreSQL`)
+      usedPostgres = true
+      console.log(`✅ Fetched ${coins.length} coins from PostgreSQL (including pending)`)
+      if (coins.length > 0) {
+        console.log(`📝 Sample coin:`, { id: coins[0].id, name: coins[0].name, symbol: coins[0].symbol, tokenAddress: coins[0].tokenAddress })
+      }
     } catch (dbError: any) {
-      console.error('❌ PostgreSQL query failed:', dbError)
-      // Return empty array instead of failing
-      coins = []
+      console.warn('⚠️ PostgreSQL query failed, falling back to SQLite:', dbError?.message || dbError)
+      // On PostgreSQL failure, fall back to local SQLite database
+      coins = await loadCoinsFromSqlite()
+    }
+
+    // If Postgres succeeded but returned no rows, also try SQLite as a fallback
+    // This ensures we get coins from SQLite if Postgres is empty
+    if (usedPostgres && coins.length === 0) {
+      console.log('📊 PostgreSQL returned 0 rows, trying SQLite fallback...')
+      const sqliteCoins = await loadCoinsFromSqlite()
+      if (sqliteCoins.length > 0) {
+        console.log(`✅ SQLite fallback found ${sqliteCoins.length} coins`)
+        coins = sqliteCoins
+      } else {
+        console.log('⚠️ SQLite also returned 0 coins')
+      }
+    } else if (!usedPostgres && coins.length > 0) {
+      console.log(`✅ Using SQLite data: ${coins.length} coins found`)
+    }
+    
+    // Ensure we have coins - log what we found
+    console.log(`📊 Total coins loaded: ${coins.length}`)
+    if (coins.length > 0) {
+      console.log(`📋 Coin symbols:`, coins.map(c => c.symbol).join(', '))
+      console.log(`📋 Coin names:`, coins.map(c => c.name).join(', '))
+    } else {
+      console.warn('⚠️ No coins found in database!')
     }
 
     // Fetch balances for all coins in parallel (with rate limiting)
@@ -134,7 +215,26 @@ export async function GET(
       await Promise.all(
         batch.map(async (coin: any) => {
           try {
-            if (!coin.tokenAddress) return
+            // Include all coins, even without tokenAddress
+            // For coins without tokenAddress, skip balance check but still include them
+            if (!coin.tokenAddress) {
+              // Add coin without balance check
+              coinsWithData.push({
+                id: coin.id || coin.txHash,
+                name: coin.name,
+                symbol: coin.symbol,
+                tokenAddress: null,
+                curveAddress: coin.curveAddress || null,
+                imageHash: coin.imageHash,
+                description: coin.description,
+                createdAt: coin.createdAt,
+                creator: coin.creator,
+                txHash: coin.txHash,
+                supply: coin.supply,
+                isPending: true // Mark as pending
+              })
+              return
+            }
 
             const balance = await getTokenBalance(provider, coin.tokenAddress, userAddress)
             const hasBalance = parseFloat(balance) > 0
@@ -252,6 +352,8 @@ export async function GET(
     }
 
     console.log(`✅ Gaming coins API: Returning ${coinsWithData.length} coins, ${userHoldings.length} user holdings`)
+    console.log(`📋 Coin symbols:`, coinsWithData.map(c => c.symbol).join(', '))
+    console.log(`👤 Created by user:`, coinsWithData.filter(c => c.creator?.toLowerCase() === userAddress.toLowerCase()).map(c => c.symbol).join(', '))
     
     return NextResponse.json({
       success: true,

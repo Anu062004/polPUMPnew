@@ -324,25 +324,45 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
         lastViewedToken: symbol
       })
 
-      // Add token to user's profile
+      // Add token to user's profile (optional, non-blocking)
       try {
         if (address) {
-          // Try to update profile (optional - won't fail creation if it fails)
           try {
-            const profileResponse = await fetch(`/api/profile/${address}/tokens`, {
-              method: 'POST',
+            // Load existing profile (if any)
+            const existingProfileResp = await fetch(`/api/profile/${address}`)
+            let existingProfile: any = null
+            if (existingProfileResp.ok) {
+              const existingJson = await existingProfileResp.json().catch(() => null)
+              existingProfile = existingJson?.profile || null
+            }
+
+            const tokens = Array.isArray(existingProfile?.tokens)
+              ? [...existingProfile.tokens]
+              : []
+
+            tokens.push({
+              tokenAddress: tokenAddr,
+              tokenName: name,
+              tokenSymbol: symbol,
+              curveAddress: curveAddr,
+              txHash: result.txHash,
+              imageUrl: finalImageHash ? `/api/image/${finalImageHash}` : undefined,
+              description: meta.description,
+              createdAt: new Date().toISOString(),
+            })
+
+            const updatedProfile = {
+              ...(existingProfile || {}),
+              address,
+              tokens,
+            }
+
+            await fetch(`/api/profile/${address}`, {
+              method: 'PUT',
               headers: {
                 'Content-Type': 'application/json',
               },
-              body: JSON.stringify({
-                tokenAddress: tokenAddr,
-                tokenName: name,
-                tokenSymbol: symbol,
-                curveAddress: curveAddr,
-                txHash: result.txHash,
-                imageUrl: finalImageHash ? `/api/image/${finalImageHash}` : undefined,
-                description: meta.description
-              })
+              body: JSON.stringify(updatedProfile),
             })
             // Silently ignore profile update failures
           } catch (profileUpdateError) {

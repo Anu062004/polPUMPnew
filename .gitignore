@@ -52,3 +52,10 @@ next-env.d.ts
 deployments/*.json
 !deployments/.gitkeep
 
+# Database files
+*.db
+*.db-journal
+data/*.db
+data/*.db-journal
+!data/.gitkeep
+

@@ -360,37 +360,26 @@ export default function HomePage() {
                 </div>
               )}
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                {mounted ? (
-                  <motion.button
-                    whileHover={{ scale: isConnected ? 1.05 : 1 }}
-                    whileTap={{ scale: isConnected ? 0.95 : 1 }}
-                    onClick={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      if (!isConnected) {
-                        alert('Please connect your wallet first!\n\nClick the "Connect Wallet" button in the top right corner.')
-                        return
-                      }
-                      setIsTokenModalOpen(true)
-                    }}
-                    disabled={!isConnected}
-                    className={`btn-primary ${!isConnected ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:shadow-lg'}`}
-                    type="button"
-                    title={!isConnected ? 'Connect wallet first' : 'Create your first token'}
-                  >
-                    {!isConnected ? '🔒 Connect Wallet to Create Token' : 'Create Your First Token'}
-                    <ArrowRight className="w-5 h-5 ml-2" />
-                  </motion.button>
-                ) : (
-                  <motion.button
-                    disabled
-                    className="btn-primary opacity-50 cursor-not-allowed"
-                    type="button"
-                  >
-                    🔒 Connect Wallet to Create Token
-                    <ArrowRight className="w-5 h-5 ml-2" />
-                  </motion.button>
-                )}
+                <motion.button
+                  whileHover={{ scale: mounted && isConnected ? 1.05 : 1 }}
+                  whileTap={{ scale: mounted && isConnected ? 0.95 : 1 }}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    if (!mounted || !isConnected) {
+                      alert('Please connect your wallet first!\n\nClick the "Connect Wallet" button in the top right corner.')
+                      return
+                    }
+                    setIsTokenModalOpen(true)
+                  }}
+                  disabled={!mounted || !isConnected}
+                  className={`btn-primary ${!mounted || !isConnected ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:shadow-lg'}`}
+                  type="button"
+                  title={!mounted || !isConnected ? 'Connect wallet first' : 'Create your first token'}
+                >
+                  {!mounted || !isConnected ? '🔒 Connect Wallet to Create Token' : 'Create Your First Token'}
+                  <ArrowRight className="w-5 h-5 ml-2" />
+                </motion.button>
                 <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                   <Link href="/explore" className="btn-secondary inline-flex items-center justify-center cursor-pointer">
                     Explore Tokens

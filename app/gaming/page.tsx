@@ -13,6 +13,7 @@ export default function GamingPage() {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<'pumpplay'|'meme-royale'|'mines'|'arcade'>('pumpplay')
   const backend = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000'
+  const [mounted, setMounted] = useState(false)
   
   // Platform Coins & User Holdings
   const [allCoins, setAllCoins] = useState<any[]>([])
@@ -69,6 +70,15 @@ export default function GamingPage() {
   const [nativeBalance, setNativeBalance] = useState<string>('0.0')
   const [isLoadingBalance, setIsLoadingBalance] = useState(false)
 
+  // Derived data: tokens created by the connected user
+  const createdCoins = address
+    ? allCoins.filter(
+        (c) =>
+          typeof c.creator === 'string' &&
+          c.creator.toLowerCase() === address.toLowerCase()
+      )
+    : []
+
   // Load native MATIC balance
   const loadNativeBalance = async () => {
     if (!address) return
@@ -83,6 +93,11 @@ export default function GamingPage() {
       setIsLoadingBalance(false)
     }
   }
+
+  // Set mounted state on client
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // Auto-refresh native balance
   useEffect(() => {
@@ -104,9 +119,14 @@ export default function GamingPage() {
       try {
         const controller = new AbortController()
         const timeoutId = setTimeout(() => controller.abort(), 5000) // 5s timeout
+        const timestamp = Date.now()
         
-        response = await fetch(`${backend}/gaming/coins/${address}`, { 
+        response = await fetch(`${backend}/gaming/coins/${address}?t=${timestamp}`, { 
           cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache'
+          },
           signal: controller.signal
         })
         
@@ -124,7 +144,15 @@ export default function GamingPage() {
       // Fallback to Next.js API route if backend failed
       if (!response || !response.ok) {
         try {
-          response = await fetch(`/api/gaming/coins/${address}`, { cache: 'no-store' })
+          // Add timestamp to force cache-busting and ensure fresh data
+          const timestamp = Date.now()
+          response = await fetch(`/api/gaming/coins/${address}?t=${timestamp}`, { 
+            cache: 'no-store',
+            headers: {
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache'
+            }
+          })
         } catch (apiError) {
           console.warn('Both backend and API route failed, using empty data')
           setAllCoins([])
@@ -136,21 +164,27 @@ export default function GamingPage() {
       
       if (response && response.ok) {
         const data = await response.json()
+        console.log(`✅ Coins loaded: ${data.totalCoins || 0} total, ${data.coinsWithBalance || 0} with balance`)
+        console.log(`📋 All coin symbols:`, (data.coins || []).map((c: any) => c.symbol).join(', '))
+        console.log(`👤 Created by you:`, (data.coins || []).filter((c: any) => 
+          c.creator?.toLowerCase() === address?.toLowerCase()
+        ).map((c: any) => c.symbol).join(', '))
         setAllCoins(data.coins || [])
         setUserCoins(data.userHoldings || [])
         setLoadingCoins(false)
-        // Only log success, not errors
-        // console.log(`✅ Balance updated: ${data.totalCoins || 0} coins, you hold ${data.coinsWithBalance || 0}`)
         // Also refresh native balance
         loadNativeBalance()
       } else {
-        // Set empty arrays on error instead of throwing
+        // Log error for debugging
+        const errorText = response ? await response.text() : 'No response'
+        console.error(`❌ Failed to load coins: ${response?.status} ${response?.statusText}`, errorText)
         setAllCoins([])
         setUserCoins([])
         setLoadingCoins(false)
       }
     } catch (e: any) {
-      // Silently handle errors - don't spam console
+      // Log error for debugging
+      console.error('❌ Error loading coins:', e)
       setAllCoins([])
       setUserCoins([])
       setLoadingCoins(false)
@@ -600,14 +634,34 @@ export default function GamingPage() {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`
   }
 
+  // Avoid hydration mismatches by only rendering full UI on the client
+  if (!mounted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#050816] text-purple-300">
+        Loading Gaming Arena...
+      </div>
+    )
+  }
+
   return (
-    <div className="min-h-screen relative overflow-hidden">
+    <div className="min-h-screen relative overflow-hidden bg-[#050816]" suppressHydrationWarning>
+      {/* Neon arena background layers */}
+      <div
+        className="pointer-events-none absolute inset-0 opacity-40 mix-blend-screen"
+        style={{
+          backgroundImage:
+            'radial-gradient(circle at 10% 0%, rgba(244,114,182,0.35) 0, transparent 55%), radial-gradient(circle at 90% 100%, rgba(56,189,248,0.35) 0, transparent 55%)',
+        }}
+      />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(129,140,248,0.15),transparent_60%),radial-gradient(circle_at_bottom,_rgba(45,212,191,0.18),transparent_55%)]" />
+
       <BlobBackground />
-      <div className="relative z-10 p-6">
+
+      <div className="relative z-10 p-6" suppressHydrationWarning>
         <div className="max-w-7xl mx-auto">
-        {/* Improved Header Section */}
+        {/* Arena Header / HUD */}
         <div className="mb-8">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 px-5 py-4 bg-black/40 border border-purple-500/40 rounded-2xl shadow-[0_0_40px_rgba(168,85,247,0.45)] backdrop-blur-xl">
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-2">
                 <h1 className="text-4xl md:text-5xl font-black bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500 text-transparent bg-clip-text drop-shadow-[0_0_30px_rgba(168,85,247,0.5)]">
@@ -651,9 +705,11 @@ export default function GamingPage() {
                     </div>
                     <div className="h-8 w-px bg-purple-500/30"></div>
                     <div className="text-right">
-                      <div className="text-xs text-purple-300/80 font-semibold mb-0.5">Tokens</div>
+                      <div className="text-xs text-purple-300/80 font-semibold mb-0.5">
+                        Tokens (Created / Held)
+                      </div>
                       <div className="text-lg font-bold text-cyan-400">
-                        {userCoins.length}
+                        {createdCoins.length} / {userCoins.length}
                       </div>
                     </div>
                   </div>
@@ -714,16 +770,30 @@ export default function GamingPage() {
                 🎮 Gaming with Platform Coins
               </h2>
               <p className="text-sm text-purple-300/80" suppressHydrationWarning>
-                {typeof window !== 'undefined' ? `${allCoins.length} coins available • ${userCoins.length} in your wallet` : '0 coins available • 0 in your wallet'}
+                {mounted
+                  ? `${allCoins.length} coins available • ${createdCoins.length} created • ${userCoins.length} in your wallet`
+                  : 'Loading coins...'}
               </p>
             </div>
             {address && (
-              <button
-                onClick={() => setIsCreateCoinModalOpen(true)}
-                className="px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold rounded-lg shadow-lg transform hover:scale-105 transition-all duration-200 border border-green-400/50"
-              >
-                ➕ Create Coin
-              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    console.log('🔄 Manual refresh triggered')
+                    loadCoinsData()
+                  }}
+                  className="px-4 py-2.5 bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white font-bold rounded-lg shadow-lg transform hover:scale-105 transition-all duration-200 border border-blue-400/50"
+                  title="Refresh coins list"
+                >
+                  🔄 Refresh
+                </button>
+                <button
+                  onClick={() => setIsCreateCoinModalOpen(true)}
+                  className="px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold rounded-lg shadow-lg transform hover:scale-105 transition-all duration-200 border border-green-400/50"
+                >
+                  ➕ Create Coin
+                </button>
+              </div>
             )}
           </div>
           
@@ -767,8 +837,8 @@ export default function GamingPage() {
                       {allCoins
                         .filter(c => !userCoins.find(uc => (uc.tokenAddress || uc.id) === (c.tokenAddress || c.id)))
                         .map((c) => (
-                          <option key={c.tokenAddress || c.id} value={c.tokenAddress || c.id} className="bg-[#1a0b2e]">
-                            {c.symbol || 'UNKNOWN'} (0.0000) - {c.name || 'Unknown Token'} - Buy first to play
+                          <option key={c.tokenAddress || c.id || `pending-${c.id}`} value={c.tokenAddress || c.id || ''} className="bg-[#1a0b2e" disabled={!c.tokenAddress}>
+                            {c.symbol || 'UNKNOWN'} (0.0000) - {c.name || 'Unknown Token'} {!c.tokenAddress ? '- Pending Creation' : '- Buy first to play'}
                           </option>
                         ))}
                     </optgroup>
@@ -850,22 +920,27 @@ export default function GamingPage() {
                 <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
                   {allCoins.slice(0, 20).map((c, i) => {
                     const tokenAddress = c.tokenAddress || c.id
+                    const isPending = !c.tokenAddress || c.isPending
                     return (
                       <div 
                         key={i} 
                         onClick={() => {
-                          if (tokenAddress) {
+                          if (tokenAddress && !isPending) {
                             router.push(`/token/${tokenAddress}`)
                           }
                         }}
-                        className={`border rounded-lg px-3 py-2 text-xs cursor-pointer transition-all duration-200 hover:scale-105 ${
-                          c.hasBalance 
-                            ? 'bg-purple-500/10 border-purple-400/50 hover:bg-purple-500/20 text-purple-300' 
-                            : 'bg-[#1a0b2e]/40 border-purple-500/20 hover:border-purple-500/40 text-purple-300/70'
+                        className={`border rounded-lg px-3 py-2 text-xs transition-all duration-200 ${
+                          isPending
+                            ? 'bg-yellow-500/10 border-yellow-400/30 text-yellow-300/70 cursor-not-allowed'
+                            : c.hasBalance 
+                            ? 'bg-purple-500/10 border-purple-400/50 hover:bg-purple-500/20 text-purple-300 cursor-pointer hover:scale-105' 
+                            : 'bg-[#1a0b2e]/40 border-purple-500/20 hover:border-purple-500/40 text-purple-300/70 cursor-pointer hover:scale-105'
                         }`}
+                        title={isPending ? 'Token creation pending - waiting for on-chain deployment' : undefined}
                       >
                         <span className="font-semibold">{c.symbol || 'UNKNOWN'}</span>
                         <span className="text-purple-400/60 ml-1">- {c.name || 'Unknown'}</span>
+                        {isPending && <span className="text-yellow-400/80 ml-1 text-[10px]">⏳ Pending</span>}
                       </div>
                     )
                   })}
@@ -1991,6 +2066,7 @@ export default function GamingPage() {
           console.log('✅ Token created:', tokenData)
           
           // Save token to database via API
+          let saveSuccess = false
           if (tokenData.tokenAddress && tokenData.curveAddress && tokenData.txHash) {
             try {
               const saveResponse = await fetch('/api/coins', {
@@ -2016,21 +2092,39 @@ export default function GamingPage() {
               if (saveResponse.ok) {
                 const result = await saveResponse.json()
                 if (result.success) {
-                  console.log('✅ Token saved to database')
+                  console.log('✅ Token saved to database:', result.coin?.id || 'unknown')
+                  saveSuccess = true
                 } else {
                   console.warn('⚠️ Token save warning:', result.error)
                 }
+              } else {
+                const errorText = await saveResponse.text().catch(() => 'Unknown error')
+                console.error('❌ Token save failed:', saveResponse.status, errorText)
               }
             } catch (saveError: any) {
               console.error('❌ Failed to save token to database:', saveError)
             }
           }
           
-          // Refresh coins list after creation
+          // Refresh coins list after creation - force immediate refresh with multiple attempts
           if (address) {
-            setTimeout(() => {
+            // Wait a moment for database write to complete, then refresh
+            const refreshCoins = () => {
+              console.log('🔄 Refreshing coins list...')
               loadCoinsData()
-            }, 2000) // Wait 2 seconds for database to update
+            }
+            
+            // Immediate refresh (after save completes)
+            if (saveSuccess) {
+              setTimeout(refreshCoins, 500) // Wait 500ms for DB write
+            } else {
+              refreshCoins() // Try immediately if save failed
+            }
+            
+            // Additional refreshes to ensure the new token appears
+            setTimeout(refreshCoins, 1500) // After 1.5 seconds
+            setTimeout(refreshCoins, 3000) // After 3 seconds
+            setTimeout(refreshCoins, 5000) // After 5 seconds
           }
           setIsCreateCoinModalOpen(false)
         }}
