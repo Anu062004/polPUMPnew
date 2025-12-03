@@ -134,10 +134,19 @@ export async function GET(
     const provider = new ethers.JsonRpcProvider(rpcUrl)
 
     // Initialize PostgreSQL schema if needed
+    // If this fails, we'll fall back to SQLite
     try {
       await initializeSchema()
     } catch (schemaError: any) {
-      console.warn('Schema initialization warning (may already exist):', schemaError.message)
+      // If it's a connection string error, log it but don't break - we'll use SQLite fallback
+      if (schemaError.code === 'invalid_connection_string' || 
+          schemaError.message?.includes('connection string') ||
+          schemaError.message?.includes('POSTGRES_PRISMA_URL')) {
+        console.warn('⚠️ PostgreSQL connection issue, will use SQLite fallback:', schemaError.message)
+      } else {
+        console.warn('⚠️ Schema initialization warning (may already exist):', schemaError.message)
+      }
+      // Don't throw - let the code continue to SQLite fallback
     }
     
     // Get all coins from PostgreSQL database - show ALL created tokens
@@ -146,6 +155,12 @@ export async function GET(
     try {
       // Get SQL client for Vercel Postgres
       const sql = await getSql()
+      
+      // If sql is null, Postgres is not available - skip to SQLite fallback
+      if (!sql) {
+        console.log('📊 Postgres not available, skipping to SQLite fallback')
+        throw new Error('Postgres not available')
+      }
       
       // Get all coins, regardless of token_address status
       const result = await sql`

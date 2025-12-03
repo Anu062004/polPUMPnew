@@ -23,12 +23,32 @@ export async function getDb() {
     // Use @vercel/postgres with createClient() for proper connection handling
     if (!vercelClient) {
       try {
-        // Prefer pooled connection (POSTGRES_PRISMA_URL), fallback to direct connection
-        // createClient() automatically reads from env vars if no connectionString is provided
-        // It handles both pooled and non-pooled connections correctly
-        vercelClient = createClient()
+        // Explicitly prioritize pooled connection string (POSTGRES_PRISMA_URL)
+        // This is required for serverless environments like Vercel
+        // Direct connection strings (POSTGRES_URL) don't work with sql template tag
+        const pooledUrl = process.env.POSTGRES_PRISMA_URL
+        
+        if (pooledUrl) {
+          // Use pooled connection - this works with sql template tag
+          vercelClient = createClient({ connectionString: pooledUrl })
+          console.log('✅ Using Vercel Postgres pooled connection (POSTGRES_PRISMA_URL)')
+        } else {
+          // No pooled connection available - don't try to use direct connection
+          // This will cause the code to fall back to SQLite
+          console.warn('⚠️ POSTGRES_PRISMA_URL not found. Postgres operations will be skipped.')
+          throw new Error(
+            'POSTGRES_PRISMA_URL (pooled connection) is required for Vercel Postgres. ' +
+            'Direct connection strings (POSTGRES_URL) cannot be used with sql template tag. ' +
+            'Please configure POSTGRES_PRISMA_URL in your Vercel project settings, or the app will use SQLite fallback.'
+          )
+        }
       } catch (error: any) {
-        console.error('Failed to create Vercel Postgres client:', error)
+        // Don't log as error if it's just missing pooled connection - this is expected fallback
+        if (error.message?.includes('POSTGRES_PRISMA_URL')) {
+          console.warn('⚠️', error.message)
+        } else {
+          console.error('❌ Failed to create Vercel Postgres client:', error.message)
+        }
         throw error
       }
     }
@@ -63,9 +83,22 @@ export async function getDb() {
 export async function initializeSchema() {
   try {
     // Check if PostgreSQL is configured
-    if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
+    // Prioritize pooled connection string for Vercel
+    const hasPostgres = !!(process.env.POSTGRES_PRISMA_URL || 
+                          process.env.POSTGRES_URL || 
+                          process.env.POSTGRES_URL_NON_POOLING ||
+                          process.env.DATABASE_URL)
+    
+    if (!hasPostgres) {
       console.warn('⚠️ No PostgreSQL connection string found. Using fallback.')
       return
+    }
+    
+    // Check if we have pooled connection (required for Vercel)
+    if (isVercelPostgres && !process.env.POSTGRES_PRISMA_URL && process.env.POSTGRES_URL) {
+      // Only direct connection available - this won't work with sql template tag
+      console.warn('⚠️ Only direct connection string (POSTGRES_URL) found. Pooled connection (POSTGRES_PRISMA_URL) is recommended for Vercel.')
+      // Don't throw error, just warn - let it try and fail gracefully
     }
     
     const db = await getDb()
@@ -305,9 +338,20 @@ export async function initializeSchema() {
 
       console.log('✅ Vercel Postgres schema initialized successfully')
     }
-  } catch (error) {
+  } catch (error: any) {
+    // If it's a connection string error, provide helpful message
+    if (error.code === 'invalid_connection_string' || 
+        error.message?.includes('connection string')) {
+      console.error('❌ Schema initialization failed - connection string issue:', error.message)
+      console.error('💡 Tip: Make sure POSTGRES_PRISMA_URL (pooled connection) is configured in Vercel')
+      // Don't throw - let the calling code handle fallback
+      return
+    }
     console.error('❌ Schema initialization failed:', error)
-    throw error
+    // Only throw if it's not a connection issue (might be a real schema problem)
+    if (!error.message?.includes('connection')) {
+      throw error
+    }
   }
 }
 
@@ -327,13 +371,25 @@ export async function query(text: string, params?: any[]) {
 
 /**
  * Get the sql template tag for Vercel Postgres
+ * Returns null if Postgres is not available or connection fails
  */
 export async function getSql() {
-  const db = await getDb()
-  if (db.type === 'vercel') {
-    return db.sql
+  try {
+    const db = await getDb()
+    if (db.type === 'vercel') {
+      return db.sql
+    }
+    return null
+  } catch (error: any) {
+    // If connection fails, return null so caller can use SQLite fallback
+    if (error.code === 'invalid_connection_string' || 
+        error.message?.includes('connection string') ||
+        error.message?.includes('POSTGRES_PRISMA_URL')) {
+      console.warn('⚠️ Cannot get Postgres SQL client, will use SQLite fallback:', error.message)
+      return null
+    }
+    throw error
   }
-  throw new Error('Not using Vercel Postgres')
 }
 
 /**
