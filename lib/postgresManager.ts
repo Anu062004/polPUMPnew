@@ -23,31 +23,30 @@ export async function getDb() {
     // Use @vercel/postgres with createClient() for proper connection handling
     if (!vercelClient) {
       try {
-        // Explicitly prioritize pooled connection string (POSTGRES_PRISMA_URL)
-        // This is required for serverless environments like Vercel
-        // Direct connection strings (POSTGRES_URL) don't work with sql template tag
+        // Check if POSTGRES_PRISMA_URL is available (required for pooled connections)
         const pooledUrl = process.env.POSTGRES_PRISMA_URL
         
-        if (pooledUrl) {
-          // Use pooled connection - this works with sql template tag
-          vercelClient = createClient({ connectionString: pooledUrl })
-          console.log('✅ Using Vercel Postgres pooled connection (POSTGRES_PRISMA_URL)')
-        } else {
+        if (!pooledUrl) {
           // No pooled connection available - don't try to use direct connection
-          // This will cause the code to fall back to SQLite
           console.warn('⚠️ POSTGRES_PRISMA_URL not found. Postgres operations will be skipped.')
           throw new Error(
             'POSTGRES_PRISMA_URL (pooled connection) is required for Vercel Postgres. ' +
             'Direct connection strings (POSTGRES_URL) cannot be used with sql template tag. ' +
-            'Please configure POSTGRES_PRISMA_URL in your Vercel project settings, or the app will use SQLite fallback.'
+            'Please configure POSTGRES_PRISMA_URL in your Vercel project settings.'
           )
         }
+        
+        // createClient() automatically reads from POSTGRES_PRISMA_URL environment variable
+        // Don't pass connectionString explicitly - let it read from env
+        vercelClient = createClient()
+        console.log('✅ Using Vercel Postgres client (POSTGRES_PRISMA_URL from env)')
       } catch (error: any) {
         // Don't log as error if it's just missing pooled connection - this is expected fallback
         if (error.message?.includes('POSTGRES_PRISMA_URL')) {
           console.warn('⚠️', error.message)
         } else {
           console.error('❌ Failed to create Vercel Postgres client:', error.message)
+          console.error('Error details:', error)
         }
         throw error
       }
@@ -339,17 +338,35 @@ export async function initializeSchema() {
       console.log('✅ Vercel Postgres schema initialized successfully')
     }
   } catch (error: any) {
+    // Log full error details for debugging
+    console.error('❌ Schema initialization failed:', error)
+    console.error('Error type:', error?.constructor?.name)
+    console.error('Error message:', error?.message)
+    console.error('Error code:', error?.code)
+    if (error?.stack) {
+      console.error('Error stack:', error.stack)
+    }
+    
     // If it's a connection string error, provide helpful message
     if (error.code === 'invalid_connection_string' || 
-        error.message?.includes('connection string')) {
-      console.error('❌ Schema initialization failed - connection string issue:', error.message)
+        error.message?.includes('connection string') ||
+        error.message?.includes('POSTGRES_PRISMA_URL')) {
       console.error('💡 Tip: Make sure POSTGRES_PRISMA_URL (pooled connection) is configured in Vercel')
+      console.error('💡 Check that the environment variable is set in Vercel project settings')
       // Don't throw - let the calling code handle fallback
       return
     }
-    console.error('❌ Schema initialization failed:', error)
-    // Only throw if it's not a connection issue (might be a real schema problem)
-    if (!error.message?.includes('connection')) {
+    
+    // If it's a TypeError, log more details
+    if (error instanceof TypeError || error?.constructor?.name === 'TypeError') {
+      console.error('💡 TypeError detected - this might be a client initialization issue')
+      console.error('💡 Make sure @vercel/postgres package is installed: npm install @vercel/postgres')
+    }
+    
+    // Only throw if it's not a connection/client issue (might be a real schema problem)
+    if (!error.message?.includes('connection') && 
+        !error.message?.includes('POSTGRES') &&
+        !(error instanceof TypeError)) {
       throw error
     }
   }
