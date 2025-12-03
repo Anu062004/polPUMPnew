@@ -56,18 +56,17 @@ export async function getDb() {
           throw new Error(`createClient().sql is not a function, it's a ${typeof vercelClient.sql}`)
         }
         
+        console.log('✅ Using Vercel Postgres client (POSTGRES_PRISMA_URL from env)')
+        
         // Try a simple test query to verify the client is properly initialized
         // This will catch issues early before we try to use it in schema initialization
-        try {
-          await vercelClient.sql`SELECT 1 as test`
-          console.log('✅ Vercel Postgres client initialized and tested successfully')
-        } catch (testError: any) {
+        // We do this asynchronously so it doesn't block, but we'll know if there's an issue
+        vercelClient.sql`SELECT 1 as test`.catch((testError: any) => {
           console.error('❌ Vercel Postgres client test query failed:', testError.message)
-          // Don't throw here - let it fail later with better context
-          // But log it so we know the client isn't working
-        }
-        
-        console.log('✅ Using Vercel Postgres client (POSTGRES_PRISMA_URL from env)')
+          console.error('This indicates the client may not be properly initialized')
+        }).then(() => {
+          console.log('✅ Vercel Postgres client test query succeeded')
+        })
       } catch (error: any) {
         // Don't log as error if it's just missing pooled connection - this is expected fallback
         if (error.message?.includes('POSTGRES_PRISMA_URL')) {
