@@ -3,14 +3,15 @@
  * Handles all database operations using PostgreSQL instead of SQLite
  */
 
-import { sql } from '@vercel/postgres'
+import { createClient } from '@vercel/postgres'
 import { Pool } from 'pg'
 
 // Use standard pg Pool if Vercel Postgres is not available (for local dev)
 let pool: Pool | null = null
+let vercelClient: ReturnType<typeof createClient> | null = null
 
 // Check if we're using Vercel Postgres
-const isVercelPostgres = !!(process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL)
+const isVercelPostgres = !!(process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL || process.env.POSTGRES_URL_NON_POOLING)
 
 /**
  * Get database connection
@@ -19,8 +20,19 @@ const isVercelPostgres = !!(process.env.POSTGRES_URL || process.env.POSTGRES_PRI
 export async function getDb() {
   // Check if we're in Vercel environment
   if (isVercelPostgres) {
-    // Use @vercel/postgres
-    return { type: 'vercel', sql }
+    // Use @vercel/postgres with createClient() for proper connection handling
+    if (!vercelClient) {
+      try {
+        // Prefer pooled connection (POSTGRES_PRISMA_URL), fallback to direct connection
+        // createClient() automatically reads from env vars if no connectionString is provided
+        // It handles both pooled and non-pooled connections correctly
+        vercelClient = createClient()
+      } catch (error: any) {
+        console.error('Failed to create Vercel Postgres client:', error)
+        throw error
+      }
+    }
+    return { type: 'vercel', client: vercelClient, sql: vercelClient.sql }
   }
 
   // Fallback to standard pg Pool for local development
@@ -231,7 +243,13 @@ export async function initializeSchema() {
 
       console.log('✅ PostgreSQL schema initialized successfully')
     } else {
-      // Using @vercel/postgres sql object
+      // Using @vercel/postgres client
+      const db = await getDb()
+      if (db.type !== 'vercel') {
+        throw new Error('Expected Vercel Postgres client')
+      }
+      const { sql } = db
+      
       await sql`
         CREATE TABLE IF NOT EXISTS coins (
           id VARCHAR(255) PRIMARY KEY,
@@ -310,8 +328,12 @@ export async function query(text: string, params?: any[]) {
 /**
  * Get the sql template tag for Vercel Postgres
  */
-export function getSql() {
-  return sql
+export async function getSql() {
+  const db = await getDb()
+  if (db.type === 'vercel') {
+    return db.sql
+  }
+  throw new Error('Not using Vercel Postgres')
 }
 
 /**

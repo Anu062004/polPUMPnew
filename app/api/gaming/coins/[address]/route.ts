@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ethers } from 'ethers'
-import { sql } from '@vercel/postgres'
-import { initializeSchema } from '@/lib/postgresManager'
+import { initializeSchema, getSql } from '@/lib/postgresManager'
 import sqlite3 from 'sqlite3'
 import { open } from 'sqlite'
 import path from 'path'
@@ -145,6 +144,9 @@ export async function GET(
     let coins: any[] = []
     let usedPostgres = false
     try {
+      // Get SQL client for Vercel Postgres
+      const sql = await getSql()
+      
       // Get all coins, regardless of token_address status
       const result = await sql`
         SELECT * FROM coins 

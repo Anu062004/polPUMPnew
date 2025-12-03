@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sql } from '@vercel/postgres'
-import { initializeSchema } from '@/lib/postgresManager'
+import { initializeSchema, getSql } from '@/lib/postgresManager'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,6 +20,8 @@ export async function GET(request: NextRequest) {
     let coins: any[] = []
     
     try {
+      const sql = await getSql()
+      
       const result = await sql`
         SELECT COUNT(*) as count FROM coins
       `
