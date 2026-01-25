@@ -128,7 +128,12 @@ contract EnhancedFactory is AccessControl, Pausable, ReentrancyGuard {
             address(this),
             treasury,
             defaultFeeBps,
-            feeSplit,
+            EnhancedBondingCurve.FeeSplit({
+                platformFeeBps: feeSplit.platformFeeBps,
+                creatorFeeBps: feeSplit.creatorFeeBps,
+                burnFeeBps: feeSplit.burnFeeBps,
+                lpFeeBps: feeSplit.lpFeeBps
+            }),
             curveType,
             curveParams
         );

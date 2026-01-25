@@ -4,14 +4,14 @@ import React, { useState, useEffect } from 'react'
 import { useAccount } from 'wagmi'
 import { BrowserProvider } from 'ethers'
 import { userProfileManager, UserProfile, TokenCreated } from '../../lib/userProfileManager'
-import { 
-  User, 
-  Edit3, 
-  Save, 
-  X, 
-  Plus, 
-  TrendingUp, 
-  Coins, 
+import {
+  User,
+  Edit3,
+  Save,
+  X,
+  Plus,
+  TrendingUp,
+  Coins,
   Activity,
   Settings,
   Upload,
@@ -23,14 +23,14 @@ import {
 
 export default function ProfilePage() {
   const { address: userAddress, isConnected } = useAccount()
-  
+
   // Profile state
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
-  
+
   // Edit form state
   const [editForm, setEditForm] = useState({
     username: '',
@@ -39,7 +39,7 @@ export default function ProfilePage() {
     showTradingStats: true,
     notifications: true
   })
-  
+
   // Avatar upload state
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
@@ -65,7 +65,7 @@ export default function ProfilePage() {
 
       const provider = new BrowserProvider(eth)
       const signer = await provider.getSigner()
-      
+
       await userProfileManager.initialize(signer)
       await loadProfile()
     } catch (error) {
@@ -82,14 +82,14 @@ export default function ProfilePage() {
 
     try {
       let userProfile = await userProfileManager.getProfile(userAddress)
-      
+
       if (!userProfile) {
         // Create new profile
         const result = await userProfileManager.createProfile(userAddress, {
           username: `User_${userAddress.slice(0, 6)}`,
           bio: 'Welcome to POL Pump! 🚀'
         })
-        
+
         if (result.success && result.profile) {
           userProfile = result.profile
         } else {
@@ -122,7 +122,7 @@ export default function ProfilePage() {
           ...userProfile.preferences
         }
       }
-      
+
       setProfile(completeProfile)
       setEditForm({
         username: completeProfile.username,
@@ -208,9 +208,9 @@ export default function ProfilePage() {
           const trades = hist.history || []
           const totalTrades = trades.length
           const totalVolume = trades.reduce((acc: number, t: any) => acc + (Number(t.amountOg || 0)), 0)
-          
+
           console.log(`Profile enrichment: Found ${totalTrades} trades, total volume: ${totalVolume} MATIC for wallet ${userAddress}`)
-          
+
           const updatedStats = {
             ...completeProfile.tradingStats,
             totalTrades,
@@ -230,9 +230,9 @@ export default function ProfilePage() {
         if (tokensHeldRes && tokensHeldRes.ok) {
           const tokensData = await tokensHeldRes.json()
           const tokensHeld = tokensData.tokensHeld || 0
-          
+
           console.log(`Profile enrichment: Found ${tokensHeld} tokens held by wallet ${userAddress}`)
-          
+
           const updatedStats = {
             ...completeProfile.tradingStats,
             tokensHeld
@@ -265,16 +265,16 @@ export default function ProfilePage() {
               totalTrades:
                 completeProfile.tradingStats.totalTrades || localTotalTrades
                   ? Math.max(
-                      completeProfile.tradingStats.totalTrades,
-                      localTotalTrades
-                    )
+                    completeProfile.tradingStats.totalTrades,
+                    localTotalTrades
+                  )
                   : localTotalTrades,
               totalVolume:
                 completeProfile.tradingStats.totalVolume || localTotalVolume
                   ? Math.max(
-                      completeProfile.tradingStats.totalVolume,
-                      localTotalVolume
-                    )
+                    completeProfile.tradingStats.totalVolume,
+                    localTotalVolume
+                  )
                   : localTotalVolume,
               tokensHeld:
                 completeProfile.tradingStats.tokensHeld ||
@@ -318,7 +318,7 @@ export default function ProfilePage() {
       // Handle avatar upload if new file selected (with graceful failure handling)
       let avatarUrl = profile.avatarUrl
       let avatarUploadError = null
-      
+
       if (avatarFile) {
         setIsUploadingAvatar(true)
         try {
@@ -358,7 +358,7 @@ export default function ProfilePage() {
         setProfile(result.profile)
         setIsEditing(false)
         setAvatarFile(null)
-        
+
         // Show warning if avatar upload failed but profile was saved
         if (avatarUploadError) {
           setError(`Profile saved successfully, but avatar upload failed: ${avatarUploadError}`)
@@ -436,19 +436,19 @@ export default function ProfilePage() {
   // Prevent hydration mismatch by not rendering until mounted
   if (!mounted) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #1a0b2e 0%, #16213e 25%, #0f3460 50%, #1a0b2e 100%)' }}>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#FF4F84]"></div>
       </div>
     )
   }
 
   if (!isConnected) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #1a0b2e 0%, #16213e 25%, #0f3460 50%, #1a0b2e 100%)' }}>
+        <div className="text-center glass-card p-12">
           <User className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Connect Your Wallet</h2>
-          <p className="text-gray-600">Please connect your wallet to view your profile</p>
+          <h2 className="text-2xl font-bold text-white mb-2">Connect Your Wallet</h2>
+          <p className="text-gray-400">Please connect your wallet to view your profile</p>
         </div>
       </div>
     )
@@ -456,34 +456,34 @@ export default function ProfilePage() {
 
   if (isLoading && !profile) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #1a0b2e 0%, #16213e 25%, #0f3460 50%, #1a0b2e 100%)' }}>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#FF4F84]"></div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900/20 to-slate-900 text-white">
-      <div className="max-w-4xl mx-auto px-4 py-8">
+    <div className="min-h-screen text-white" style={{ background: 'linear-gradient(135deg, #1a0b2e 0%, #16213e 25%, #0f3460 50%, #1a0b2e 100%)' }}>
+      <div className="max-w-4xl mx-auto px-4 py-8 pt-24">
         {/* Header */}
-        <div className="bg-sky-100 text-slate-900 rounded-2xl p-6 mb-6 border-4 border-black shadow-[6px_6px_0_#000]">
-          <div className="flex items-center justify-between">
+        <div className="glass-card mb-6">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div className="flex items-center space-x-4">
-              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-2xl font-bold">
+              <div className="w-16 h-16 bg-gradient-to-br from-[#FF4F84] to-[#8C52FF] rounded-full flex items-center justify-center text-white text-2xl font-bold shadow-glow-md">
                 {profile?.username?.charAt(0) || 'U'}
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">
+                <h1 className="text-2xl font-bold text-white">
                   {profile?.username || 'User Profile'}
                 </h1>
-                <p className="text-gray-600">{shortenAddress(userAddress || '')}</p>
+                <p className="text-gray-400 font-mono text-sm">{shortenAddress(userAddress || '')}</p>
               </div>
             </div>
             <div className="flex items-center space-x-2">
               {!isEditing ? (
                 <button
                   onClick={handleEdit}
-                  className="flex items-center space-x-2 px-4 py-2 bg-yellow-300 text-slate-900 border-4 border-black rounded-lg shadow-[4px_4px_0_#000] hover:translate-x-1 hover:translate-y-1 hover:shadow-none"
+                  className="btn-secondary flex items-center gap-2 !px-4 !py-2"
                 >
                   <Edit3 className="w-4 h-4" />
                   <span>Edit Profile</span>
@@ -493,14 +493,14 @@ export default function ProfilePage() {
                   <button
                     onClick={handleSave}
                     disabled={isLoading || isUploadingAvatar}
-                    className="flex items-center space-x-2 px-4 py-2 bg-green-400 text-black border-4 border-black rounded-lg shadow-[4px_4px_0_#000] hover:translate-x-1 hover:translate-y-1 hover:shadow-none disabled:opacity-50"
+                    className="btn-success flex items-center gap-2 disabled:opacity-50"
                   >
                     <Save className="w-4 h-4" />
                     <span>{isLoading || isUploadingAvatar ? 'Saving...' : 'Save'}</span>
                   </button>
                   <button
                     onClick={handleCancel}
-                    className="flex items-center space-x-2 px-4 py-2 bg-white text-slate-900 border-4 border-black rounded-lg shadow-[4px_4px_0_#000] hover:translate-x-1 hover:translate-y-1 hover:shadow-none"
+                    className="btn-secondary flex items-center gap-2 !px-4 !py-2"
                   >
                     <X className="w-4 h-4" />
                     <span>Cancel</span>
@@ -513,8 +513,8 @@ export default function ProfilePage() {
 
         {/* Error Display */}
         {error && (
-          <div className="bg-red-200 border-4 border-black rounded-2xl p-4 mb-6 text-red-900 shadow-[6px_6px_0_#000]">
-            <div>{error}</div>
+          <div className="glass-card !border-red-500/50 !bg-red-500/10 p-4 mb-6">
+            <div className="text-red-400">{error}</div>
           </div>
         )}
 
@@ -522,16 +522,16 @@ export default function ProfilePage() {
           {/* Profile Information */}
           <div className="lg:col-span-2 space-y-6">
             {/* Basic Info */}
-            <div className="bg-sky-100 text-slate-900 rounded-2xl p-6 border-4 border-black shadow-[6px_6px_0_#000]">
-              <h2 className="text-lg font-extrabold mb-4">Profile Information</h2>
-              
+            <div className="glass-card">
+              <h2 className="text-lg font-bold text-white mb-4">Profile Information</h2>
+
               {isEditing ? (
                 <div className="space-y-4">
                   {/* Avatar Upload */}
                   <div>
-                    <label className="block text-sm font-extrabold text-slate-900 mb-2">Avatar</label>
+                    <label className="block text-sm font-semibold text-gray-300 mb-2">Avatar</label>
                     <div className="flex items-center space-x-4">
-                      <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-xl font-bold">
+                      <div className="w-16 h-16 bg-gradient-to-br from-[#FF4F84] to-[#8C52FF] rounded-full flex items-center justify-center text-white text-xl font-bold">
                         {editForm.username.charAt(0) || 'U'}
                       </div>
                       <div>
@@ -539,10 +539,10 @@ export default function ProfilePage() {
                           type="file"
                           accept="image/*"
                           onChange={handleAvatarChange}
-                          className="block w-full text-sm text-slate-900 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-4 file:border-black file:text-sm file:font-extrabold file:bg-white file:text-slate-900 hover:file:translate-x-1 hover:file:translate-y-1 hover:file:shadow-none"
+                          className="block w-full text-sm text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#FF4F84] file:text-white hover:file:opacity-80 cursor-pointer"
                         />
                         {avatarFile && (
-                          <p className="text-sm text-green-600 mt-1">
+                          <p className="text-sm text-green-400 mt-1">
                             Selected: {avatarFile.name}
                           </p>
                         )}
@@ -552,24 +552,24 @@ export default function ProfilePage() {
 
                   {/* Username */}
                   <div>
-                    <label className="block text-sm font-extrabold text-slate-900 mb-2">Username</label>
+                    <label className="block text-sm font-semibold text-gray-300 mb-2">Username</label>
                     <input
                       type="text"
                       value={editForm.username}
                       onChange={(e) => setEditForm({ ...editForm, username: e.target.value })}
-                      className="w-full px-3 py-2 rounded-md border-4 border-black shadow-[4px_4px_0_#000] focus:outline-none focus:ring-0 focus:border-black"
+                      className="input-glass"
                       placeholder="Enter your username"
                     />
                   </div>
 
                   {/* Bio */}
                   <div>
-                    <label className="block text-sm font-extrabold text-slate-900 mb-2">Bio</label>
+                    <label className="block text-sm font-semibold text-gray-300 mb-2">Bio</label>
                     <textarea
                       value={editForm.bio}
                       onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
                       rows={3}
-                      className="w-full px-3 py-2 rounded-md border-4 border-black shadow-[4px_4px_0_#000] focus:outline-none focus:ring-0 focus:border-black"
+                      className="input-glass resize-none"
                       placeholder="Tell us about yourself..."
                     />
                   </div>
@@ -577,61 +577,61 @@ export default function ProfilePage() {
               ) : (
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
-                    <p className="text-gray-900">{profile?.username || 'Not set'}</p>
+                    <label className="block text-sm font-medium text-gray-400 mb-1">Username</label>
+                    <p className="text-white">{profile?.username || 'Not set'}</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Bio</label>
-                    <p className="text-gray-900">{profile?.bio || 'No bio available'}</p>
+                    <label className="block text-sm font-medium text-gray-400 mb-1">Bio</label>
+                    <p className="text-white">{profile?.bio || 'No bio available'}</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Member Since</label>
-                    <p className="text-gray-900">{profile ? formatDate(profile.createdAt) : 'Unknown'}</p>
+                    <label className="block text-sm font-medium text-gray-400 mb-1">Member Since</label>
+                    <p className="text-white">{profile ? formatDate(profile.createdAt) : 'Unknown'}</p>
                   </div>
                 </div>
               )}
             </div>
 
             {/* Tokens Created */}
-            <div className="bg-sky-100 text-slate-900 rounded-2xl p-6 border-4 border-black shadow-[6px_6px_0_#000]">
+            <div className="glass-card">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-extrabold">Tokens Created</h2>
-                <span className="px-3 py-1 bg-blue-100 text-blue-800 text-sm font-medium rounded-full">
+                <h2 className="text-lg font-bold text-white">Tokens Created</h2>
+                <span className="px-3 py-1 bg-[#FF4F84]/20 text-[#FF4F84] text-sm font-medium rounded-full border border-[#FF4F84]/30">
                   {profile?.tokensCreated?.length || 0}
                 </span>
               </div>
-              
+
               {profile?.tokensCreated?.length ? (
                 <div className="space-y-3">
                   {profile.tokensCreated.map((token, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 bg-white rounded-lg border-4 border-black shadow-[4px_4px_0_#000]">
+                    <div key={index} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
                       <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-blue-600 rounded-full flex items-center justify-center text-white text-sm font-bold">
+                        <div className="w-10 h-10 bg-gradient-to-br from-[#12D9C8] to-[#00D1FF] rounded-full flex items-center justify-center text-white text-sm font-bold">
                           {token.tokenSymbol.charAt(0)}
                         </div>
                         <div>
-                          <div className="font-medium text-gray-900">{token.tokenName}</div>
-                          <div className="text-sm text-gray-600">{token.tokenSymbol}</div>
+                          <div className="font-medium text-white">{token.tokenName}</div>
+                          <div className="text-sm text-gray-400">{token.tokenSymbol}</div>
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="text-sm text-gray-600">{formatDate(token.createdAt)}</div>
+                        <div className="text-sm text-gray-400 mb-1">{formatDate(token.createdAt)}</div>
                         <button
                           onClick={() => copyToClipboard(token.tokenAddress)}
-                          className="text-slate-900 bg-yellow-300 border-2 border-black px-2 py-1 rounded shadow-[2px_2px_0_#000] hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-none text-sm"
+                          className="text-white bg-white/10 hover:bg-white/20 px-2 py-1 rounded-lg text-sm transition-colors flex items-center gap-1"
                         >
-                          <Copy className="w-4 h-4 inline mr-1" />
-                          Copy Address
+                          <Copy className="w-3 h-3" />
+                          Copy
                         </button>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <Coins className="w-12 h-12 mx-auto mb-3 text-gray-400" />
-                  <p>No tokens created yet</p>
-                  <p className="text-sm">Create your first token to get started!</p>
+                <div className="empty-state">
+                  <Coins className="empty-state-icon" />
+                  <p className="empty-state-title">No tokens created yet</p>
+                  <p className="empty-state-description">Create your first token to get started!</p>
                 </div>
               )}
             </div>
@@ -641,28 +641,28 @@ export default function ProfilePage() {
           <div className="space-y-6">
             {/* Trading Stats */}
             {profile?.preferences?.showTradingStats && (
-              <div className="bg-sky-100 text-slate-900 rounded-2xl p-6 border-4 border-black shadow-[6px_6px_0_#000]">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                  <TrendingUp className="w-5 h-5 mr-2" />
+              <div className="glass-card">
+                <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
+                  <TrendingUp className="w-5 h-5 mr-2 text-[#12D9C8]" />
                   Trading Stats
                 </h3>
                 <div className="space-y-3">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Total Trades</span>
-                    <span className="font-medium">{profile?.tradingStats?.totalTrades || 0}</span>
+                    <span className="text-gray-400">Total Trades</span>
+                    <span className="font-medium text-white font-mono">{profile?.tradingStats?.totalTrades || 0}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Total Volume</span>
-                    <span className="font-medium">{profile?.tradingStats?.totalVolume || 0} MATIC</span>
+                    <span className="text-gray-400">Total Volume</span>
+                    <span className="font-medium text-[#12D9C8] font-mono">{profile?.tradingStats?.totalVolume || 0} MATIC</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Tokens Held</span>
-                    <span className="font-medium">{profile?.tradingStats?.tokensHeld || 0}</span>
+                    <span className="text-gray-400">Tokens Held</span>
+                    <span className="font-medium text-white font-mono">{profile?.tradingStats?.tokensHeld || 0}</span>
                   </div>
                   {profile?.tradingStats?.lastTradeAt && (
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Last Trade</span>
-                      <span className="font-medium text-sm">{formatDate(profile.tradingStats.lastTradeAt)}</span>
+                      <span className="text-gray-400">Last Trade</span>
+                      <span className="font-medium text-sm text-white">{formatDate(profile.tradingStats.lastTradeAt)}</span>
                     </div>
                   )}
                 </div>
@@ -670,71 +670,68 @@ export default function ProfilePage() {
             )}
 
             {/* Settings */}
-            <div className="bg-sky-100 text-slate-900 rounded-2xl p-6 border-4 border-black shadow-[6px_6px_0_#000]">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                <Settings className="w-5 h-5 mr-2" />
+            <div className="glass-card">
+              <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
+                <Settings className="w-5 h-5 mr-2 text-gray-400" />
                 Settings
               </h3>
-              
+
               {isEditing ? (
                 <div className="space-y-4">
-                  <label className="flex items-center">
+                  <label className="flex items-center cursor-pointer">
                     <input
                       type="checkbox"
                       checked={editForm.publicProfile}
                       onChange={(e) => setEditForm({ ...editForm, publicProfile: e.target.checked })}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      className="rounded border-white/20 bg-white/10 text-[#FF4F84] focus:ring-[#FF4F84] focus:ring-offset-0"
                     />
-                    <span className="ml-2 text-sm text-gray-700">Public Profile</span>
+                    <span className="ml-2 text-sm text-gray-300">Public Profile</span>
                   </label>
-                  <label className="flex items-center">
+                  <label className="flex items-center cursor-pointer">
                     <input
                       type="checkbox"
                       checked={editForm.showTradingStats}
                       onChange={(e) => setEditForm({ ...editForm, showTradingStats: e.target.checked })}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      className="rounded border-white/20 bg-white/10 text-[#FF4F84] focus:ring-[#FF4F84] focus:ring-offset-0"
                     />
-                    <span className="ml-2 text-sm text-gray-700">Show Trading Stats</span>
+                    <span className="ml-2 text-sm text-gray-300">Show Trading Stats</span>
                   </label>
-                  <label className="flex items-center">
+                  <label className="flex items-center cursor-pointer">
                     <input
                       type="checkbox"
                       checked={editForm.notifications}
                       onChange={(e) => setEditForm({ ...editForm, notifications: e.target.checked })}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      className="rounded border-white/20 bg-white/10 text-[#FF4F84] focus:ring-[#FF4F84] focus:ring-offset-0"
                     />
-                    <span className="ml-2 text-sm text-gray-700">Notifications</span>
+                    <span className="ml-2 text-sm text-gray-300">Notifications</span>
                   </label>
                 </div>
               ) : (
                 <div className="space-y-3">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Public Profile</span>
-                    <span className={`px-2 py-1 text-xs rounded-full ${
-                      profile?.preferences.publicProfile 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-gray-100 text-gray-800'
-                    }`}>
+                    <span className="text-gray-400">Public Profile</span>
+                    <span className={`px-2 py-1 text-xs rounded-full ${profile?.preferences.publicProfile
+                        ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                        : 'bg-white/10 text-gray-400'
+                      }`}>
                       {profile?.preferences.publicProfile ? 'Yes' : 'No'}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Show Stats</span>
-                    <span className={`px-2 py-1 text-xs rounded-full ${
-                      profile?.preferences.showTradingStats 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-gray-100 text-gray-800'
-                    }`}>
+                    <span className="text-gray-400">Show Stats</span>
+                    <span className={`px-2 py-1 text-xs rounded-full ${profile?.preferences.showTradingStats
+                        ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                        : 'bg-white/10 text-gray-400'
+                      }`}>
                       {profile?.preferences.showTradingStats ? 'Yes' : 'No'}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Notifications</span>
-                    <span className={`px-2 py-1 text-xs rounded-full ${
-                      profile?.preferences.notifications 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-gray-100 text-gray-800'
-                    }`}>
+                    <span className="text-gray-400">Notifications</span>
+                    <span className={`px-2 py-1 text-xs rounded-full ${profile?.preferences.notifications
+                        ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                        : 'bg-white/10 text-gray-400'
+                      }`}>
                       {profile?.preferences.notifications ? 'On' : 'Off'}
                     </span>
                   </div>
@@ -743,16 +740,16 @@ export default function ProfilePage() {
             </div>
 
             {/* Wallet Info */}
-            <div className="bg-sky-100 text-slate-900 rounded-2xl p-6 border-4 border-black shadow-[6px_6px_0_#000]">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Wallet Information</h3>
+            <div className="glass-card">
+              <h3 className="text-lg font-semibold text-white mb-4">Wallet Information</h3>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                  <label className="block text-sm font-medium text-gray-400 mb-1">Address</label>
                   <div className="flex items-center space-x-2">
-                    <span className="font-mono text-sm text-gray-900">{shortenAddress(userAddress || '')}</span>
+                    <span className="font-mono text-sm text-white">{shortenAddress(userAddress || '')}</span>
                     <button
                       onClick={() => copyToClipboard(userAddress || '')}
-                      className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                      className="p-1 text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors"
                       title="Copy address"
                     >
                       <Copy className="w-3 h-3" />
@@ -760,8 +757,11 @@ export default function ProfilePage() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Network</label>
-                  <span className="text-sm text-gray-900">Polygon Amoy</span>
+                  <label className="block text-sm font-medium text-gray-400 mb-1">Network</label>
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-sm">
+                    <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                    Polygon Amoy
+                  </span>
                 </div>
               </div>
             </div>

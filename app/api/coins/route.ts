@@ -8,10 +8,12 @@ import { CONTRACT_CONFIG } from '../../../lib/contract-config'
 
 // Helper function to get database path (handles serverless environments)
 function getDbPath() {
-  const isServerless = process.env.VERCEL === '1' || 
-                      process.env.AWS_LAMBDA_FUNCTION_NAME || 
-                      process.env.NEXT_RUNTIME === 'nodejs'
-  
+  const isServerless =
+    process.env.VERCEL === '1' ||
+    process.env.AWS_LAMBDA_FUNCTION_NAME ||
+    process.env.NEXT_RUNTIME === 'nodejs'
+
+  // Keep path selection simple; actual usage is gated by allowSqliteFallback
   if (isServerless) {
     return '/tmp/data/coins.db'
   }
@@ -20,10 +22,79 @@ function getDbPath() {
 
 // Database file path + chain metadata
 const DB_PATH = getDbPath()
-const RPC_URL =
-  process.env.NEXT_PUBLIC_EVM_RPC ||
-  process.env.POLYGON_AMOY_RPC ||
-  'https://polygon-amoy.infura.io/v3/b4f237515b084d4bad4e5de070b0452f'
+// SECURITY FIX: Removed hardcoded API key
+function getRpcUrl(): string {
+  const url = process.env.NEXT_PUBLIC_EVM_RPC ||
+              process.env.POLYGON_AMOY_RPC ||
+              process.env.RPC_URL
+  if (!url) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('NEXT_PUBLIC_EVM_RPC or POLYGON_AMOY_RPC must be set in production')
+    }
+    console.warn('⚠️ RPC URL not configured, using public node. Set NEXT_PUBLIC_EVM_RPC for production.')
+    return 'https://polygon-amoy.publicnode.com'
+  }
+  return url
+}
+const RPC_URL = getRpcUrl()
+
+// Security/ops controls
+const allowSqliteFallback =
+  process.env.NODE_ENV !== 'production' &&
+  process.env.ALLOW_SQLITE_FALLBACK !== '0'
+const writeApiKey = process.env.API_AUTH_TOKEN || ''
+
+const RATE_LIMIT_WINDOW_MS = 60_000
+const RATE_LIMIT_MAX = 30
+const rateBuckets = new Map<string, { count: number; reset: number }>()
+
+function getClientKey(request: NextRequest, prefix: string) {
+  const ip =
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    request.ip ||
+    'unknown'
+  return `${prefix}:${ip}`
+}
+
+function enforceRateLimit(request: NextRequest, prefix: string) {
+  const key = getClientKey(request, prefix)
+  const now = Date.now()
+  const bucket = rateBuckets.get(key) || { count: 0, reset: now + RATE_LIMIT_WINDOW_MS }
+  if (bucket.reset < now) {
+    bucket.count = 0
+    bucket.reset = now + RATE_LIMIT_WINDOW_MS
+  }
+  bucket.count += 1
+  rateBuckets.set(key, bucket)
+  if (bucket.count > RATE_LIMIT_MAX) {
+    return NextResponse.json(
+      { success: false, error: 'Rate limit exceeded' },
+      { status: 429 }
+    )
+  }
+  return null
+}
+
+function requireWriteKey(request: NextRequest) {
+  if (!writeApiKey) {
+    // In development we allow missing key; in production this should be set
+    if (process.env.NODE_ENV === 'production') {
+      return NextResponse.json(
+        { success: false, error: 'Write API key is not configured' },
+        { status: 500 }
+      )
+    }
+    return null
+  }
+  const provided = request.headers.get('x-api-key') || ''
+  if (provided !== writeApiKey) {
+    return NextResponse.json(
+      { success: false, error: 'Unauthorized' },
+      { status: 401 }
+    )
+  }
+  return null
+}
 
 const FACTORY_ABI = [
   'event PairCreated(address indexed token, address indexed curve, address indexed creator, string name, string symbol, uint256 seedOg, uint256 seedTokens)',
@@ -161,9 +232,36 @@ async function loadCoinsFromSqlite(limit = 100) {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    // Parse query parameters for pagination and filtering
+    const { searchParams } = new URL(request.url)
+    const page = parseInt(searchParams.get('page') || '1', 10)
+    let limit = parseInt(searchParams.get('limit') || '100', 10)
+    // Enforce reasonable limits: minimum 1, maximum 1000 per page
+    limit = Math.max(1, Math.min(1000, limit))
+    const sort = searchParams.get('sort') || 'created_at'
+    const order = searchParams.get('order')?.toUpperCase() || 'DESC'
+    const search = searchParams.get('search') || ''
+    const offset = (page - 1) * limit
+
+    // Validate sort field to prevent SQL injection
+    // Map frontend sort fields to database column names
+    const sortFieldMap: Record<string, string> = {
+      'created_at': 'created_at',
+      'name': 'name',
+      'symbol': 'symbol',
+      'market_cap': 'market_cap',
+      'volume_24h': 'volume_24h',
+      'trades_count': 'total_transactions' // Map trades_count to total_transactions
+    }
+    const validSortFields = Object.keys(sortFieldMap)
+    const dbSortField = sortFieldMap[sort] || sortFieldMap['created_at']
+    const sortOrder = order === 'ASC' ? 'ASC' : 'DESC'
+
     let coins: any[] = []
+    let total = 0
+    let totalPages = 0
 
     try {
       // Try PostgreSQL first (used in production / when configured)
@@ -176,75 +274,228 @@ export async function GET() {
         throw new Error('Postgres not available')
       }
 
-      const result = await sql`
-        SELECT * FROM coins 
-        ORDER BY created_at DESC 
-        LIMIT 100
-      `
-      const allCoins = result.rows
+      // Build query with search and pagination
+      // Note: Vercel Postgres sql template doesn't support dynamic column names in ORDER BY
+      // So we use pg Pool directly for dynamic queries (safe because we validated sortField)
+      const searchPattern = search ? `%${search}%` : null
       
-      const coinMap = new Map<string, any>()
-      for (const coin of allCoins) {
-        const mappedCoin = {
-          ...coin,
-          tokenAddress: coin.token_address,
-          curveAddress: coin.curve_address,
-          txHash: coin.tx_hash,
-          createdAt: coin.created_at,
-          imageHash: coin.image_hash,
-          telegramUrl: coin.telegram_url,
-          xUrl: coin.x_url,
-          discordUrl: coin.discord_url,
-          websiteUrl: coin.website_url,
-          marketCap: coin.market_cap,
-          volume24h: coin.volume_24h,
-          totalTransactions: coin.total_transactions,
-        }
-        
-        const key =
-          mappedCoin.tokenAddress?.toLowerCase() ||
-          mappedCoin.id?.toLowerCase() ||
-          `${mappedCoin.symbol?.toLowerCase()}-${mappedCoin.name?.toLowerCase()}` ||
-          mappedCoin.txHash?.toLowerCase() ||
-          ''
-        
-        if (key && !coinMap.has(key)) {
-          coinMap.set(key, mappedCoin)
-        }
+      // Get connection string
+      const connectionString = process.env.POSTGRES_PRISMA_URL || 
+                               process.env.POSTGRES_URL || 
+                               process.env.POSTGRES_URL_NON_POOLING
+      
+      if (!connectionString) {
+        throw new Error('Postgres connection string not found')
       }
       
-      coins = Array.from(coinMap.values()).slice(0, 50)
+      const { Pool } = await import('pg')
+      const pool = new Pool({ connectionString })
+      
+      try {
+        let result
+        let countResult
+        
+        if (search && searchPattern) {
+          // Search query with dynamic ORDER BY
+          const queryText = `
+            SELECT * FROM coins 
+            WHERE LOWER(name) LIKE LOWER($1) 
+               OR LOWER(symbol) LIKE LOWER($1)
+            ORDER BY ${dbSortField} ${sortOrder}
+            LIMIT $2 OFFSET $3
+          `
+          const countText = `
+            SELECT COUNT(*) as total FROM coins 
+            WHERE LOWER(name) LIKE LOWER($1) 
+               OR LOWER(symbol) LIKE LOWER($1)
+          `
+          
+          result = await pool.query(queryText, [searchPattern, limit, offset])
+          countResult = await pool.query(countText, [searchPattern])
+        } else {
+          // No search - get all coins with pagination
+          const queryText = `
+            SELECT * FROM coins 
+            ORDER BY ${dbSortField} ${sortOrder}
+            LIMIT $1 OFFSET $2
+          `
+          const countText = `SELECT COUNT(*) as total FROM coins`
+          
+          result = await pool.query(queryText, [limit, offset])
+          countResult = await pool.query(countText)
+        }
 
-      await backfillCoinAddresses(sql, coins)
+        total = parseInt(countResult.rows[0]?.total || '0', 10)
+        totalPages = Math.ceil(total / limit)
+        
+        const allCoins = result.rows
+      
+        const coinMap = new Map<string, any>()
+        for (const coin of allCoins) {
+          const mappedCoin = {
+            ...coin,
+            tokenAddress: coin.token_address,
+            curveAddress: coin.curve_address,
+            txHash: coin.tx_hash,
+            createdAt: coin.created_at,
+            imageHash: coin.image_hash,
+            telegramUrl: coin.telegram_url,
+            xUrl: coin.x_url,
+            discordUrl: coin.discord_url,
+            websiteUrl: coin.website_url,
+            marketCap: coin.market_cap,
+            volume24h: coin.volume_24h,
+            volume_24h: coin.volume_24h?.toString() || '0', // For frontend compatibility
+            totalTransactions: coin.total_transactions,
+            trades_count: coin.total_transactions || 0, // Map to frontend expected field
+            unique_traders: coin.holders || 0, // Use holders as unique_traders for now
+          }
+          
+          // Create a unique key for deduplication
+          // Use id as primary key, fallback to other identifiers
+          const key =
+            mappedCoin.id?.toLowerCase() ||
+            (mappedCoin.tokenAddress ? `token_${mappedCoin.tokenAddress.toLowerCase()}` : null) ||
+            (mappedCoin.txHash ? `tx_${mappedCoin.txHash.toLowerCase()}` : null) ||
+            `${mappedCoin.symbol?.toLowerCase()}-${mappedCoin.name?.toLowerCase()}-${mappedCoin.createdAt}` ||
+            `coin_${coinMap.size}` // Fallback to prevent filtering out coins
+          
+          // Only skip if we have a valid key and it already exists
+          if (key && !coinMap.has(key)) {
+            coinMap.set(key, mappedCoin)
+          } else if (!key || key.startsWith('coin_')) {
+            // If no valid key, still add the coin with a unique key
+            coinMap.set(`coin_${Date.now()}_${coinMap.size}`, mappedCoin)
+          }
+        }
+        
+        coins = Array.from(coinMap.values())
+
+        // Backfill addresses if we have sql client
+        if (sql) {
+          await backfillCoinAddresses(sql, coins)
+        }
+      } finally {
+        // Close pool
+        await pool.end()
+      }
+
+      // Return coins (already deduplicated in the mapping step above)
+      if (coins.length > 0) {
+        return NextResponse.json({
+          success: true,
+          coins: coins,
+          total,
+          pagination: {
+            page,
+            limit,
+            total,
+            totalPages,
+          },
+        })
+      }
+
+      // Fallback: return empty result if no coins found
+      return NextResponse.json({
+        success: true,
+        coins: [],
+        total: 0,
+        pagination: {
+          page,
+          limit,
+          total: 0,
+          totalPages: 0,
+        },
+      })
     } catch (pgError: any) {
-      console.warn('PostgreSQL not available for /api/coins GET, using SQLite fallback:', pgError?.message || pgError)
-      coins = await loadCoinsFromSqlite(100)
-    }
-
-    // Deduplicate coins based on unique identifiers
-    const seen = new Set<string>()
-    const uniqueCoins: any[] = []
-    
-    for (const coin of coins) {
-      const key =
-        coin.tokenAddress?.toLowerCase() ||
-        coin.id?.toLowerCase() ||
-        `${coin.symbol?.toLowerCase()}-${coin.name?.toLowerCase()}` ||
-        coin.txHash?.toLowerCase() ||
-        ''
-      
-      if (key && !seen.has(key)) {
-        seen.add(key)
-        uniqueCoins.push(coin)
+      console.warn('PostgreSQL not available for /api/coins GET:', pgError?.message || pgError)
+      if (allowSqliteFallback) {
+        // For SQLite, apply pagination manually
+        const allSqliteCoins = await loadCoinsFromSqlite(10000) // Get all, then paginate
+        
+        // Apply search filter
+        let filtered = allSqliteCoins
+        if (search) {
+          filtered = allSqliteCoins.filter((c: any) => 
+            c.name?.toLowerCase().includes(search.toLowerCase()) ||
+            c.symbol?.toLowerCase().includes(search.toLowerCase())
+          )
+        }
+        
+        // Map SQLite coins to include frontend-expected fields
+        const mappedSqliteCoins = filtered.map((c: any) => ({
+          ...c,
+          tokenAddress: c.tokenAddress || c.token_address,
+          token_address: c.tokenAddress || c.token_address,
+          volume_24h: (c.volume24h || 0).toString(),
+          trades_count: c.totalTransactions || 0,
+          unique_traders: c.holders || 0,
+        }))
+        
+        // Apply sorting
+        mappedSqliteCoins.sort((a: any, b: any) => {
+          let aVal: any, bVal: any
+          switch (sort) {
+            case 'created_at':
+              aVal = new Date(a.createdAt || 0).getTime()
+              bVal = new Date(b.createdAt || 0).getTime()
+              break
+            case 'name':
+              aVal = (a.name || '').toLowerCase()
+              bVal = (b.name || '').toLowerCase()
+              break
+            case 'symbol':
+              aVal = (a.symbol || '').toLowerCase()
+              bVal = (b.symbol || '').toLowerCase()
+              break
+            case 'market_cap':
+              aVal = parseFloat(a.marketCap || '0')
+              bVal = parseFloat(b.marketCap || '0')
+              break
+            case 'volume_24h':
+              aVal = parseFloat(a.volume24h || a.volume_24h || '0')
+              bVal = parseFloat(b.volume24h || b.volume_24h || '0')
+              break
+            case 'trades_count':
+              aVal = a.trades_count || a.totalTransactions || 0
+              bVal = b.trades_count || b.totalTransactions || 0
+              break
+            default:
+              aVal = new Date(a.createdAt || 0).getTime()
+              bVal = new Date(b.createdAt || 0).getTime()
+          }
+          
+          if (sortOrder === 'ASC') {
+            return aVal > bVal ? 1 : aVal < bVal ? -1 : 0
+          } else {
+            return aVal < bVal ? 1 : aVal > bVal ? -1 : 0
+          }
+        })
+        
+        // Apply pagination
+        total = mappedSqliteCoins.length
+        totalPages = Math.ceil(total / limit)
+        coins = mappedSqliteCoins.slice(offset, offset + limit)
+        
+        return NextResponse.json({
+          success: true,
+          coins,
+          total,
+          pagination: {
+            page,
+            limit,
+            total,
+            totalPages,
+          },
+        })
+      } else {
+        return NextResponse.json(
+          { success: false, error: 'Database unavailable and SQLite fallback disabled' },
+          { status: 500 }
+        )
       }
     }
-
-    return NextResponse.json({
-      success: true,
-      coins: uniqueCoins,
-      total: uniqueCoins.length,
-    })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to fetch coins:', error)
     return NextResponse.json(
       { success: false, error: 'Failed to fetch coins' },
@@ -390,6 +641,11 @@ function parsePairCreatedLogs(
 
 export async function POST(request: NextRequest) {
   try {
+    const authError = requireWriteKey(request)
+    if (authError) return authError
+    const rl = enforceRateLimit(request, 'coins-post')
+    if (rl) return rl
+
     const coinData = await request.json()
 
     // Validate required fields
@@ -569,7 +825,13 @@ export async function POST(request: NextRequest) {
         message: 'Coin added successfully',
       })
     } catch (pgError: any) {
-      console.warn('PostgreSQL not available for /api/coins POST, using SQLite fallback:', pgError?.message || pgError)
+      console.warn('PostgreSQL not available for /api/coins POST:', pgError?.message || pgError)
+      if (!allowSqliteFallback) {
+        return NextResponse.json(
+          { success: false, error: 'Database unavailable and SQLite fallback disabled' },
+          { status: 500 }
+        )
+      }
     }
 
     // Fallback: store in local SQLite database for local development
@@ -733,17 +995,24 @@ export async function POST(request: NextRequest) {
 // - Supports ?keep=PEPA to keep only coins with symbol PEPA
 export async function DELETE(request: NextRequest) {
   try {
+    const authError = requireWriteKey(request)
+    if (authError) return authError
+    const rl = enforceRateLimit(request, 'coins-delete')
+    if (rl) return rl
+
     const url = new URL(request.url)
     const provided = url.searchParams.get('secret') || ''
     const keepSymbol = url.searchParams.get('keep') || ''
-    const adminSecret = process.env.ADMIN_SECRET
+    const adminSecret = process.env.ADMIN_SECRET || ''
 
-    if (adminSecret) {
-      if (provided !== adminSecret) {
-        return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
-      }
-    } else if (process.env.NODE_ENV === 'production') {
-      return NextResponse.json({ success: false, error: 'Not allowed in production without ADMIN_SECRET' }, { status: 403 })
+    if (!adminSecret) {
+      return NextResponse.json(
+        { success: false, error: 'ADMIN_SECRET is required for destructive operations' },
+        { status: 500 }
+      )
+    }
+    if (provided !== adminSecret) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
     const db = await getDatabase()

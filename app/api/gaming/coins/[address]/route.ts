@@ -21,6 +21,41 @@ const MEME_TOKEN_ABI = [
   'function name() view returns (string)'
 ]
 
+const allowSqliteFallback =
+  process.env.NODE_ENV !== 'production' &&
+  process.env.ALLOW_SQLITE_FALLBACK !== '0'
+
+const RATE_LIMIT_WINDOW_MS = 60_000
+const RATE_LIMIT_MAX = 120 // Increased for gaming page auto-refresh
+const rateBuckets = new Map<string, { count: number; reset: number }>()
+
+function getClientKey(request: NextRequest) {
+  const ip =
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    request.ip ||
+    'unknown'
+  return `gaming-coins:${ip}`
+}
+
+function enforceRateLimit(request: NextRequest) {
+  const key = getClientKey(request)
+  const now = Date.now()
+  const bucket = rateBuckets.get(key) || { count: 0, reset: now + RATE_LIMIT_WINDOW_MS }
+  if (bucket.reset < now) {
+    bucket.count = 0
+    bucket.reset = now + RATE_LIMIT_WINDOW_MS
+  }
+  bucket.count += 1
+  rateBuckets.set(key, bucket)
+  if (bucket.count > RATE_LIMIT_MAX) {
+    return NextResponse.json(
+      { success: false, error: 'Rate limit exceeded' },
+      { status: 429 }
+    )
+  }
+  return null
+}
+
 // Get token balance for a user
 async function getTokenBalance(
   provider: ethers.JsonRpcProvider,
@@ -42,6 +77,10 @@ export const dynamic = 'force-dynamic'
 
 async function loadCoinsFromSqlite() {
   try {
+    if (!allowSqliteFallback) {
+      console.warn('SQLite fallback disabled; returning empty coin list')
+      return []
+    }
     // Use the same database path logic as the coins API
     const isServerless = process.env.VERCEL === '1' || 
                         process.env.AWS_LAMBDA_FUNCTION_NAME || 
@@ -76,8 +115,9 @@ async function loadCoinsFromSqlite() {
 
     // Get all coins from SQLite - include ALL tokens regardless of status
     // Get ALL coins from SQLite - no filtering, include everything
+    // Removed limit to show ALL coins
     const rows = await db.all<any[]>(
-      `SELECT * FROM coins ORDER BY createdAt DESC LIMIT 200`
+      `SELECT * FROM coins ORDER BY createdAt DESC`
     )
 
     await db.close()
@@ -112,6 +152,9 @@ export async function GET(
   { params }: { params: Promise<{ address: string }> | { address: string } }
 ) {
   try {
+    const rl = enforceRateLimit(request)
+    if (rl) return rl
+
     // Handle both sync and async params (Next.js 13+ uses async params)
     const resolvedParams = params instanceof Promise ? await params : params
     const userAddress = resolvedParams.address
@@ -166,15 +209,17 @@ export async function GET(
       }
       
       // Get all coins, regardless of token_address status
+      // Removed limit to show ALL coins
       const result = await sql`
         SELECT * FROM coins 
         ORDER BY created_at DESC
-        LIMIT 200
       `
       
-      console.log(`📊 PostgreSQL query returned ${result.rows.length} rows`)
+      // Vercel Postgres sql template returns array directly, not { rows: [...] }
+      const rows = Array.isArray(result) ? result : (result as any).rows || []
+      console.log(`📊 PostgreSQL query returned ${rows.length} rows`)
       
-      coins = result.rows.map((coin: any) => ({
+      coins = rows.map((coin: any) => ({
         ...coin,
         id: coin.id,
         name: coin.name,
@@ -194,21 +239,37 @@ export async function GET(
         console.log(`📝 Sample coin:`, { id: coins[0].id, name: coins[0].name, symbol: coins[0].symbol, tokenAddress: coins[0].tokenAddress })
       }
     } catch (dbError: any) {
-      console.warn('⚠️ PostgreSQL query failed, falling back to SQLite:', dbError?.message || dbError)
-      // On PostgreSQL failure, fall back to local SQLite database
-      coins = await loadCoinsFromSqlite()
+      console.warn('⚠️ PostgreSQL query failed:', dbError?.message || dbError)
+      // On PostgreSQL failure, fall back to local SQLite database only when allowed
+      if (allowSqliteFallback) {
+        coins = await loadCoinsFromSqlite()
+      } else {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Database unavailable and SQLite fallback disabled',
+            coins: [],
+            userHoldings: [],
+            totalCoins: 0,
+            coinsWithBalance: 0
+          },
+          { status: 500 }
+        )
+      }
     }
 
     // If Postgres succeeded but returned no rows, try SQLite fallback (local dev only)
     // Note: On Vercel, SQLite is ephemeral and won't persist data
     if (usedPostgres && coins.length === 0) {
       console.log('📊 PostgreSQL returned 0 rows, trying SQLite fallback (local dev only)...')
-      const sqliteCoins = await loadCoinsFromSqlite()
-      if (sqliteCoins.length > 0) {
-        console.log(`✅ SQLite fallback found ${sqliteCoins.length} coins`)
-        coins = sqliteCoins
-      } else {
-        console.warn('⚠️ No coins found in Postgres or SQLite. On Vercel, ensure POSTGRES_PRISMA_URL is configured and coins are saved to Postgres when created.')
+      if (allowSqliteFallback) {
+        const sqliteCoins = await loadCoinsFromSqlite()
+        if (sqliteCoins.length > 0) {
+          console.log(`✅ SQLite fallback found ${sqliteCoins.length} coins`)
+          coins = sqliteCoins
+        } else {
+          console.warn('⚠️ No coins found in Postgres or SQLite. On Vercel, ensure POSTGRES_PRISMA_URL is configured and coins are saved to Postgres when created.')
+        }
       }
     } else if (!usedPostgres && coins.length > 0) {
       console.log(`✅ Using SQLite data: ${coins.length} coins found`)

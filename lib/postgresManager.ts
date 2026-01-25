@@ -262,6 +262,73 @@ export async function initializeSchema() {
         )
       `)
 
+      // User sessions table for JWT token management
+      await db.pool.query(`
+        CREATE TABLE IF NOT EXISTS user_sessions (
+          wallet VARCHAR(255) PRIMARY KEY,
+          role VARCHAR(20) NOT NULL CHECK (role IN ('TRADER','CREATOR')),
+          refresh_token TEXT,
+          expires_at TIMESTAMP,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        )
+      `)
+
+      await db.pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_user_sessions_wallet ON user_sessions(wallet);
+        CREATE INDEX IF NOT EXISTS idx_user_sessions_role ON user_sessions(role);
+      `)
+
+      // Users table for role tracking and profiles
+      await db.pool.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          wallet VARCHAR(255) PRIMARY KEY,
+          role VARCHAR(20) NOT NULL DEFAULT 'TRADER' CHECK (role IN ('TRADER','CREATOR')),
+          last_role_check BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000,
+          created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000,
+          updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000
+        )
+      `)
+
+      await db.pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_users_wallet ON users(wallet);
+        CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+      `)
+
+      // Copy trading signals table
+      await db.pool.query(`
+        CREATE TABLE IF NOT EXISTS trading_signals (
+          id SERIAL PRIMARY KEY,
+          creator_wallet VARCHAR(255) NOT NULL,
+          token_address VARCHAR(255) NOT NULL,
+          signal_type VARCHAR(10) NOT NULL CHECK (signal_type IN ('BUY','SELL')),
+          price_target VARCHAR(100),
+          message TEXT,
+          created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000
+        )
+      `)
+
+      await db.pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_signals_creator ON trading_signals(creator_wallet);
+        CREATE INDEX IF NOT EXISTS idx_signals_token ON trading_signals(token_address);
+        CREATE INDEX IF NOT EXISTS idx_signals_created ON trading_signals(created_at DESC);
+      `)
+
+      // Creator followers table
+      await db.pool.query(`
+        CREATE TABLE IF NOT EXISTS creator_followers (
+          creator_wallet VARCHAR(255) NOT NULL,
+          follower_wallet VARCHAR(255) NOT NULL,
+          created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000,
+          PRIMARY KEY (creator_wallet, follower_wallet)
+        )
+      `)
+
+      await db.pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_followers_creator ON creator_followers(creator_wallet);
+        CREATE INDEX IF NOT EXISTS idx_followers_follower ON creator_followers(follower_wallet);
+      `)
+
       console.log('✅ PostgreSQL schema initialized successfully')
     } else {
       // Using @vercel/postgres sql template tag directly
@@ -322,6 +389,106 @@ export async function initializeSchema() {
       `
       await sql`
         CREATE INDEX IF NOT EXISTS idx_coins_token_address ON coins(token_address)
+      `
+
+      // User sessions table for JWT token management
+      await sql`
+        CREATE TABLE IF NOT EXISTS user_sessions (
+          wallet VARCHAR(255) PRIMARY KEY,
+          role VARCHAR(20) NOT NULL CHECK (role IN ('TRADER','CREATOR')),
+          refresh_token TEXT,
+          expires_at TIMESTAMP,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        )
+      `
+
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_user_sessions_wallet ON user_sessions(wallet)
+      `
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_user_sessions_role ON user_sessions(role)
+      `
+
+      // Users table for role tracking
+      await sql`
+        CREATE TABLE IF NOT EXISTS users (
+          wallet VARCHAR(255) PRIMARY KEY,
+          role VARCHAR(20) NOT NULL DEFAULT 'TRADER' CHECK (role IN ('TRADER','CREATOR')),
+          last_role_check BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000,
+          created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000,
+          updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000
+        )
+      `
+
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_users_wallet ON users(wallet)
+      `
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)
+      `
+
+      // Copy trading signals table
+      await sql`
+        CREATE TABLE IF NOT EXISTS trading_signals (
+          id SERIAL PRIMARY KEY,
+          creator_wallet VARCHAR(255) NOT NULL,
+          token_address VARCHAR(255) NOT NULL,
+          signal_type VARCHAR(10) NOT NULL CHECK (signal_type IN ('BUY','SELL')),
+          price_target VARCHAR(100),
+          message TEXT,
+          created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000
+        )
+      `
+
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_signals_creator ON trading_signals(creator_wallet)
+      `
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_signals_token ON trading_signals(token_address)
+      `
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_signals_created ON trading_signals(created_at DESC)
+      `
+
+      // Creator followers table
+      await sql`
+        CREATE TABLE IF NOT EXISTS creator_followers (
+          creator_wallet VARCHAR(255) NOT NULL,
+          follower_wallet VARCHAR(255) NOT NULL,
+          created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000,
+          PRIMARY KEY (creator_wallet, follower_wallet)
+        )
+      `
+
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_followers_creator ON creator_followers(creator_wallet)
+      `
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_followers_follower ON creator_followers(follower_wallet)
+      `
+
+      // Chat messages table
+      await sql`
+        CREATE TABLE IF NOT EXISTS chat_messages (
+          id SERIAL PRIMARY KEY,
+          sender_wallet VARCHAR(255) NOT NULL,
+          role VARCHAR(20) NOT NULL CHECK (role IN ('TRADER','CREATOR')),
+          room_id VARCHAR(255) NOT NULL DEFAULT 'global',
+          message TEXT NOT NULL,
+          token_symbol VARCHAR(100),
+          created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000
+        )
+      `
+
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_chat_room ON chat_messages(room_id)
+      `
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_chat_created ON chat_messages(created_at DESC)
+      `
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_chat_sender ON chat_messages(sender_wallet)
       `
 
       console.log('✅ Vercel Postgres schema initialized successfully')

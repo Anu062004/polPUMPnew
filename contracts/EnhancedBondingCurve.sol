@@ -148,7 +148,7 @@ contract EnhancedBondingCurve is ReentrancyGuard, Ownable, Pausable {
         if (tokensOut < minTokensOut) revert InsufficientOutput();
 
         // Update reserves
-        uint256 newOgReserve = ogReserve.add(ogInAfterFee);
+        uint256 newOgReserve = ogReserve + ogInAfterFee;
         uint256 newTokenReserve = tokenReserve.sub(tokensOut);
         
         // Safety check
@@ -165,7 +165,7 @@ contract EnhancedBondingCurve is ReentrancyGuard, Ownable, Pausable {
         token.transfer(msg.sender, tokensOut);
 
         // Calculate price and impact
-        uint256 price = ogInAfterFee.mul(1e18).div(tokensOut);
+        uint256 price = (ogInAfterFee * 1e18) / tokensOut;
         uint256 priceImpact = calculatePriceImpact(ogInAfterFee, tokensOut, true);
 
         emit BuyExecuted(msg.sender, ogIn, tokensOut, price, priceImpact);
@@ -211,7 +211,7 @@ contract EnhancedBondingCurve is ReentrancyGuard, Ownable, Pausable {
         payable(msg.sender).sendValue(ogOut);
 
         // Calculate price and impact
-        uint256 price = ogOut.mul(1e18).div(tokensIn);
+        uint256 price = (ogOut * 1e18) / tokensIn;
         uint256 priceImpact = calculatePriceImpact(tokensIn, ogOut, false);
 
         emit SellExecuted(msg.sender, tokensIn, ogOut, price, priceImpact);
@@ -232,9 +232,9 @@ contract EnhancedBondingCurve is ReentrancyGuard, Ownable, Pausable {
     /// @notice Calculate OG received for a sell (before fees)
     function calculateOgForSell(uint256 tokensIn) public view returns (uint256) {
         // For constant product, we use x * y = k
-        uint256 k = ogReserve.mul(tokenReserve);
-        uint256 newTokenReserve = tokenReserve.add(tokensIn);
-        uint256 newOgReserve = k.div(newTokenReserve);
+        uint256 k = ogReserve * tokenReserve;
+        uint256 newTokenReserve = tokenReserve + tokensIn;
+        uint256 newOgReserve = k / newTokenReserve;
         return ogReserve.sub(newOgReserve);
     }
 
@@ -244,7 +244,7 @@ contract EnhancedBondingCurve is ReentrancyGuard, Ownable, Pausable {
         uint256 slope = curveParams.length >= 32 
             ? abi.decode(curveParams, (uint256)) 
             : 1e18;
-        return ogIn.mul(slope).div(1e18);
+        return (ogIn * slope) / 1e18;
     }
 
     /// @notice Exponential curve: tokens = base * (1 + rate)^ogIn
@@ -254,7 +254,7 @@ contract EnhancedBondingCurve is ReentrancyGuard, Ownable, Pausable {
             ? abi.decode(curveParams, (uint256)) 
             : 1e18;
         // Use fixed-point math approximation
-        return ogIn.mul(exponent).div(1e18);
+        return (ogIn * exponent) / 1e18;
     }
 
     /// @notice Sigmoid curve: S-shaped growth
@@ -264,8 +264,8 @@ contract EnhancedBondingCurve is ReentrancyGuard, Ownable, Pausable {
             ? abi.decode(curveParams, (uint256)) 
             : 1e18;
         // tokens = k * ogIn / (1 + ogIn/k)
-        uint256 denominator = 1e18.add(ogIn.mul(1e18).div(k));
-        return k.mul(ogIn).div(denominator);
+        uint256 denominator = 1e18 + (ogIn * 1e18) / k;
+        return (k * ogIn) / denominator;
     }
 
     /// @notice Distribute fees according to fee split
@@ -274,21 +274,21 @@ contract EnhancedBondingCurve is ReentrancyGuard, Ownable, Pausable {
 
         // Platform fee
         if (feeSplit.platformFeeBps > 0) {
-            uint256 platformFee = totalFee.mul(feeSplit.platformFeeBps).div(10000);
+            uint256 platformFee = (totalFee * feeSplit.platformFeeBps) / 10000;
             payable(treasury).sendValue(platformFee);
             emit FeeTaken(tokenAddr, treasury, platformFee, "platform");
         }
 
         // Creator fee
         if (feeSplit.creatorFeeBps > 0 && creator != address(0)) {
-            uint256 creatorFee = totalFee.mul(feeSplit.creatorFeeBps).div(10000);
+            uint256 creatorFee = (totalFee * feeSplit.creatorFeeBps) / 10000;
             payable(creator).sendValue(creatorFee);
             emit FeeTaken(tokenAddr, creator, creatorFee, "creator");
         }
 
         // Burn fee (burn tokens)
         if (feeSplit.burnFeeBps > 0) {
-            uint256 burnAmount = amount.mul(feeSplit.burnFeeBps).div(10000);
+            uint256 burnAmount = (amount * feeSplit.burnFeeBps) / 10000;
             if (burnAmount > 0) {
                 token.burn(address(this), burnAmount);
                 emit FeeTaken(tokenAddr, address(0), burnAmount, "burn");
@@ -297,8 +297,8 @@ contract EnhancedBondingCurve is ReentrancyGuard, Ownable, Pausable {
 
         // LP fee (reinvest to reserves)
         if (feeSplit.lpFeeBps > 0) {
-            uint256 lpFee = totalFee.mul(feeSplit.lpFeeBps).div(10000);
-            ogReserve = ogReserve.add(lpFee);
+            uint256 lpFee = (totalFee * feeSplit.lpFeeBps) / 10000;
+            ogReserve = ogReserve + lpFee;
             emit FeeTaken(tokenAddr, address(this), lpFee, "lp");
         }
     }
@@ -310,10 +310,10 @@ contract EnhancedBondingCurve is ReentrancyGuard, Ownable, Pausable {
         bool isBuy
     ) internal view returns (uint256) {
         if (isBuy) {
-            uint256 currentPrice = ogReserve.mul(1e18).div(tokenReserve);
-            uint256 executionPrice = inputAmount.mul(1e18).div(outputAmount);
+            uint256 currentPrice = (ogReserve * 1e18) / tokenReserve;
+            uint256 executionPrice = (inputAmount * 1e18) / outputAmount;
             if (executionPrice > currentPrice) {
-                return executionPrice.sub(currentPrice).mul(10000).div(currentPrice);
+                return ((executionPrice - currentPrice) * 10000) / currentPrice;
             }
         }
         return 0;
@@ -361,7 +361,7 @@ contract EnhancedBondingCurve is ReentrancyGuard, Ownable, Pausable {
 
     receive() external payable {
         // Allow top-ups to reserves
-        ogReserve = ogReserve.add(msg.value);
+        ogReserve = ogReserve + msg.value;
     }
 }
 

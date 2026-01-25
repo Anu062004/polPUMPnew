@@ -307,10 +307,26 @@ class OGStorageSDK {
 }
 
 // Create and export a configured instance
+// SECURITY: privateKey must be server-side only (never use NEXT_PUBLIC_ prefix)
+// If privateKey is needed, it should be passed from server-side code only
+const getRpcUrl = (envVar: string, fallback?: string): string => {
+  const url = process.env[envVar]
+  if (!url) {
+    if (fallback) {
+      console.warn(`⚠️ ${envVar} not set, using fallback. Configure this for production.`)
+      return fallback
+    }
+    throw new Error(`Required environment variable ${envVar} is not set. Please configure your RPC endpoint.`)
+  }
+  return url
+}
+
 export const ogStorageSDK = new OGStorageSDK({
-	evmRpc: process.env.NEXT_PUBLIC_EVM_RPC || 'https://polygon-amoy.infura.io/v3/b4f237515b084d4bad4e5de070b0452f',
-	indexerRpc: process.env.NEXT_PUBLIC_INDEXER_RPC || 'https://polygon-amoy.infura.io/v3/b4f237515b084d4bad4e5de070b0452f',
-	privateKey: process.env.NEXT_PUBLIC_PRIVATE_KEY || '',
+	evmRpc: getRpcUrl('NEXT_PUBLIC_EVM_RPC', 'https://polygon-amoy.publicnode.com'),
+	indexerRpc: getRpcUrl('NEXT_PUBLIC_INDEXER_RPC', 'https://polygon-amoy.publicnode.com'),
+	// SECURITY FIX: Remove NEXT_PUBLIC_PRIVATE_KEY - private keys should NEVER be exposed to client
+	// If private key is needed, it must be used server-side only
+	privateKey: '', // Private keys should be passed from server-side code only
 	backendUrl: process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000'
 });
 

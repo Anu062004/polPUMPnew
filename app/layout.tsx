@@ -1,11 +1,17 @@
 import type { Metadata, Viewport } from 'next'
-import { Inter } from 'next/font/google'
+import { Inter, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import { Providers } from './providers'
 import { PumpAIProvider } from './providers/PumpAIContext'
+import { AuthProvider } from './providers/AuthContext'
+import Footer from './components/Footer'
 import Script from 'next/script'
 
 const inter = Inter({ subsets: ['latin'] })
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  variable: '--font-mono',
+})
 
 export const metadata: Metadata = {
   title: 'POL Pump - Memetoken Trading Platform',
@@ -25,7 +31,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className={jetbrainsMono.variable}>
       <head>
         {/* Lit runtime optimization script */}
         <Script
@@ -52,10 +58,15 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={inter.className}>
+      <body className={`${inter.className} min-h-screen flex flex-col`}>
         <PumpAIProvider>
           <Providers>
-            {children}
+            <AuthProvider>
+              <main className="flex-1">
+                {children}
+              </main>
+              <Footer />
+            </AuthProvider>
           </Providers>
         </PumpAIProvider>
       </body>

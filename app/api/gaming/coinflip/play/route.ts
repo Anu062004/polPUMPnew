@@ -1,24 +1,86 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { databaseManager } from '../../../../../lib/databaseManager'
+import { requirePostgres } from '../../../../../lib/gamingPostgres'
+import { verifySignatureWithTimestamp } from '../../../../../lib/authUtils'
+import { validateAddress, validatePositiveNumber, validateCoinflipChoice } from '../../../../../lib/validationUtils'
 import { ethers } from 'ethers'
+import { getEvmRpcUrl } from '../../../../../lib/rpcConfig'
 
+/**
+ * Play a coinflip game
+ * SECURITY: Requires wallet signature verification
+ * FIXES: Uses Postgres, input validation, removes hardcoded RPC
+ */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userAddress, wager, choice } = body // choice: 'heads' or 'tails'
+    const { 
+      userAddress, 
+      wager, 
+      choice,
+      signature,
+      message
+    } = body
 
-    if (!userAddress || !wager) {
+    // Input validation
+    const addressValidation = validateAddress(userAddress)
+    if (!addressValidation.isValid) {
       return NextResponse.json(
-        { success: false, error: 'Missing required fields' },
+        { success: false, error: addressValidation.error },
         { status: 400 }
       )
     }
 
-    await databaseManager.initialize()
-    const db = await databaseManager.getConnection()
+    const wagerValidation = validatePositiveNumber(wager, 'Wager')
+    if (!wagerValidation.isValid) {
+      return NextResponse.json(
+        { success: false, error: wagerValidation.error },
+        { status: 400 }
+      )
+    }
 
-    // Get a recent block for randomness
-    const rpcUrl = process.env.NEXT_PUBLIC_EVM_RPC || 'https://polygon-amoy.infura.io/v3/b4f237515b084d4bad4e5de070b0452f'
+    const choiceValidation = validateCoinflipChoice(choice)
+    if (!choiceValidation.isValid) {
+      return NextResponse.json(
+        { success: false, error: choiceValidation.error },
+        { status: 400 }
+      )
+    }
+
+    // Wallet signature verification (SECURITY FIX)
+    if (process.env.NODE_ENV === 'production' || process.env.REQUIRE_SIGNATURE === 'true') {
+      if (!signature || !message) {
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: 'Wallet signature required. Please sign the message to play.' 
+          },
+          { status: 401 }
+        )
+      }
+
+      const verification = verifySignatureWithTimestamp(
+        message,
+        signature,
+        userAddress.toLowerCase(),
+        5 * 60 * 1000
+      )
+
+      if (!verification.isValid) {
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: `Signature verification failed: ${verification.error}` 
+          },
+          { status: 401 }
+        )
+      }
+    }
+
+    // Get Postgres connection (DATA PERSISTENCE FIX)
+    const sql = await requirePostgres()
+
+    // Get a recent block for randomness (provably fair)
+    const rpcUrl = getEvmRpcUrl() // FIX: Removed hardcoded API key
     const provider = new ethers.JsonRpcProvider(rpcUrl)
     
     let blockNumber: number | null = null
@@ -43,34 +105,23 @@ export async function POST(request: NextRequest) {
       outcome = Math.random() < 0.5 ? 'heads' : 'tails'
     }
 
-    const userWon = choice === outcome
+    const userWon = choice.toLowerCase() === outcome
 
-    // Record the game
+    // Record the game in Postgres
     const seedHash = blockHash || ethers.id(`${userAddress}-${Date.now()}`)
     const seedReveal = blockHash || seedHash
 
-    await db.run(
-      `INSERT INTO gaming_coinflip 
-       (userAddress, wager, outcome, seedHash, seedReveal, blockNumber, blockHash, createdAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        userAddress.toLowerCase(),
-        wager,
-        userWon ? 'win' : 'lose',
-        seedHash,
-        seedReveal,
-        blockNumber,
-        blockHash,
-        Date.now(),
-      ]
-    )
-
-    await db.close()
+    const result = await sql`
+      INSERT INTO gaming_coinflip 
+      (user_address, wager, outcome, seed_hash, seed_reveal, block_number, block_hash, created_at)
+      VALUES (${userAddress.toLowerCase()}, ${wager}, ${userWon ? 'win' : 'lose'}, ${seedHash}, ${seedReveal}, ${blockNumber}, ${blockHash}, ${Date.now()})
+      RETURNING id
+    `
 
     return NextResponse.json({
       success: true,
-      result: outcome, // 'heads' or 'tails' - the actual coin flip result
-      outcome: userWon ? 'win' : 'lose', // 'win' or 'lose' - whether user won
+      result: outcome,
+      outcome: userWon ? 'win' : 'lose',
       userChoice: choice,
       won: userWon,
       blockNumber,
@@ -79,9 +130,12 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Error playing coinflip:', error)
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to play coinflip' },
+      { 
+        success: false, 
+        error: error.message || 'Failed to play coinflip',
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      },
       { status: 500 }
     )
   }
 }
-

@@ -1,38 +1,90 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { databaseManager } from '../../../../../lib/databaseManager'
+import { requirePostgres } from '../../../../../lib/gamingPostgres'
+import { verifySignatureWithTimestamp } from '../../../../../lib/authUtils'
+import { validateAddress, validatePositiveNumber, validateMinesCount } from '../../../../../lib/validationUtils'
 
+/**
+ * Start a new Mines game
+ * SECURITY: Requires wallet signature verification
+ * FIXES: Uses Postgres, input validation, transaction safety
+ */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userAddress, betAmount, tokenAddress, minesCount, txHash } = body
+    const { 
+      userAddress, 
+      betAmount, 
+      tokenAddress, 
+      minesCount,
+      signature,
+      message
+    } = body
 
-    if (!userAddress || !betAmount || !tokenAddress || !minesCount) {
+    // Input validation
+    const addressValidation = validateAddress(userAddress)
+    if (!addressValidation.isValid) {
       return NextResponse.json(
-        { success: false, error: 'Missing required fields' },
+        { success: false, error: addressValidation.error },
         { status: 400 }
       )
     }
 
-    try {
-      await databaseManager.initialize()
-    } catch (dbError: any) {
-      console.error('Database initialization error:', dbError)
+    const amountValidation = validatePositiveNumber(betAmount, 'Bet amount')
+    if (!amountValidation.isValid) {
       return NextResponse.json(
-        { success: false, error: 'Database not available. Please try again later.' },
-        { status: 503 }
+        { success: false, error: amountValidation.error },
+        { status: 400 }
       )
     }
 
-    let db
-    try {
-      db = await databaseManager.getConnection()
-    } catch (dbError: any) {
-      console.error('Database connection error:', dbError)
+    const tokenValidation = validateAddress(tokenAddress)
+    if (!tokenValidation.isValid) {
       return NextResponse.json(
-        { success: false, error: 'Database connection failed. Please try again.' },
-        { status: 503 }
+        { success: false, error: 'Invalid token address' },
+        { status: 400 }
       )
     }
+
+    const minesValidation = validateMinesCount(minesCount)
+    if (!minesValidation.isValid) {
+      return NextResponse.json(
+        { success: false, error: minesValidation.error },
+        { status: 400 }
+      )
+    }
+
+    // Wallet signature verification (SECURITY FIX)
+    if (process.env.NODE_ENV === 'production' || process.env.REQUIRE_SIGNATURE === 'true') {
+      if (!signature || !message) {
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: 'Wallet signature required. Please sign the message to start game.' 
+          },
+          { status: 401 }
+        )
+      }
+
+      const verification = verifySignatureWithTimestamp(
+        message,
+        signature,
+        userAddress.toLowerCase(),
+        5 * 60 * 1000
+      )
+
+      if (!verification.isValid) {
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: `Signature verification failed: ${verification.error}` 
+          },
+          { status: 401 }
+        )
+      }
+    }
+
+    // Get Postgres connection (DATA PERSISTENCE FIX)
+    const sql = await requirePostgres()
 
     // Generate random mine positions (25 tiles, minesCount mines)
     const totalTiles = 25
@@ -45,60 +97,22 @@ export async function POST(request: NextRequest) {
     }
     minePositions.sort((a, b) => a - b)
 
-    // Ensure table exists
-    try {
-      await db.run(`
-        CREATE TABLE IF NOT EXISTS gaming_mines (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          userAddress TEXT NOT NULL,
-          betAmount REAL NOT NULL,
-          tokenAddress TEXT NOT NULL,
-          minesCount INTEGER NOT NULL,
-          gridState TEXT NOT NULL,
-          revealedTiles TEXT NOT NULL,
-          status TEXT NOT NULL DEFAULT 'active',
-          currentMultiplier REAL NOT NULL DEFAULT 1.0,
-          cashoutAmount REAL,
-          createdAt INTEGER NOT NULL,
-          completedAt INTEGER
-        )
-      `)
-    } catch (tableError: any) {
-      console.warn('Table creation warning (may already exist):', tableError.message)
-    }
-
-    // Create game session
-    const result = await db.run(
-      `INSERT INTO gaming_mines 
-       (userAddress, betAmount, tokenAddress, minesCount, gridState, revealedTiles, status, currentMultiplier, createdAt)
-       VALUES (?, ?, ?, ?, ?, ?, 'active', 1.0, ?)`,
-      [
-        userAddress.toLowerCase(),
-        betAmount,
-        tokenAddress,
-        minesCount,
-        JSON.stringify(Array(totalTiles).fill(null)), // Grid state
-        JSON.stringify([]), // No tiles revealed yet
-        Date.now(),
-      ]
-    )
-
-    const gameId = (result as any).lastID
-
-    // Store mine positions server-side (don't send to client)
-    // We'll store them in gridState as a special format
+    // Create grid state with mine positions
     const gridState = Array(totalTiles).fill(null).map((_, i) => ({
       index: i,
       isMine: minePositions.includes(i),
       revealed: false,
     }))
 
-    await db.run(
-      'UPDATE gaming_mines SET gridState = ? WHERE id = ?',
-      [JSON.stringify(gridState), gameId]
-    )
+    // Create game session in Postgres
+    const result = await sql`
+      INSERT INTO gaming_mines 
+      (user_address, bet_amount, token_address, mines_count, grid_state, revealed_tiles, status, current_multiplier, created_at)
+      VALUES (${userAddress.toLowerCase()}, ${betAmount}, ${tokenAddress.toLowerCase()}, ${minesCount}, ${JSON.stringify(gridState)}, ${JSON.stringify([])}, 'active', 1.0, ${Date.now()})
+      RETURNING id
+    `
 
-    await db.close()
+    const gameId = result[0].id
 
     return NextResponse.json({
       success: true,
@@ -110,9 +124,12 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Error starting mines game:', error)
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to start game' },
+      { 
+        success: false, 
+        error: error.message || 'Failed to start game',
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      },
       { status: 500 }
     )
   }
 }
-

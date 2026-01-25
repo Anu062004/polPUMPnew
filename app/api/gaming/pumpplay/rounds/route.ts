@@ -1,63 +1,87 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { databaseManager } from '../../../../../lib/databaseManager'
+import { requirePostgres } from '../../../../../lib/gamingPostgres'
+import { initializeSchema, getSql } from '@/lib/postgresManager'
 
+/**
+ * Get PumpPlay rounds
+ * FIXES: Uses Postgres instead of SQLite
+ */
 export async function GET(request: NextRequest) {
   try {
-    await databaseManager.initialize()
-    const db = await databaseManager.getConnection()
+    // Get Postgres connection (DATA PERSISTENCE FIX)
+    const sql = await requirePostgres()
+    
+    // Also ensure coins schema is initialized
+    await initializeSchema()
+    const coinsSql = await getSql()
+    if (!coinsSql) {
+      throw new Error('Postgres not available for coins')
+    }
 
     // Get all rounds, ordered by creation time
-    const rounds = await db.all(`
+    const rounds = await sql`
       SELECT 
         id,
-        createdAt,
-        endsAt,
+        created_at,
+        ends_at,
         candidates,
         status,
-        winnerCoinId,
-        totalPool
+        winner_coin_id,
+        total_pool
       FROM gaming_pumpplay_rounds
-      ORDER BY createdAt DESC
+      ORDER BY created_at DESC
       LIMIT 50
-    `)
+    `
 
     // Parse candidates JSON and enrich with coin details
     const enrichedRounds = await Promise.all(
       rounds.map(async (round: any) => {
-        let candidates = []
+        let candidates: string[] = []
         try {
           candidates = JSON.parse(round.candidates || '[]')
         } catch {
           candidates = []
         }
 
-        // Get coin details for candidates
+        // Get coin details for candidates from Postgres
         const coinDetails = await Promise.all(
           candidates.map(async (coinId: string) => {
-            const coin = await db.get('SELECT * FROM coins WHERE id = ? OR tokenAddress = ?', [coinId, coinId])
-            return coin || { id: coinId, name: 'Unknown', symbol: 'UNK' }
+            const coinResult = await coinsSql`
+              SELECT * FROM coins 
+              WHERE id = ${coinId} OR token_address = ${coinId}
+              LIMIT 1
+            `
+            const coin = coinResult[0]
+            return coin ? {
+              id: coin.id,
+              name: coin.name,
+              symbol: coin.symbol,
+              tokenAddress: coin.token_address
+            } : { id: coinId, name: 'Unknown', symbol: 'UNK' }
           })
         )
 
         // Get bet counts and total for this round
-        const bets = await db.all(
-          'SELECT coinId, SUM(amount) as total FROM gaming_pumpplay_bets WHERE roundId = ? GROUP BY coinId',
-          [round.id]
-        )
+        const bets = await sql`
+          SELECT coin_id, SUM(amount) as total 
+          FROM gaming_pumpplay_bets 
+          WHERE round_id = ${round.id} 
+          GROUP BY coin_id
+        `
 
         const betMap: Record<string, number> = {}
         bets.forEach((bet: any) => {
-          betMap[bet.coinId] = bet.total || 0
+          betMap[bet.coin_id] = parseFloat(bet.total) || 0
         })
 
         return {
           id: round.id,
-          createdAt: round.createdAt,
-          endsAt: round.endsAt,
+          createdAt: round.created_at,
+          endsAt: round.ends_at,
           candidates: coinDetails,
           status: round.status,
-          winnerCoinId: round.winnerCoinId,
-          totalPool: round.totalPool || 0,
+          winnerCoinId: round.winner_coin_id,
+          totalPool: parseFloat(round.total_pool) || 0,
           bets: betMap,
         }
       })
@@ -66,26 +90,33 @@ export async function GET(request: NextRequest) {
     // Create a new round if none exist or all are closed
     const openRounds = enrichedRounds.filter((r: any) => r.status === 'open')
     if (openRounds.length === 0) {
-      // Get some candidate coins
-      const candidateCoins = await db.all(`
-        SELECT id, name, symbol, tokenAddress 
+      // Get some candidate coins from Postgres
+      const candidateCoinsResult = await coinsSql`
+        SELECT id, name, symbol, token_address 
         FROM coins 
-        WHERE tokenAddress IS NOT NULL 
-        ORDER BY createdAt DESC 
+        WHERE token_address IS NOT NULL 
+        ORDER BY created_at DESC 
         LIMIT 5
-      `)
+      `
+
+      const candidateCoins = candidateCoinsResult.map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        symbol: c.symbol,
+        tokenAddress: c.token_address
+      }))
 
       if (candidateCoins.length >= 2) {
         const now = Date.now()
         const endsAt = now + 24 * 60 * 60 * 1000 // 24 hours from now
 
-        const newRound = await db.run(
-          `INSERT INTO gaming_pumpplay_rounds (createdAt, endsAt, candidates, status, totalPool)
-           VALUES (?, ?, ?, 'open', 0)`,
-          [now, endsAt, JSON.stringify(candidateCoins.map((c: any) => c.id || c.tokenAddress))]
-        )
+        const newRound = await sql`
+          INSERT INTO gaming_pumpplay_rounds (created_at, ends_at, candidates, status, total_pool)
+          VALUES (${now}, ${endsAt}, ${JSON.stringify(candidateCoins.map((c: any) => c.id || c.tokenAddress))}, 'open', 0)
+          RETURNING id
+        `
 
-        const roundId = (newRound as any).lastID
+        const roundId = newRound[0].id
         const newRoundData = {
           id: roundId,
           createdAt: now,
@@ -101,8 +132,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    await db.close()
-
     return NextResponse.json({
       success: true,
       rounds: enrichedRounds,
@@ -110,9 +139,12 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('Error fetching PumpPlay rounds:', error)
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to fetch rounds' },
+      { 
+        success: false, 
+        error: error.message || 'Failed to fetch rounds',
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      },
       { status: 500 }
     )
   }
 }
-

@@ -7,6 +7,7 @@ import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { Home, Sparkles, Gamepad2, User, Search, Video, Bot } from 'lucide-react'
 import { useAccount } from 'wagmi'
 import { usePumpAI } from '../providers/PumpAIContext'
+import AuthButton from '../../components/AuthButton'
 // Using img tag instead of Next Image for better compatibility
 
 export default function PremiumNavbar() {
@@ -92,6 +93,19 @@ export default function PremiumNavbar() {
             >
               <User className="w-4 h-4" />
               <span className="font-medium">Profile</span>
+            </Link>
+            {/* Role-based dashboard links */}
+            <Link
+              href="/trader"
+              className="flex items-center gap-2 text-[#E3E4E8] hover:text-white transition-colors duration-300"
+            >
+              <span className="font-medium">Trader</span>
+            </Link>
+            <Link
+              href="/creator"
+              className="flex items-center gap-2 text-[#E3E4E8] hover:text-white transition-colors duration-300"
+            >
+              <span className="font-medium">Creator</span>
             </Link>
           </div>
 
@@ -184,6 +198,9 @@ export default function PremiumNavbar() {
                           >
                             {account.displayName}
                           </button>
+
+                          {/* Auth Button (Login/Logout) */}
+                          <AuthButton />
                         </div>
                       )
                     })()}

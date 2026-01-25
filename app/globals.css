@@ -69,6 +69,157 @@
     pointer-events: auto;
   }
 
+  /* Enhanced Glass Variants */
+  .glass-card-static {
+    @apply glass p-6;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  }
+
+  .glass-card-intense {
+    @apply glass p-6;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+  }
+
+  .glass-card-intense:hover {
+    box-shadow: 0 12px 48px rgba(255, 79, 132, 0.3), 0 0 60px rgba(140, 82, 255, 0.2);
+    transform: translateY(-6px);
+    border-color: rgba(255, 79, 132, 0.3);
+  }
+
+  /* Stat Card */
+  .stat-card {
+    @apply glass p-4 rounded-2xl;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.04) 100%);
+  }
+
+  .stat-card-value {
+    @apply text-3xl font-bold bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent;
+  }
+
+  .stat-card-label {
+    @apply text-sm text-gray-400 mt-1;
+  }
+
+  /* Game Card */
+  .game-card {
+    @apply glass p-5 rounded-2xl transition-all duration-300;
+    background: linear-gradient(135deg, rgba(26, 11, 46, 0.8) 0%, rgba(22, 33, 62, 0.8) 100%);
+    border: 1px solid rgba(140, 82, 255, 0.2);
+  }
+
+  .game-card:hover {
+    border-color: rgba(140, 82, 255, 0.5);
+    box-shadow: 0 0 30px rgba(140, 82, 255, 0.3);
+    transform: translateY(-2px);
+  }
+
+  /* Game Tab */
+  .game-tab {
+    @apply px-6 py-3 rounded-xl font-semibold transition-all duration-300 cursor-pointer;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid transparent;
+  }
+
+  .game-tab:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .game-tab.active {
+    background: linear-gradient(135deg, #FF4F84 0%, #8C52FF 100%);
+    box-shadow: 0 0 20px rgba(255, 79, 132, 0.5);
+  }
+
+  /* XP Progress Bar */
+  .xp-bar {
+    @apply h-3 rounded-full overflow-hidden;
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .xp-bar-fill {
+    @apply h-full rounded-full transition-all duration-500;
+    background: linear-gradient(90deg, #12D9C8 0%, #00D1FF 100%);
+    box-shadow: 0 0 10px rgba(18, 217, 200, 0.5);
+  }
+
+  /* Countdown Timer */
+  .countdown-timer {
+    @apply font-mono text-2xl font-bold;
+  }
+
+  .countdown-urgent {
+    @apply text-red-400;
+    animation: countdown-pulse 1s ease-in-out infinite;
+  }
+
+  @keyframes countdown-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+  }
+
+  /* Skeleton Loader */
+  .skeleton {
+    @apply rounded-lg;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.05) 25%, rgba(255, 255, 255, 0.1) 50%, rgba(255, 255, 255, 0.05) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes skeleton-pulse {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  .skeleton-card {
+    @apply skeleton w-full h-48 rounded-2xl;
+  }
+
+  .skeleton-text {
+    @apply skeleton h-4 rounded;
+  }
+
+  .skeleton-avatar {
+    @apply skeleton w-12 h-12 rounded-full;
+  }
+
+  /* Empty State */
+  .empty-state {
+    @apply text-center py-16 px-6;
+  }
+
+  .empty-state-icon {
+    @apply w-20 h-20 mx-auto mb-6 text-gray-500 opacity-50;
+  }
+
+  .empty-state-title {
+    @apply text-2xl font-bold text-white mb-2;
+  }
+
+  .empty-state-description {
+    @apply text-gray-400 max-w-md mx-auto;
+  }
+
+  /* Result Animations */
+  .result-win {
+    animation: win-glow 0.6s ease-out;
+  }
+
+  .result-lose {
+    animation: lose-shake 0.4s ease-in-out;
+  }
+
+  @keyframes win-glow {
+    0% { box-shadow: 0 0 0 rgba(0, 255, 136, 0); }
+    50% { box-shadow: 0 0 60px rgba(0, 255, 136, 0.8); }
+    100% { box-shadow: 0 0 20px rgba(0, 255, 136, 0.4); }
+  }
+
+  @keyframes lose-shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px) rotate(-1deg); }
+    75% { transform: translateX(5px) rotate(1deg); }
+  }
+
   /* Buttons */
   .btn-primary {
     @apply inline-flex items-center justify-center px-8 py-4 font-semibold rounded-full text-white transition-all duration-300 cursor-pointer;
@@ -108,6 +259,31 @@
     text-decoration: none;
   }
 
+  /* Success/Danger Button Variants */
+  .btn-success {
+    @apply inline-flex items-center justify-center px-6 py-3 font-semibold rounded-xl text-white transition-all duration-300 cursor-pointer;
+    background: linear-gradient(135deg, #00FF88 0%, #12D9C8 100%);
+    box-shadow: 0 4px 20px rgba(0, 255, 136, 0.3);
+    border: none;
+  }
+
+  .btn-success:hover {
+    transform: scale(1.03);
+    box-shadow: 0 6px 30px rgba(0, 255, 136, 0.5);
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center px-6 py-3 font-semibold rounded-xl text-white transition-all duration-300 cursor-pointer;
+    background: linear-gradient(135deg, #FF3366 0%, #FF4F84 100%);
+    box-shadow: 0 4px 20px rgba(255, 51, 102, 0.3);
+    border: none;
+  }
+
+  .btn-danger:hover {
+    transform: scale(1.03);
+    box-shadow: 0 6px 30px rgba(255, 51, 102, 0.5);
+  }
+
   /* Input */
   .input-glass {
     @apply w-full rounded-xl px-4 py-3 text-white placeholder-[rgba(255,255,255,0.4)] outline-none transition-all;
@@ -133,6 +309,14 @@
 
   .neon-glow-purple {
     filter: drop-shadow(0 0 10px rgba(140, 82, 255, 0.6));
+  }
+
+  .neon-glow-green {
+    filter: drop-shadow(0 0 10px rgba(0, 255, 136, 0.6));
+  }
+
+  .neon-glow-red {
+    filter: drop-shadow(0 0 10px rgba(255, 51, 102, 0.6));
   }
 
   /* Blob Background */
@@ -251,6 +435,47 @@
     border-color: rgba(255, 79, 132, 0.5);
     color: white;
     box-shadow: 0 0 20px rgba(255, 79, 132, 0.4);
+  }
+
+  /* Rank Badge */
+  .rank-badge {
+    @apply inline-flex items-center justify-center w-8 h-8 rounded-full font-bold text-sm;
+  }
+
+  .rank-badge-gold {
+    @apply rank-badge;
+    background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+    color: #1a0b2e;
+    box-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
+  }
+
+  .rank-badge-silver {
+    @apply rank-badge;
+    background: linear-gradient(135deg, #C0C0C0 0%, #A0A0A0 100%);
+    color: #1a0b2e;
+  }
+
+  .rank-badge-bronze {
+    @apply rank-badge;
+    background: linear-gradient(135deg, #CD7F32 0%, #B87333 100%);
+    color: white;
+  }
+
+  /* Leaderboard Row */
+  .leaderboard-row {
+    @apply flex items-center gap-4 p-4 rounded-xl transition-all duration-300;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid transparent;
+  }
+
+  .leaderboard-row:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(140, 82, 255, 0.2);
+  }
+
+  .leaderboard-row.current-user {
+    background: rgba(140, 82, 255, 0.1);
+    border-color: rgba(140, 82, 255, 0.3);
   }
 }
 
@@ -451,6 +676,14 @@
     animation: shimmer 2s infinite;
   }
 }
+
+
+
+
+
+
+
+
 
 
 

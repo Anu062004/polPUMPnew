@@ -144,7 +144,7 @@ contract PumpFunFactory {
         token.setMinter(curveAddr);
         
         // Transfer curve ownership to creator
-        BondingCurvePool(curveAddr).transferOwnership(msg.sender);
+        BondingCurvePool(payable(curveAddr)).transferOwnership(msg.sender);
         
         // Track mappings
         tokenToCurve[tokenAddr] = curveAddr;

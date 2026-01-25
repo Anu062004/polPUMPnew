@@ -89,7 +89,14 @@ contract POLToken is ERC20, Ownable, Pausable {
     }
     
     /// @notice Get complete token metadata
-    /// @return Token metadata struct
+    /// @return _name Token name
+    /// @return _symbol Token symbol
+    /// @return _description Token description
+    /// @return _metadataRootHash Token metadata root hash
+    /// @return _imageRootHash Token image root hash
+    /// @return _creator Token creator address
+    /// @return _createdAt Token creation timestamp
+    /// @return _totalSupply Token total supply
     function getMetadata() external view returns (
         string memory _name,
         string memory _symbol,

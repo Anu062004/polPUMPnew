@@ -1,101 +1,146 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { databaseManager } from '../../../../../lib/databaseManager'
+import { requirePostgres } from '../../../../../lib/gamingPostgres'
+import { verifySignatureWithTimestamp } from '../../../../../lib/authUtils'
+import { validateGameId, validateAddress } from '../../../../../lib/validationUtils'
 
+/**
+ * Cash out from a Mines game
+ * SECURITY: Requires wallet signature verification
+ * FIXES: Uses Postgres, has transactions, prevents double cashout (race condition)
+ */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { gameId, userAddress } = body
+    const { 
+      gameId, 
+      userAddress,
+      signature,
+      message
+    } = body
 
-    if (!gameId || !userAddress) {
+    // Input validation
+    const gameIdValidation = validateGameId(gameId)
+    if (!gameIdValidation.isValid) {
       return NextResponse.json(
-        { success: false, error: 'Missing required fields' },
+        { success: false, error: gameIdValidation.error },
         { status: 400 }
       )
     }
 
-    try {
-      await databaseManager.initialize()
-    } catch (dbError: any) {
-      console.error('Database initialization error:', dbError)
+    const addressValidation = validateAddress(userAddress)
+    if (!addressValidation.isValid) {
       return NextResponse.json(
-        { success: false, error: 'Database not available. Please try again later.' },
-        { status: 503 }
+        { success: false, error: addressValidation.error },
+        { status: 400 }
       )
     }
 
-    let db
-    try {
-      db = await databaseManager.getConnection()
-    } catch (dbError: any) {
-      console.error('Database connection error:', dbError)
-      return NextResponse.json(
-        { success: false, error: 'Database connection failed. Please try again.' },
-        { status: 503 }
-      )
-    }
-
-    // Ensure table exists
-    try {
-      await db.run(`
-        CREATE TABLE IF NOT EXISTS gaming_mines (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          userAddress TEXT NOT NULL,
-          betAmount REAL NOT NULL,
-          tokenAddress TEXT NOT NULL,
-          minesCount INTEGER NOT NULL,
-          gridState TEXT NOT NULL,
-          revealedTiles TEXT NOT NULL,
-          status TEXT NOT NULL DEFAULT 'active',
-          currentMultiplier REAL NOT NULL DEFAULT 1.0,
-          cashoutAmount REAL,
-          createdAt INTEGER NOT NULL,
-          completedAt INTEGER
+    // Wallet signature verification (SECURITY FIX)
+    if (process.env.NODE_ENV === 'production' || process.env.REQUIRE_SIGNATURE === 'true') {
+      if (!signature || !message) {
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: 'Wallet signature required. Please sign the message to cash out.' 
+          },
+          { status: 401 }
         )
-      `)
-    } catch (tableError: any) {
-      console.warn('Table creation warning (may already exist):', tableError.message)
-    }
+      }
 
-    const game = await db.get('SELECT * FROM gaming_mines WHERE id = ? AND userAddress = ?', [gameId, userAddress.toLowerCase()])
-
-    if (!game) {
-      return NextResponse.json(
-        { success: false, error: 'Game not found' },
-        { status: 404 }
+      const verification = verifySignatureWithTimestamp(
+        message,
+        signature,
+        userAddress.toLowerCase(),
+        5 * 60 * 1000
       )
+
+      if (!verification.isValid) {
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: `Signature verification failed: ${verification.error}` 
+          },
+          { status: 401 }
+        )
+      }
     }
 
-    if (game.status !== 'active') {
-      return NextResponse.json(
-        { success: false, error: 'Game is not active' },
-        { status: 400 }
-      )
+    // Get Postgres connection (DATA PERSISTENCE FIX)
+    const sql = await requirePostgres()
+
+    // Use transaction with row lock to prevent double cashout (RACE CONDITION FIX)
+    try {
+      // Lock the row for update to prevent concurrent cashouts
+      const gameResult = await sql`
+        SELECT * FROM gaming_mines 
+        WHERE id = ${gameId} 
+        AND user_address = ${userAddress.toLowerCase()}
+        FOR UPDATE
+      `
+
+      if (gameResult.length === 0) {
+        return NextResponse.json(
+          { success: false, error: 'Game not found' },
+          { status: 404 }
+        )
+      }
+
+      const game = gameResult[0]
+
+      if (game.status !== 'active') {
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: `Game is not active (status: ${game.status})` 
+          },
+          { status: 400 }
+        )
+      }
+
+      // Calculate cashout amount
+      const cashoutAmount = parseFloat(game.bet_amount) * parseFloat(game.current_multiplier)
+
+      // Atomically update status to prevent double cashout
+      const updateResult = await sql`
+        UPDATE gaming_mines 
+        SET status = 'cashed_out', 
+            cashout_amount = ${cashoutAmount}, 
+            completed_at = ${Date.now()}
+        WHERE id = ${gameId} 
+        AND status = 'active'
+        RETURNING *
+      `
+
+      // Check if update succeeded (another request may have cashed out first)
+      if (updateResult.length === 0) {
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: 'Game was already cashed out or is no longer active' 
+          },
+          { status: 409 } // Conflict
+        )
+      }
+
+      return NextResponse.json({
+        success: true,
+        cashoutAmount,
+        multiplier: game.current_multiplier,
+      })
+    } catch (dbError: any) {
+      // Transaction will rollback automatically on error
+      console.error('Database error in cashout transaction:', dbError)
+      throw dbError
     }
-
-    // Calculate cashout amount
-    const cashoutAmount = parseFloat(game.betAmount) * parseFloat(game.currentMultiplier)
-
-    // Mark as cashed out
-    await db.run(
-      `UPDATE gaming_mines 
-       SET status = 'cashed_out', cashoutAmount = ?, completedAt = ?
-       WHERE id = ?`,
-      [cashoutAmount, Date.now(), gameId]
-    )
-
-    await db.close()
-
-    return NextResponse.json({
-      success: true,
-      cashoutAmount,
-      multiplier: game.currentMultiplier,
-    })
   } catch (error: any) {
     console.error('Error cashing out:', error)
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to cash out' },
+      { 
+        success: false, 
+        error: error.message || 'Failed to cash out',
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      },
       { status: 500 }
     )
   }
 }
-

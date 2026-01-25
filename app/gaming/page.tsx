@@ -13,6 +13,7 @@ export default function GamingPage() {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<'pumpplay'|'meme-royale'|'mines'|'arcade'>('pumpplay')
   const backend = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000'
+  const apiKey = process.env.NEXT_PUBLIC_API_KEY || ''
   const [mounted, setMounted] = useState(false)
   
   // Platform Coins & User Holdings
@@ -2068,41 +2069,52 @@ export default function GamingPage() {
           // Save token to database via API
           let saveSuccess = false
           if (tokenData.tokenAddress && tokenData.curveAddress && tokenData.txHash) {
-            try {
-              const saveResponse = await fetch('/api/coins', {
+            const payload = {
+              name: tokenData.name,
+              symbol: tokenData.symbol,
+              supply: tokenData.supply,
+              description: tokenData.description,
+              imageHash: tokenData.imageHash,
+              tokenAddress: tokenData.tokenAddress,
+              curveAddress: tokenData.curveAddress,
+              txHash: tokenData.txHash,
+              creator: address || 'Unknown',
+              telegramUrl: tokenData.telegramUrl,
+              xUrl: tokenData.xUrl,
+              discordUrl: tokenData.discordUrl,
+              websiteUrl: tokenData.websiteUrl,
+            }
+
+            const attemptSave = async (delayMs: number) => {
+              await new Promise((r) => setTimeout(r, delayMs))
+              const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+              if (apiKey) headers['x-api-key'] = apiKey
+              const resp = await fetch('/api/coins', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  name: tokenData.name,
-                  symbol: tokenData.symbol,
-                  supply: tokenData.supply,
-                  description: tokenData.description,
-                  imageHash: tokenData.imageHash,
-                  tokenAddress: tokenData.tokenAddress,
-                  curveAddress: tokenData.curveAddress,
-                  txHash: tokenData.txHash,
-                  creator: address || 'Unknown',
-                  telegramUrl: tokenData.telegramUrl,
-                  xUrl: tokenData.xUrl,
-                  discordUrl: tokenData.discordUrl,
-                  websiteUrl: tokenData.websiteUrl,
-                }),
+                headers,
+                body: JSON.stringify(payload),
               })
-              
-              if (saveResponse.ok) {
-                const result = await saveResponse.json()
-                if (result.success) {
-                  console.log('✅ Token saved to database:', result.coin?.id || 'unknown')
-                  saveSuccess = true
-                } else {
-                  console.warn('⚠️ Token save warning:', result.error)
-                }
-              } else {
-                const errorText = await saveResponse.text().catch(() => 'Unknown error')
-                console.error('❌ Token save failed:', saveResponse.status, errorText)
+              if (!resp.ok) {
+                const txt = await resp.text().catch(() => '')
+                throw new Error(`status ${resp.status}: ${txt || 'unknown error'}`)
               }
-            } catch (saveError: any) {
-              console.error('❌ Failed to save token to database:', saveError)
+              const result = await resp.json()
+              if (!result.success) {
+                throw new Error(result.error || 'unknown save error')
+              }
+              return result
+            }
+
+            const backoffs = [0, 750, 1500, 3000]
+            for (const wait of backoffs) {
+              try {
+                const result = await attemptSave(wait)
+                console.log('✅ Token saved to database:', result.coin?.id || 'unknown')
+                saveSuccess = true
+                break
+              } catch (saveError: any) {
+                console.warn(`Save attempt failed (wait ${wait}ms):`, saveError?.message || saveError)
+              }
             }
           }
           

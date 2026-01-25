@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { ethers } from 'ethers'
 import { getTokenCreator, upsertLivestream } from '../../../../lib/livestreamDatabase'
 import { buildLivestreamUrls } from '../../../../lib/livestreamHelpers'
+import { withCreatorAuth } from '../../../../lib/roleMiddleware'
 
-export async function POST(request: NextRequest) {
+export const POST = withCreatorAuth(async (request: NextRequest, user) => {
   try {
     const body = await request.json()
-    const { tokenAddress, creatorAddress } = body
+    const { tokenAddress } = body
 
     // Validate token address
     if (!tokenAddress || !ethers.isAddress(tokenAddress)) {
@@ -16,21 +17,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate creator address (required for auth)
-    if (!creatorAddress || !ethers.isAddress(creatorAddress)) {
-      return NextResponse.json(
-        { success: false, error: 'Creator address required' },
-        { status: 400 }
-      )
-    }
+    // Use authenticated user's wallet as creator address
+    const creatorAddress = user.wallet
 
-    // Verify creator is the token creator
+    // Verify creator is the token creator (optional check - role already verified)
     const tokenCreator = await getTokenCreator(tokenAddress)
     
     // If token creator not found, allow if creatorAddress matches (for on-chain tokens)
     if (!tokenCreator) {
-      console.warn(`Token creator not found for ${tokenAddress}, allowing if creatorAddress matches`)
-      // For on-chain tokens without creator in DB, we'll allow it if the address is valid
+      console.warn(`Token creator not found for ${tokenAddress}, allowing CREATOR role user`)
+      // For on-chain tokens without creator in DB, we'll allow CREATOR role users
       // This is a fallback for tokens not yet indexed
     } else {
       // Check if caller is the creator (case-insensitive)
