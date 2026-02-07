@@ -19,7 +19,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: 0gPump/package-lock.json
+          cache-dependency-path: '0gPump/package-lock.json'
       
       - name: Install dependencies
         working-directory: ./0gPump
@@ -45,7 +45,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: 0gPump/package-lock.json
+          cache-dependency-path: '0gPump/package-lock.json'
       
       - name: Install dependencies
         working-directory: ./0gPump
@@ -74,7 +74,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: 0gPump/package-lock.json
+          cache-dependency-path: '0gPump/package-lock.json'
       
       - name: Install dependencies
         working-directory: ./0gPump
@@ -100,7 +100,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: 0gPump/package-lock.json
+          cache-dependency-path: '0gPump/package-lock.json'
       
       - name: Install dependencies
         working-directory: ./0gPump
