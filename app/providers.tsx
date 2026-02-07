@@ -12,7 +12,12 @@ const { connectors } = getDefaultWallets({
 
 // Determine which chain to use based on environment
 const isMainnet = process.env.NEXT_PUBLIC_NETWORK === 'polygon'
-const targetChain = isMainnet ? polygon : polygonAmoy
+const targetChain = isMainnet 
+  ? {
+      ...polygon,
+      name: 'Polygon Mainnet', // Override name to ensure correct display
+    }
+  : polygonAmoy
 
 const config = createConfig({
   chains: [targetChain],

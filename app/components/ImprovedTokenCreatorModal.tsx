@@ -147,12 +147,14 @@ export default function ImprovedTokenCreatorModal({ isOpen, onClose, onTokenCrea
       if (!address) throw new Error('Wallet not connected')
       if (!imageHash) throw new Error('Please upload an image first')
 
+      const networkName = process.env.NEXT_PUBLIC_NETWORK === 'polygon' ? 'Polygon Mainnet' : 'Polygon Amoy'
+
       // Create metadata
       setStatus('Uploading metadata to storage...')
       const meta = {
         name,
         symbol,
-        description: description || `${name} (${symbol}) - A memecoin created on Polygon Amoy`,
+        description: description || `${name} (${symbol}) - A memecoin created on ${networkName}`,
         supply: supply.replace(/_/g, ''),
         creator: address,
         imageRootHash: imageHash,
@@ -182,7 +184,7 @@ export default function ImprovedTokenCreatorModal({ isOpen, onClose, onTokenCrea
 
       const metadataRootHash = json.coin.metadataRootHash as string
 
-      setStatus('Creating token with bonding curve on Polygon Amoy (this may take 30-60 seconds)...')
+      setStatus(`Creating token with bonding curve on ${networkName} (this may take 30-60 seconds)...`)
 
       const result = await newFactoryService.createPair({
         name,
@@ -287,7 +289,11 @@ export default function ImprovedTokenCreatorModal({ isOpen, onClose, onTokenCrea
       // Verify bonding curve is seeded and ready for trading
       setStatus('⏳ Verifying bonding curve is ready for trading...')
       try {
-        const rpcUrl = process.env.NEXT_PUBLIC_EVM_RPC || 'https://polygon-amoy.infura.io/v3/b4f237515b084d4bad4e5de070b0452f'
+        const isMainnet = process.env.NEXT_PUBLIC_NETWORK === 'polygon'
+        const rpcUrl = process.env.NEXT_PUBLIC_EVM_RPC || 
+                       (isMainnet 
+                         ? 'https://polygon-mainnet.infura.io/v3/2a16fc884a10441eae11c29cd9b9aa5f'
+                         : 'https://polygon-amoy.infura.io/v3/b4f237515b084d4bad4e5de070b0452f')
         const readProvider = new ethers.JsonRpcProvider(rpcUrl)
         const curveInfo = await newBondingCurveTradingService.getCurveInfo(curveAddr, readProvider)
         
@@ -612,7 +618,7 @@ export default function ImprovedTokenCreatorModal({ isOpen, onClose, onTokenCrea
                           target="_blank"
                           rel="noreferrer"
                           className="underline text-blue-400 hover:text-blue-300"
-                          href={`https://amoy.polygonscan.com/tx/${txHash}`}
+                          href={`https://${process.env.NEXT_PUBLIC_NETWORK === 'polygon' ? 'polygonscan.com' : 'amoy.polygonscan.com'}/tx/${txHash}`}
                         >
                           View on PolygonScan
                         </a>

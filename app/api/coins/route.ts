@@ -1015,6 +1015,50 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Try PostgreSQL first (production)
+    try {
+      const { initializeSchema, getSql } = await import('../../../lib/postgresManager')
+      await initializeSchema()
+      const sql = await getSql()
+      
+      if (sql) {
+        if (keepSymbol) {
+          const result = await sql`
+            DELETE FROM coins WHERE LOWER(symbol) != LOWER(${keepSymbol})
+          `
+          const countResult = await sql`SELECT COUNT(*) as count FROM coins`
+          const remaining = parseInt(countResult[0]?.count || '0', 10)
+          
+          return NextResponse.json({ 
+            success: true, 
+            message: `All coins deleted except ${keepSymbol}`,
+            deleted: result.count || 0,
+            remaining
+          })
+        } else {
+          // Get count before deletion
+          const countResult = await sql`SELECT COUNT(*) as count FROM coins`
+          const countBefore = parseInt(countResult[0]?.count || '0', 10)
+          
+          await sql`DELETE FROM coins`
+          
+          // Verify deletion
+          const verifyResult = await sql`SELECT COUNT(*) as count FROM coins`
+          const countAfter = parseInt(verifyResult[0]?.count || '0', 10)
+          const deleted = countBefore - countAfter
+          
+          return NextResponse.json({ 
+            success: true, 
+            message: 'All coins deleted from PostgreSQL',
+            deleted
+          })
+        }
+      }
+    } catch (pgError: any) {
+      console.warn('PostgreSQL not available for DELETE, trying SQLite:', pgError?.message)
+    }
+    
+    // Fallback to SQLite
     const db = await getDatabase()
     
     if (keepSymbol) {
@@ -1032,10 +1076,18 @@ export async function DELETE(request: NextRequest) {
       })
     } else {
       // Delete all coins
+      const countBefore = await db.get('SELECT COUNT(*) as count FROM coins')
       await db.exec('DELETE FROM coins')
+      const countAfter = await db.get('SELECT COUNT(*) as count FROM coins')
       await db.close()
       
-      return NextResponse.json({ success: true, message: 'All coins deleted' })
+      const deleted = (countBefore?.count || 0) - (countAfter?.count || 0)
+      
+      return NextResponse.json({ 
+        success: true, 
+        message: 'All coins deleted from SQLite',
+        deleted
+      })
     }
   } catch (error) {
     console.error('Failed to delete coins:', error)

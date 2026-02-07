@@ -115,6 +115,7 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
     try {
       if (!address) throw new Error('Wallet not connected')
 
+      const networkName = process.env.NEXT_PUBLIC_NETWORK === 'polygon' ? 'Polygon Mainnet' : 'Polygon Amoy'
       let finalImageHash = ''
 
       // Image should already be uploaded to storage via OGImageUploader
@@ -132,7 +133,7 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
       const meta = {
         name,
         symbol,
-        description: description || `${name} (${symbol}) - A memecoin created on Polygon Amoy`,
+        description: description || `${name} (${symbol}) - A memecoin created on ${networkName}`,
         supply: supply.replace(/_/g, ''),
         creator: address,
         imageRootHash: finalImageHash,
@@ -164,7 +165,7 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
 
       const metadataRootHash = json.coin.metadataRootHash as string
 
-      setStatus('Creating token with bonding curve on Polygon Amoy (this may take 30-60 seconds)...')
+      setStatus(`Creating token with bonding curve on ${networkName} (this may take 30-60 seconds)...`)
 
       // Create token using new bonding curve mechanism
       const result = await newFactoryService.createPair({
@@ -263,7 +264,11 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
       // Verify bonding curve is seeded and ready for trading
       setStatus('⏳ Verifying bonding curve is ready for trading...')
       try {
-        const rpcUrl = process.env.NEXT_PUBLIC_EVM_RPC || 'https://polygon-amoy.infura.io/v3/b4f237515b084d4bad4e5de070b0452f'
+        const isMainnet = process.env.NEXT_PUBLIC_NETWORK === 'polygon'
+        const rpcUrl = process.env.NEXT_PUBLIC_EVM_RPC || 
+                       (isMainnet 
+                         ? 'https://polygon-mainnet.infura.io/v3/2a16fc884a10441eae11c29cd9b9aa5f'
+                         : 'https://polygon-amoy.infura.io/v3/b4f237515b084d4bad4e5de070b0452f')
         const readProvider = new ethers.JsonRpcProvider(rpcUrl)
         const curveInfo = await newBondingCurveTradingService.getCurveInfo(curveAddr, readProvider)
         
@@ -288,7 +293,7 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
 
       setCreationResult({ ...result, tokenAddress: tokenAddr, curveAddress: curveAddr })
       setTxHash(result.txHash || 'Transaction submitted')
-      setStatus('✅ Token created successfully! Transaction confirmed on Polygon Amoy.')
+      setStatus(`✅ Token created successfully! Transaction confirmed on ${networkName}.`)
       setSuccess(true)
 
       const tokenData = {
@@ -420,7 +425,7 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
                 </div>
                 <div className="flex items-center justify-between">
                   <p className="text-slate-700 text-sm">
-                    Create your own memecoin on Polygon Amoy with immediate trading via new bonding curve system
+                    Create your own memecoin on {process.env.NEXT_PUBLIC_NETWORK === 'polygon' ? 'Polygon Mainnet' : 'Polygon Amoy'} with immediate trading via new bonding curve system
                   </p>
                   <ConnectButton />
                 </div>
@@ -623,7 +628,7 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
                           target="_blank"
                           rel="noreferrer"
                           className="underline text-blue-400 hover:text-blue-300"
-                          href={`https://amoy.polygonscan.com/tx/${txHash}`}
+                          href={`https://${process.env.NEXT_PUBLIC_NETWORK === 'polygon' ? 'polygonscan.com' : 'amoy.polygonscan.com'}/tx/${txHash}`}
                         >
                           {txHash}
                         </a>

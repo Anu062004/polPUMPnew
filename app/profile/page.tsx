@@ -760,7 +760,7 @@ export default function ProfilePage() {
                   <label className="block text-sm font-medium text-gray-400 mb-1">Network</label>
                   <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-sm">
                     <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-                    Polygon Amoy
+                    {process.env.NEXT_PUBLIC_NETWORK === 'polygon' ? 'Polygon Mainnet' : 'Polygon Amoy'}
                   </span>
                 </div>
               </div>

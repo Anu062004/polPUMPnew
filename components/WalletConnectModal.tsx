@@ -4,8 +4,12 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, Wallet, Shield, Zap, CheckCircle, AlertTriangle } from 'lucide-react'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { useAccount, useSwitchChain, useChainId } from 'wagmi'
-import { polygonAmoy } from 'wagmi/chains'
+import { polygon, polygonAmoy } from 'wagmi/chains'
 import { useEffect, useState } from 'react'
+
+// Determine network based on environment
+const isMainnet = process.env.NEXT_PUBLIC_NETWORK === 'polygon'
+const targetChain = isMainnet ? polygon : polygonAmoy
 
 interface WalletConnectModalProps {
   isOpen: boolean
@@ -31,7 +35,7 @@ export default function WalletConnectModal({ isOpen, onClose, onSuccess, reason 
 
   useEffect(() => {
     if (isConnected && chainId) {
-      if (chainId !== polygonAmoy.id) {
+      if (chainId !== targetChain.id) {
         setWrongNetwork(true)
       } else {
         setWrongNetwork(false)
@@ -46,7 +50,7 @@ export default function WalletConnectModal({ isOpen, onClose, onSuccess, reason 
 
   const handleSwitchNetwork = () => {
     if (switchChain) {
-      switchChain({ chainId: polygonAmoy.id })
+      switchChain({ chainId: targetChain.id })
     }
   }
 
@@ -90,13 +94,13 @@ export default function WalletConnectModal({ isOpen, onClose, onSuccess, reason 
                   <div>
                     <div className="font-semibold text-yellow-300 mb-1">Wrong Network</div>
                     <div className="text-sm text-yellow-200/80 mb-3">
-                      Please switch to Polygon Amoy testnet to continue
+                      Please switch to {isMainnet ? 'Polygon Mainnet' : 'Polygon Amoy testnet'} to continue
                     </div>
                     <button
                       onClick={handleSwitchNetwork}
                       className="btn-primary text-sm py-2 px-4"
                     >
-                      Switch to Polygon Amoy
+                      Switch to {isMainnet ? 'Polygon Mainnet' : 'Polygon Amoy'}
                     </button>
                   </div>
                 </div>
@@ -198,8 +202,8 @@ export default function WalletConnectModal({ isOpen, onClose, onSuccess, reason 
                 <div className="mt-6 p-4 bg-white/5 rounded-lg border border-white/10">
                   <div className="text-xs text-white/60 text-center">
                     <div className="font-semibold text-white/80 mb-1">Network</div>
-                    <div>Polygon Amoy Testnet</div>
-                    <div className="mt-2 text-[#12D9C8]">Chain ID: {polygonAmoy.id}</div>
+                    <div>{isMainnet ? 'Polygon Mainnet' : 'Polygon Amoy Testnet'}</div>
+                    <div className="mt-2 text-[#12D9C8]">Chain ID: {targetChain.id}</div>
                   </div>
                 </div>
               </>

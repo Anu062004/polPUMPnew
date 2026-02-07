@@ -42,7 +42,11 @@ export async function POST(request: NextRequest) {
 
     // Fallback: Try to resolve from RPC directly using proper ABI parsing
     try {
-      const rpcUrl = process.env.NEXT_PUBLIC_EVM_RPC || 'https://polygon-amoy.infura.io/v3/b4f237515b084d4bad4e5de070b0452f'
+      const isMainnet = process.env.NEXT_PUBLIC_NETWORK === 'polygon'
+      const rpcUrl = process.env.NEXT_PUBLIC_EVM_RPC || 
+                     (isMainnet 
+                       ? 'https://polygon-mainnet.infura.io/v3/2a16fc884a10441eae11c29cd9b9aa5f'
+                       : 'https://polygon-amoy.infura.io/v3/b4f237515b084d4bad4e5de070b0452f')
       const provider = new ethers.JsonRpcProvider(rpcUrl)
       
       const receipt = await provider.getTransactionReceipt(txHash)
