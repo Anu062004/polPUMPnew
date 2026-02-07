@@ -96,7 +96,8 @@ export async function GET(
         }
       }
     } else {
-      console.log('Skipping backend fetch on serverless environment (Vercel)')
+      // Silently skip backend fetch on serverless (expected behavior)
+      // No need to log this as it's normal for Vercel deployments
     }
 
     // Fallback: Try to check local uploads directory
@@ -153,11 +154,19 @@ export async function GET(
       }
     }
 
-    // Final fallback: Return 404 with helpful message
-    return new NextResponse('Image not available. Backend server may not be running.', { 
-      status: 404,
+    // Final fallback: Return a transparent 1x1 pixel PNG instead of 404
+    // This prevents 404 errors from cluttering logs for deleted/missing images
+    // Especially useful for testnet tokens that were removed
+    const transparentPixel = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      'base64'
+    )
+    
+    return new NextResponse(transparentPixel, {
+      status: 200,
       headers: {
-        'Content-Type': 'text/plain'
+        'Content-Type': 'image/png',
+        'Cache-Control': 'public, max-age=3600' // Cache for 1 hour to reduce requests
       }
     })
   } catch (error) {
