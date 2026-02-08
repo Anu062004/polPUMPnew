@@ -5,8 +5,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { withAuth, withCreatorAuth } from '../../../../lib/roleMiddleware'
-import { getDb } from '../../../../lib/postgresManager'
+import { withAuth, withCreatorAuth } from '../../../lib/roleMiddleware'
+import { getDb } from '../../../lib/postgresManager'
 import { ethers } from 'ethers'
 
 // GET /api/trading-signals - Get trading signals (all users)
@@ -40,10 +40,12 @@ export const GET = withAuth(async (request: NextRequest, user) => {
       query += ` ORDER BY created_at DESC LIMIT $${paramCount}`
       params.push(limit)
 
-      const result = await db.pool.query(query, params)
-      signals = result.rows
+      if (db.pool) {
+        const result = await db.pool.query(query, params)
+        signals = result.rows
+      }
     } else if (db.type === 'vercel') {
-      const { sql } = db
+      const sql = db.sql as any
       if (creatorWallet && tokenAddress) {
         signals = await sql`
           SELECT * FROM trading_signals 
@@ -112,7 +114,7 @@ export const POST = withCreatorAuth(async (request: NextRequest, user) => {
     const db = await getDb()
     let insertedSignal: any
 
-    if (db.type === 'pg') {
+    if (db.type === 'pg' && db.pool) {
       const result = await db.pool.query(
         `INSERT INTO trading_signals (creator_wallet, token_address, signal_type, price_target, message, created_at)
          VALUES ($1, $2, $3, $4, $5, $6)
@@ -128,7 +130,7 @@ export const POST = withCreatorAuth(async (request: NextRequest, user) => {
       )
       insertedSignal = result.rows[0]
     } else if (db.type === 'vercel') {
-      const { sql } = db
+      const sql = db.sql as any
       const result = await sql`
         INSERT INTO trading_signals (creator_wallet, token_address, signal_type, price_target, message, created_at)
         VALUES (${user.wallet}, ${tokenAddress.toLowerCase()}, ${signalType.toUpperCase()}, ${priceTarget || null}, ${message || null}, ${Date.now()})
@@ -149,6 +151,7 @@ export const POST = withCreatorAuth(async (request: NextRequest, user) => {
     )
   }
 })
+
 
 
 

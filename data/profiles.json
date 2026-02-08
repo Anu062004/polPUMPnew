@@ -20,6 +20,87 @@
       "showTradingStats": true
     },
     "address": "0x6b3a924379B9408D8110f10F084ca809863B378A",
-    "tokens": []
+    "tokens": [
+      {
+        "tokenAddress": "0x78D378F18f5d3c12596eC0eA2b1d29bd79F55148",
+        "tokenName": "STRAGER THINGS",
+        "tokenSymbol": "STR",
+        "curveAddress": "0xA10e861edF32a090B7563798e3a8871087196c27",
+        "txHash": "0xd3520827b26dffcd795fd72316ff08ddf56b6f2139b57a2859aa5ddcebae074b",
+        "imageUrl": "/api/image/QmVM9ZQ2rVrRiBDr5y1PKrzfuayeuBBaiWyAcC84f4HJz9",
+        "description": "ABCD",
+        "createdAt": "2025-12-01T12:06:45.968Z"
+      },
+      {
+        "tokenAddress": "0x6115eb17072E3134fC682742e6cC894b65a636C2",
+        "tokenName": "STRANGER THINGS ",
+        "tokenSymbol": "STR ",
+        "curveAddress": "0xff29c05CC849867f74fb796EEcE311544cBf1349",
+        "txHash": "0x71b7d3b49b19c17047e382881a2de3d3bf2620bca98ee7d7ef767e0c3bb3a223",
+        "imageUrl": "/api/image/QmVM9ZQ2rVrRiBDr5y1PKrzfuayeuBBaiWyAcC84f4HJz9",
+        "description": "A FAMOUS SERIES ",
+        "createdAt": "2025-12-01T12:15:48.016Z"
+      },
+      {
+        "tokenAddress": "0x4982c2AD872CdC8eB7F8fEE2A1E363D5996e28bD",
+        "tokenName": "abcd",
+        "tokenSymbol": "aaaa",
+        "curveAddress": "0x69e9f9656fda70D9AC33f1a6aefC61CF5C61bc9e",
+        "txHash": "0x9e26988b6d5085c54d8d214c962a7f8c4c5b10ffd034be24096c9cf1f4505f4e",
+        "imageUrl": "/api/image/bafkreig7tij2zhc74frp4ua3qwp4i77u23cfgyhtnvk5wnvf6n3kqg2hda",
+        "description": "abcd (aaaa) - A memecoin created on Polygon Amoy",
+        "createdAt": "2025-12-03T17:00:44.728Z"
+      },
+      {
+        "tokenAddress": "0xc35F99A941BBEdc96584E681Ee182904AF27d4AF",
+        "tokenName": "DOGEWOW",
+        "tokenSymbol": "WOW",
+        "curveAddress": "0xf3f32283FCdaA7E709bc96cf254C327F49b5F83a",
+        "txHash": "0xa0e9518f0e2b3bc02fd2f9a8f997608fac7205ddddcacb235481a9dd918afd81",
+        "imageUrl": "/api/image/bafkreig7tij2zhc74frp4ua3qwp4i77u23cfgyhtnvk5wnvf6n3kqg2hda",
+        "description": "DOGEWOW (WOW) - A memecoin created on Polygon Amoy",
+        "createdAt": "2025-12-03T17:02:34.512Z"
+      },
+      {
+        "tokenAddress": "0x9Da8F17D5614E61Acb41e27B2DBF744d0c5eeef9",
+        "tokenName": "Abcd",
+        "tokenSymbol": "aaaaa",
+        "curveAddress": "0x901A35262352a6394E60A921D91592Bf166117cE",
+        "txHash": "0xb529b84444651030f6cb9f91137216dd11841bae00d36db3095ee1fd6adeb44d",
+        "imageUrl": "/api/image/QmVM9ZQ2rVrRiBDr5y1PKrzfuayeuBBaiWyAcC84f4HJz9",
+        "description": "Abcd (aaaaa) - A memecoin created on Polygon Amoy",
+        "createdAt": "2025-12-03T17:18:47.593Z"
+      },
+      {
+        "tokenAddress": "0xD9fC481d16fB54456cC60bced05C254e7f12b68d",
+        "tokenName": "DECA",
+        "tokenSymbol": "DEC",
+        "curveAddress": "0xb0789ff32992DCd036d79ac514558AFd7f912056",
+        "txHash": "0x4d2d01702c1028212fd462b5f7ac25e5153e43d5dd87b45198ab3fb51535f2ac",
+        "imageUrl": "/api/image/QmVM9ZQ2rVrRiBDr5y1PKrzfuayeuBBaiWyAcC84f4HJz9",
+        "description": "DECA (DEC) - A memecoin created on Polygon Amoy",
+        "createdAt": "2025-12-03T17:26:23.009Z"
+      },
+      {
+        "tokenAddress": "0xF7062fE4C20b82Bb6A49aB9909Ee9eB0741Df4cA",
+        "tokenName": "meme1",
+        "tokenSymbol": "mem",
+        "curveAddress": "0x3EaA108b342176477b285a48d390C6E7E1696002",
+        "txHash": "0xe4513199c1fa686aad52eb236a08d1859b46610bb957757fbccedb33b5a711e5",
+        "imageUrl": "/api/image/bafkreiglqkz5rs6lursmxvxlcqedye5ne2zznfszbyki3gtg5vi6pabh5u",
+        "description": "a new token",
+        "createdAt": "2025-12-03T17:40:05.057Z"
+      },
+      {
+        "tokenAddress": "0xa00288191fe595fe1CBbAf65d19848C3f80E407a",
+        "tokenName": "DOGEWOW",
+        "tokenSymbol": "WOW",
+        "curveAddress": "0x6F047b6161E08569C37F590aE08E1cb35173B695",
+        "txHash": "0x3880b41147edad996fafdb7ef9606810483be24b054807d78a799a7de0262fc8",
+        "imageUrl": "/api/image/bafkreifkxcamslqstebiinkvqegn7w23jckwo5k52a73ga24x5mzkonvfu",
+        "description": "odeo2fef",
+        "createdAt": "2026-01-29T22:05:44.070Z"
+      }
+    ]
   }
 }

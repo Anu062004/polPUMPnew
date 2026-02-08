@@ -83,7 +83,7 @@ export async function requireCreator(
  * Helper to create authenticated route handler
  */
 export function withAuth<T = any>(
-  handler: (req: NextRequest, user: { wallet: string; role: Role }) => Promise<NextResponse<T>>
+  handler: (req: NextRequest, user: { wallet: string; role: Role }) => Promise<NextResponse<any>>
 ) {
   return async (req: NextRequest) => {
     const authResult = await authenticateRequest(req)
@@ -98,7 +98,7 @@ export function withAuth<T = any>(
  * Helper to create CREATOR-only route handler
  */
 export function withCreatorAuth<T = any>(
-  handler: (req: NextRequest, user: { wallet: string; role: Role }) => Promise<NextResponse<T>>
+  handler: (req: NextRequest, user: { wallet: string; role: Role }) => Promise<NextResponse<any>>
 ) {
   return async (req: NextRequest) => {
     const authResult = await requireCreator(req)
@@ -108,6 +108,7 @@ export function withCreatorAuth<T = any>(
     return handler(req, authResult.user)
   }
 }
+
 
 
 

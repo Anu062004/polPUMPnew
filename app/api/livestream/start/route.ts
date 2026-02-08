@@ -22,7 +22,7 @@ export const POST = withCreatorAuth(async (request: NextRequest, user) => {
 
     // Verify creator is the token creator (optional check - role already verified)
     const tokenCreator = await getTokenCreator(tokenAddress)
-    
+
     // If token creator not found, allow if creatorAddress matches (for on-chain tokens)
     if (!tokenCreator) {
       console.warn(`Token creator not found for ${tokenAddress}, allowing CREATOR role user`)
@@ -65,4 +65,4 @@ export const POST = withCreatorAuth(async (request: NextRequest, user) => {
       { status: 500 }
     )
   }
-}
+})
