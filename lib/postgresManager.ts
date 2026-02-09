@@ -3,11 +3,12 @@
  * Handles all database operations using PostgreSQL instead of SQLite
  */
 
-import { sql as vercelSql } from '@vercel/postgres'
+import { createPool, sql as vercelSql } from '@vercel/postgres'
 import { Pool } from 'pg'
 
 // Use standard pg Pool if Vercel Postgres is not available (for local dev)
 let pool: Pool | null = null
+let vercelPool: ReturnType<typeof createPool> | null = null
 
 // Check if we're using Vercel Postgres (prioritize pooled connection)
 const isVercelPostgres = !!(process.env.POSTGRES_PRISMA_URL || process.env.POSTGRES_URL || process.env.POSTGRES_URL_NON_POOLING)
@@ -27,51 +28,47 @@ export async function getDb() {
     VERCEL: process.env.VERCEL
   })
 
-  // Check if we're in Vercel environment
-  if (isVercelPostgres) {
-    // Use direct sql import from @vercel/postgres (recommended approach)
-    // This automatically reads from POSTGRES_PRISMA_URL environment variable
-    const pooledUrl = process.env.POSTGRES_PRISMA_URL
+  // Check if we're in Vercel environment with pooled connection
+  const pooledUrl = process.env.POSTGRES_PRISMA_URL
 
-    if (!pooledUrl) {
-      // No pooled connection available - don't try to use direct connection
-      console.warn('⚠️ POSTGRES_PRISMA_URL not found. Postgres operations will be skipped.')
-      throw new Error(
-        'POSTGRES_PRISMA_URL (pooled connection) is required for Vercel Postgres. ' +
-        'Direct connection strings (POSTGRES_URL) cannot be used with sql template tag. ' +
-        'Please configure POSTGRES_PRISMA_URL in your Vercel project settings.'
-      )
+  if (pooledUrl) {
+    // Use createPool with explicit connection string (this is the fix!)
+    if (!vercelPool) {
+      console.log('🔧 Creating Vercel Postgres pool with POSTGRES_PRISMA_URL...')
+      vercelPool = createPool({
+        connectionString: pooledUrl
+      })
     }
 
-    // Verify sql is available and is a function
-    if (!vercelSql || typeof vercelSql !== 'function') {
-      throw new Error(`sql from @vercel/postgres is not available or not a function. Type: ${typeof vercelSql}`)
+    console.log('✅ Using Vercel Postgres with explicit pooled connection')
+    return { type: 'vercel', sql: vercelPool.sql, pool: vercelPool }
+  }
+
+  // Check for other Postgres URLs (direct connection - less ideal but works for pg Pool)
+  if (process.env.POSTGRES_URL || process.env.DATABASE_URL) {
+    if (!pool) {
+      const connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL
+      console.log('🔧 Creating standard pg Pool with POSTGRES_URL...')
+
+      pool = new Pool({
+        connectionString,
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 2000,
+      })
+
+      pool.on('error', (err) => {
+        console.error('Unexpected error on idle client', err)
+      })
     }
 
-    console.log('✅ Using Vercel Postgres sql template tag (POSTGRES_PRISMA_URL from env)')
-
-    return { type: 'vercel', sql: vercelSql }
+    console.log('✅ Using standard pg Pool')
+    return { type: 'pg', pool }
   }
 
-  // Fallback to standard pg Pool for local development
-  if (!pool) {
-    const connectionString = process.env.DATABASE_URL ||
-      process.env.POSTGRES_URL ||
-      'postgresql://localhost:5432/polpump'
-
-    pool = new Pool({
-      connectionString,
-      max: 20,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
-    })
-
-    pool.on('error', (err) => {
-      console.error('Unexpected error on idle client', err)
-    })
-  }
-
-  return { type: 'pg', pool }
+  // No Postgres available
+  console.warn('⚠️ No PostgreSQL connection string found')
+  throw new Error('No PostgreSQL connection available. Set POSTGRES_PRISMA_URL for Vercel or POSTGRES_URL for local development.')
 }
 
 /**
