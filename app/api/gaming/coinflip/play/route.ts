@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requirePostgres, initializeGamingSchema } from '@/lib/gamingDb'
+import { requirePostgres } from '../../../../../lib/gamingPostgres'
 import { verifySignatureWithTimestamp } from '../../../../../lib/authUtils'
 import { validateAddress, validatePositiveNumber, validateCoinflipChoice } from '../../../../../lib/validationUtils'
 import { ethers } from 'ethers'

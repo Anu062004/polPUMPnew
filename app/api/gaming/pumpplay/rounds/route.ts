@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requirePostgres, initializeGamingSchema } from '@/lib/gamingDb'
+import { requirePostgres } from '../../../../../lib/gamingPostgres'
+import { initializeSchema, getSql } from '../../../../../lib/postgresManager'
 
 // Force dynamic rendering to prevent build-time execution
 export const dynamic = 'force-dynamic'
