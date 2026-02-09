@@ -13,42 +13,60 @@ let pool: Pool | null = null
  * Uses standard pg Pool with Neon/Vercel Postgres connection string
  */
 export async function getDb() {
-  // Debug logging
-  console.log('🔍 getDb() called - Environment check:', {
-    POSTGRES_PRISMA_URL: process.env.POSTGRES_PRISMA_URL ? 'SET' : 'NOT SET',
-    POSTGRES_URL: process.env.POSTGRES_URL ? 'SET' : 'NOT SET',
+  // Debug logging - log ALL environment variables related to Postgres
+  const prismaUrl = process.env.POSTGRES_PRISMA_URL
+  const postgresUrl = process.env.POSTGRES_URL
+  const databaseUrl = process.env.DATABASE_URL
+
+  console.log('🔍 getDb() called with env vars:', {
+    POSTGRES_PRISMA_URL: prismaUrl ? `SET (length: ${prismaUrl.length})` : 'NOT SET',
+    POSTGRES_URL: postgresUrl ? `SET (length: ${postgresUrl.length})` : 'NOT SET',
+    DATABASE_URL: databaseUrl ? `SET (length: ${databaseUrl.length})` : 'NOT SET',
     NODE_ENV: process.env.NODE_ENV,
     VERCEL: process.env.VERCEL
   })
 
   // Priority: POSTGRES_PRISMA_URL (pooled) > POSTGRES_URL > DATABASE_URL
-  const connectionString = process.env.POSTGRES_PRISMA_URL ||
-    process.env.POSTGRES_URL ||
-    process.env.DATABASE_URL
+  const connectionString = prismaUrl || postgresUrl || databaseUrl
 
   if (!connectionString) {
-    console.warn('⚠️ No PostgreSQL connection string found')
-    throw new Error('No PostgreSQL connection available. Set POSTGRES_PRISMA_URL in Vercel environment variables.')
+    console.error('❌ FATAL: No PostgreSQL connection string found!')
+    console.error('Postgres-related env vars:', Object.keys(process.env).filter(k => k.includes('POSTGRES') || k.includes('DATABASE')))
+    throw new Error('No PostgreSQL connection available. Set POSTGRES_PRISMA_URL in Vercel.')
   }
+
+  console.log('📡 Using connection string starting with:', connectionString.substring(0, 40) + '...')
 
   if (!pool) {
-    console.log('🔧 Creating pg Pool connection...')
-    pool = new Pool({
-      connectionString,
-      max: 10,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 10000,
-      ssl: {
-        rejectUnauthorized: false
-      }
-    })
+    console.log('🔧 Creating new pg Pool...')
+    try {
+      pool = new Pool({
+        connectionString,
+        max: 10,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 10000,
+        ssl: {
+          rejectUnauthorized: false
+        }
+      })
 
-    pool.on('error', (err) => {
-      console.error('Unexpected error on idle client', err)
-    })
+      pool.on('error', (err) => {
+        console.error('❌ Pool error:', err)
+      })
+
+      // Test the connection immediately
+      console.log('🧪 Testing connection...')
+      const client = await pool.connect()
+      const testResult = await client.query('SELECT NOW() as now')
+      client.release()
+      console.log('✅ Database connected successfully at:', testResult.rows[0].now)
+    } catch (poolError: any) {
+      console.error('❌ Failed to connect:', poolError.message)
+      pool = null // Reset pool on error
+      throw poolError
+    }
   }
 
-  console.log('✅ Using pg Pool connection')
   return { type: 'pg', pool }
 }
 
