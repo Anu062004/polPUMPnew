@@ -3,72 +3,75 @@
  * Handles all database operations using PostgreSQL instead of SQLite
  */
 
-import { createPool, sql as vercelSql } from '@vercel/postgres'
-import { Pool } from 'pg'
+import { Pool, QueryResult } from 'pg'
 
-// Use standard pg Pool if Vercel Postgres is not available (for local dev)
+// Use standard pg Pool for all connections
 let pool: Pool | null = null
-let vercelPool: ReturnType<typeof createPool> | null = null
-
-// Check if we're using Vercel Postgres (prioritize pooled connection)
-const isVercelPostgres = !!(process.env.POSTGRES_PRISMA_URL || process.env.POSTGRES_URL || process.env.POSTGRES_URL_NON_POOLING)
 
 /**
  * Get database connection
- * Uses @vercel/postgres in production, falls back to pg Pool for local dev
+ * Uses standard pg Pool with Neon/Vercel Postgres connection string
  */
 export async function getDb() {
   // Debug logging
   console.log('🔍 getDb() called - Environment check:', {
     POSTGRES_PRISMA_URL: process.env.POSTGRES_PRISMA_URL ? 'SET' : 'NOT SET',
     POSTGRES_URL: process.env.POSTGRES_URL ? 'SET' : 'NOT SET',
-    POSTGRES_URL_NON_POOLING: process.env.POSTGRES_URL_NON_POOLING ? 'SET' : 'NOT SET',
-    isVercelPostgres,
     NODE_ENV: process.env.NODE_ENV,
     VERCEL: process.env.VERCEL
   })
 
-  // Check if we're in Vercel environment with pooled connection
-  const pooledUrl = process.env.POSTGRES_PRISMA_URL
+  // Priority: POSTGRES_PRISMA_URL (pooled) > POSTGRES_URL > DATABASE_URL
+  const connectionString = process.env.POSTGRES_PRISMA_URL ||
+    process.env.POSTGRES_URL ||
+    process.env.DATABASE_URL
 
-  if (pooledUrl) {
-    // Use createPool with explicit connection string (this is the fix!)
-    if (!vercelPool) {
-      console.log('🔧 Creating Vercel Postgres pool with POSTGRES_PRISMA_URL...')
-      vercelPool = createPool({
-        connectionString: pooledUrl
-      })
-    }
-
-    console.log('✅ Using Vercel Postgres with explicit pooled connection')
-    return { type: 'vercel', sql: vercelPool.sql, pool: vercelPool }
+  if (!connectionString) {
+    console.warn('⚠️ No PostgreSQL connection string found')
+    throw new Error('No PostgreSQL connection available. Set POSTGRES_PRISMA_URL in Vercel environment variables.')
   }
 
-  // Check for other Postgres URLs (direct connection - less ideal but works for pg Pool)
-  if (process.env.POSTGRES_URL || process.env.DATABASE_URL) {
-    if (!pool) {
-      const connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL
-      console.log('🔧 Creating standard pg Pool with POSTGRES_URL...')
+  if (!pool) {
+    console.log('🔧 Creating pg Pool connection...')
+    pool = new Pool({
+      connectionString,
+      max: 10,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+      ssl: {
+        rejectUnauthorized: false
+      }
+    })
 
-      pool = new Pool({
-        connectionString,
-        max: 20,
-        idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 2000,
-      })
-
-      pool.on('error', (err) => {
-        console.error('Unexpected error on idle client', err)
-      })
-    }
-
-    console.log('✅ Using standard pg Pool')
-    return { type: 'pg', pool }
+    pool.on('error', (err) => {
+      console.error('Unexpected error on idle client', err)
+    })
   }
 
-  // No Postgres available
-  console.warn('⚠️ No PostgreSQL connection string found')
-  throw new Error('No PostgreSQL connection available. Set POSTGRES_PRISMA_URL for Vercel or POSTGRES_URL for local development.')
+  console.log('✅ Using pg Pool connection')
+  return { type: 'pg', pool }
+}
+
+/**
+ * Execute SQL query with template literal support
+ * This provides a similar interface to @vercel/postgres sql template tag
+ */
+export async function sql(strings: TemplateStringsArray, ...values: any[]): Promise<QueryResult> {
+  const db = await getDb()
+
+  // Build parameterized query from template literal
+  let query = ''
+  const params: any[] = []
+
+  for (let i = 0; i < strings.length; i++) {
+    query += strings[i]
+    if (i < values.length) {
+      params.push(values[i])
+      query += `$${params.length}`
+    }
+  }
+
+  return db.pool!.query(query, params)
 }
 
 /**
@@ -89,17 +92,10 @@ export async function initializeSchema() {
       return
     }
 
-    // Check if we have pooled connection (required for Vercel)
-    if (isVercelPostgres && !process.env.POSTGRES_PRISMA_URL && process.env.POSTGRES_URL) {
-      // Only direct connection available - this won't work with sql template tag
-      console.warn('⚠️ Only direct connection string (POSTGRES_URL) found. Pooled connection (POSTGRES_PRISMA_URL) is recommended for Vercel.')
-      // Don't throw error, just warn - let it try and fail gracefully
-    }
-
     const db = await getDb()
 
-    // Check if we're using Vercel Postgres or standard pg
-    if (db.type === 'pg') {
+    // Using standard pg Pool for all connections
+    if (db.type === 'pg' && db.pool) {
       // Standard pg Pool
       await db.pool.query(`
         CREATE TABLE IF NOT EXISTS coins (
@@ -219,7 +215,7 @@ export async function initializeSchema() {
         )
       `)
 
-      await db.query(`
+      await db.pool.query(`
         CREATE TABLE IF NOT EXISTS gaming_pumpplay_bets (
           id SERIAL PRIMARY KEY,
           round_id INTEGER NOT NULL,
@@ -337,168 +333,6 @@ export async function initializeSchema() {
       `)
 
       console.log('✅ PostgreSQL schema initialized successfully')
-    } else {
-      // Using @vercel/postgres sql template tag directly
-      const db = await getDb()
-      if (db.type !== 'vercel') {
-        throw new Error('Expected Vercel Postgres')
-      }
-      const { sql } = db
-
-      await sql`
-        CREATE TABLE IF NOT EXISTS coins (
-          id VARCHAR(255) PRIMARY KEY,
-          name VARCHAR(255) NOT NULL,
-          symbol VARCHAR(100) NOT NULL,
-          supply VARCHAR(100) NOT NULL,
-          decimals INTEGER DEFAULT 18,
-          description TEXT,
-          creator VARCHAR(255) NOT NULL,
-          created_at BIGINT NOT NULL,
-          updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000,
-          image_hash VARCHAR(255),
-          image_url TEXT,
-          metadata_hash VARCHAR(255),
-          metadata_url TEXT,
-          image_compression_ratio REAL,
-          image_original_size INTEGER,
-          image_compressed_size INTEGER,
-          token_address VARCHAR(255) UNIQUE,
-          curve_address VARCHAR(255),
-          tx_hash VARCHAR(255),
-          block_number BIGINT,
-          gas_used BIGINT,
-          gas_price VARCHAR(100),
-          telegram_url TEXT,
-          x_url TEXT,
-          discord_url TEXT,
-          website_url TEXT,
-          market_cap REAL DEFAULT 0,
-          price REAL DEFAULT 0,
-          volume_24h REAL DEFAULT 0,
-          change_24h REAL DEFAULT 0,
-          holders INTEGER DEFAULT 0,
-          total_transactions INTEGER DEFAULT 0,
-          liquidity REAL DEFAULT 0,
-          last_price_update BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000,
-          last_volume_update BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000
-        )
-      `
-
-      await sql`
-        CREATE INDEX IF NOT EXISTS idx_coins_created_at ON coins(created_at DESC)
-      `
-      await sql`
-        CREATE INDEX IF NOT EXISTS idx_coins_symbol ON coins(symbol)
-      `
-      await sql`
-        CREATE INDEX IF NOT EXISTS idx_coins_creator ON coins(creator)
-      `
-      await sql`
-        CREATE INDEX IF NOT EXISTS idx_coins_token_address ON coins(token_address)
-      `
-
-      // User sessions table for JWT token management
-      await sql`
-        CREATE TABLE IF NOT EXISTS user_sessions (
-          wallet VARCHAR(255) PRIMARY KEY,
-          role VARCHAR(20) NOT NULL CHECK (role IN ('TRADER','CREATOR')),
-          refresh_token TEXT,
-          expires_at TIMESTAMP,
-          created_at TIMESTAMP DEFAULT NOW(),
-          updated_at TIMESTAMP DEFAULT NOW()
-        )
-      `
-
-      await sql`
-        CREATE INDEX IF NOT EXISTS idx_user_sessions_wallet ON user_sessions(wallet)
-      `
-      await sql`
-        CREATE INDEX IF NOT EXISTS idx_user_sessions_role ON user_sessions(role)
-      `
-
-      // Users table for role tracking
-      await sql`
-        CREATE TABLE IF NOT EXISTS users (
-          wallet VARCHAR(255) PRIMARY KEY,
-          role VARCHAR(20) NOT NULL DEFAULT 'TRADER' CHECK (role IN ('TRADER','CREATOR')),
-          last_role_check BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000,
-          created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000,
-          updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000
-        )
-      `
-
-      await sql`
-        CREATE INDEX IF NOT EXISTS idx_users_wallet ON users(wallet)
-      `
-      await sql`
-        CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)
-      `
-
-      // Copy trading signals table
-      await sql`
-        CREATE TABLE IF NOT EXISTS trading_signals (
-          id SERIAL PRIMARY KEY,
-          creator_wallet VARCHAR(255) NOT NULL,
-          token_address VARCHAR(255) NOT NULL,
-          signal_type VARCHAR(10) NOT NULL CHECK (signal_type IN ('BUY','SELL')),
-          price_target VARCHAR(100),
-          message TEXT,
-          created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000
-        )
-      `
-
-      await sql`
-        CREATE INDEX IF NOT EXISTS idx_signals_creator ON trading_signals(creator_wallet)
-      `
-      await sql`
-        CREATE INDEX IF NOT EXISTS idx_signals_token ON trading_signals(token_address)
-      `
-      await sql`
-        CREATE INDEX IF NOT EXISTS idx_signals_created ON trading_signals(created_at DESC)
-      `
-
-      // Creator followers table
-      await sql`
-        CREATE TABLE IF NOT EXISTS creator_followers (
-          creator_wallet VARCHAR(255) NOT NULL,
-          follower_wallet VARCHAR(255) NOT NULL,
-          created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000,
-          PRIMARY KEY (creator_wallet, follower_wallet)
-        )
-      `
-
-      await sql`
-        CREATE INDEX IF NOT EXISTS idx_followers_creator ON creator_followers(creator_wallet)
-      `
-      await sql`
-        CREATE INDEX IF NOT EXISTS idx_followers_follower ON creator_followers(follower_wallet)
-      `
-
-      // Chat messages table
-      await sql`
-        CREATE TABLE IF NOT EXISTS chat_messages (
-          id SERIAL PRIMARY KEY,
-          sender_wallet VARCHAR(255) NOT NULL,
-          role VARCHAR(20) NOT NULL CHECK (role IN ('TRADER','CREATOR')),
-          room_id VARCHAR(255) NOT NULL DEFAULT 'global',
-          message TEXT NOT NULL,
-          token_symbol VARCHAR(100),
-          created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000
-        )
-      `
-
-      await sql`
-        CREATE INDEX IF NOT EXISTS idx_chat_room ON chat_messages(room_id)
-      `
-      await sql`
-        CREATE INDEX IF NOT EXISTS idx_chat_created ON chat_messages(created_at DESC)
-      `
-      await sql`
-        CREATE INDEX IF NOT EXISTS idx_chat_sender ON chat_messages(sender_wallet)
-      `
-
-      console.log('✅ Vercel Postgres schema initialized successfully')
     }
   } catch (error: any) {
     // Log full error details for debugging
@@ -523,7 +357,6 @@ export async function initializeSchema() {
     // If it's a TypeError, log more details
     if (error instanceof TypeError || error?.constructor?.name === 'TypeError') {
       console.error('💡 TypeError detected - this might be a client initialization issue')
-      console.error('💡 Make sure @vercel/postgres package is installed: npm install @vercel/postgres')
     }
 
     // Only throw if it's not a connection/client issue (might be a real schema problem)
@@ -537,53 +370,31 @@ export async function initializeSchema() {
 
 /**
  * Execute a query (for standard pg Pool only)
- * For @vercel/postgres, use the sql template tag directly
  */
 export async function query(text: string, params?: any[]) {
   const db = await getDb()
-
-  if (db.type === 'pg') {
-    return await db.pool.query(text, params)
-  } else {
-    throw new Error('Use sql template tag from @vercel/postgres for queries. Import: import { sql } from "@vercel/postgres"')
-  }
+  return await db.pool.query(text, params)
 }
 
 /**
- * Get the sql template tag for Vercel Postgres
- * Returns null if Postgres is not available or connection fails
+ * Get the sql template tag function
+ * Returns our custom sql function that works with pg Pool
  */
 export async function getSql() {
   try {
-    const db = await getDb()
-    if (db.type === 'vercel') {
-      // Verify sql is available
-      if (!db.sql || typeof db.sql !== 'function') {
-        console.error('❌ sql template tag is not available or not a function')
-        return null
-      }
-      return db.sql
-    }
-    return null
+    await getDb() // Ensure pool is initialized
+    return sql // Return our custom sql template function
   } catch (error: any) {
-    // If connection fails, return null so caller can use SQLite fallback
-    if (error.code === 'invalid_connection_string' ||
-      error.message?.includes('connection string') ||
-      error.message?.includes('POSTGRES_PRISMA_URL') ||
-      error.message?.includes('not properly initialized')) {
-      console.warn('⚠️ Cannot get Postgres SQL client, will use SQLite fallback:', error.message)
-      return null
-    }
-    console.error('❌ Unexpected error getting SQL client:', error)
-    throw error
+    console.warn('⚠️ Cannot get Postgres SQL client:', error.message)
+    return null
   }
 }
 
 /**
- * Check if using Vercel Postgres
+ * Check if PostgreSQL is configured
  */
 export function isUsingVercelPostgres() {
-  return isVercelPostgres
+  return !!(process.env.POSTGRES_PRISMA_URL || process.env.POSTGRES_URL || process.env.DATABASE_URL)
 }
 
 /**
