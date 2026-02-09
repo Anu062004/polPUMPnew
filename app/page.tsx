@@ -42,62 +42,62 @@ export default function HomePage() {
   const deduplicateCoins = (coins: ExtendedCoinData[]): ExtendedCoinData[] => {
     const seen = new Set<string>()
     const unique: ExtendedCoinData[] = []
-    
+
     for (const coin of coins) {
       // Create a unique key from tokenAddress, id, or symbol
-      const key = coin.tokenAddress?.toLowerCase() || 
-                  coin.id?.toLowerCase() || 
-                  `${coin.symbol?.toLowerCase()}-${coin.name?.toLowerCase()}` || 
-                  coin.txHash?.toLowerCase() || 
-                  ''
-      
+      const key = coin.tokenAddress?.toLowerCase() ||
+        coin.id?.toLowerCase() ||
+        `${coin.symbol?.toLowerCase()}-${coin.name?.toLowerCase()}` ||
+        coin.txHash?.toLowerCase() ||
+        ''
+
       if (key && !seen.has(key)) {
         seen.add(key)
         unique.push(coin)
       }
     }
-    
+
     return unique
   }
 
   const loadStoredCoins = async () => {
     try {
       console.log('🔄 Loading coins...')
-      
+
       // Always try backend first for most up-to-date data
       const backendBase =
         (typeof process !== 'undefined' &&
           (process as any).env &&
           (process as any).env.NEXT_PUBLIC_BACKEND_URL) ||
         'http://localhost:4000'
-      
+
       try {
         const controller = new AbortController()
         const timeoutId = setTimeout(() => controller.abort(), 3000) // 3 second timeout
-        
-        const res = await fetch(`${backendBase}/api/coins`, { 
+
+        const res = await fetch(`${backendBase}/api/coins`, {
           cache: 'no-store',
-          signal: controller.signal 
+          signal: controller.signal
         }).catch((fetchError: any) => {
           // Silently handle connection errors
-          if (fetchError.name === 'AbortError' || 
-              fetchError.message?.includes('Failed to fetch') || 
-              fetchError.message?.includes('ERR_CONNECTION_REFUSED')) {
+          if (fetchError.name === 'AbortError' ||
+            fetchError.message?.includes('Failed to fetch') ||
+            fetchError.message?.includes('ERR_CONNECTION_REFUSED')) {
             return null
           }
           throw fetchError
         })
-        
+
         clearTimeout(timeoutId)
-        
+
         if (!res) {
           throw new Error('Backend not available')
         }
-        
+
         if (res.ok) {
           const data = await res.json()
           console.log('✅ Loaded coins from backend:', data.coins?.length || 0)
-          
+
           const mapped = (data.coins || []).map((c: any) => ({
             id: c.id || c.txHash,
             name: c.name,
@@ -116,17 +116,17 @@ export default function HomePage() {
             trades_count: c.trades_count || 0,
             unique_traders: c.unique_traders || 0,
           })) as ExtendedCoinData[]
-          
+
           // Deduplicate coins before sorting
           const unique = deduplicateCoins(mapped)
-          
+
           const sorted = [...unique].sort(
             (a, b) =>
               new Date(b.createdAt as any).getTime() -
               new Date(a.createdAt as any).getTime()
           )
           setTrendingCoins(sorted.slice(0, 6))
-          
+
           // Also sync to localStorage for offline access
           if (unique.length > 0) {
             await ogStorageSDK.saveCoinToLocal(unique[0])
@@ -136,17 +136,17 @@ export default function HomePage() {
       } catch (e: any) {
         // Silently fall back to localStorage if backend is not available
         // Don't log connection errors to avoid console spam
-        if (e.name !== 'AbortError' && 
-            !e.message?.includes('Failed to fetch') && 
-            !e.message?.includes('ERR_CONNECTION_REFUSED')) {
+        if (e.name !== 'AbortError' &&
+          !e.message?.includes('Failed to fetch') &&
+          !e.message?.includes('ERR_CONNECTION_REFUSED')) {
           console.log('⚠️ Backend not available, using localStorage')
         }
       }
-      
+
       // Fallback to localStorage if backend fails
       const storedCoins = await ogStorageSDK.getAllCoins()
       console.log('📦 Loaded coins from localStorage:', storedCoins.length)
-      
+
       if (storedCoins.length > 0) {
         // Deduplicate coins from localStorage
         const unique = deduplicateCoins(storedCoins as ExtendedCoinData[])
@@ -169,31 +169,31 @@ export default function HomePage() {
   const handleCoinCreated = async (tokenData: any) => {
     try {
       console.log('🎉 Token created, refreshing list...', tokenData)
-      
+
       // Validate that we have both addresses before proceeding
       if (!tokenData.tokenAddress || !tokenData.curveAddress) {
-        console.error('❌ Token data missing addresses:', { 
-          tokenAddress: tokenData.tokenAddress, 
-          curveAddress: tokenData.curveAddress 
+        console.error('❌ Token data missing addresses:', {
+          tokenAddress: tokenData.tokenAddress,
+          curveAddress: tokenData.curveAddress
         })
         alert('Error: Token addresses are missing. Please try creating the token again.')
         return
       }
-      
+
       // Save to backend database
       const backendBase =
         (typeof process !== 'undefined' &&
           (process as any).env &&
           (process as any).env.NEXT_PUBLIC_BACKEND_URL) ||
         'http://localhost:4000'
-      
+
       let saveSuccess = false
       let saveError: string | null = null
-      
+
       try {
         const controller = new AbortController()
         const timeoutId = setTimeout(() => controller.abort(), 10000) // Increased timeout
-        
+
         const response = await fetch(`${backendBase}/api/coins`, {
           method: 'POST',
           headers: {
@@ -217,16 +217,16 @@ export default function HomePage() {
           signal: controller.signal
         }).catch((fetchError: any) => {
           // Silently handle connection errors - backend not available
-          if (fetchError.name === 'AbortError' || 
-              fetchError.message?.includes('Failed to fetch') || 
-              fetchError.message?.includes('ERR_CONNECTION_REFUSED')) {
+          if (fetchError.name === 'AbortError' ||
+            fetchError.message?.includes('Failed to fetch') ||
+            fetchError.message?.includes('ERR_CONNECTION_REFUSED')) {
             return null
           }
           throw fetchError
         })
-        
+
         clearTimeout(timeoutId)
-        
+
         if (response && response.ok) {
           const result = await response.json()
           if (result.success) {
@@ -286,13 +286,13 @@ export default function HomePage() {
         saveError = e.message || 'Failed to save token'
         console.error('❌ Save exception:', e)
       }
-      
+
       // Only proceed if save was successful
       if (!saveSuccess) {
         alert(`Failed to save token to database: ${saveError}\n\nThe token was created on-chain, but couldn't be saved. Please refresh the page and try again.`)
         return
       }
-      
+
       // Create coin object for immediate display
       const coin: ExtendedCoinData = {
         id: tokenData.txHash || `coin-${Date.now()}`,
@@ -309,17 +309,17 @@ export default function HomePage() {
         tokenAddress: tokenData.tokenAddress,
         curveAddress: tokenData.curveAddress,
       } as any
-      
+
       // Save to localStorage as backup
       await ogStorageSDK.saveCoinToLocal(coin)
-      
+
       // Add to trending coins immediately (with deduplication)
       setTrendingCoins((prev) => {
         const combined = [coin, ...prev]
         const unique = deduplicateCoins(combined)
         return unique.slice(0, 6)
       })
-      
+
       // Reload all coins from backend to ensure sync
       setTimeout(() => {
         loadStoredCoins()
@@ -330,7 +330,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen text-white" style={{ background: 'linear-gradient(135deg, #1a0b2e 0%, #16213e 25%, #0f3460 50%, #1a0b2e 100%)' }}>
+    <div className="min-h-screen text-white bg-[#0f172a]">
       <PremiumNavbar />
 
       {/* Hero Section */}
@@ -345,7 +345,7 @@ export default function HomePage() {
             <h1 className="text-6xl md:text-7xl font-bold leading-tight">
               <span className="text-white">Create, Trade &</span>
               <br />
-              <span className="text-gradient-primary">Earn Tokens</span>
+              <span className="text-blue-500">Earn Tokens</span>
             </h1>
 
             <p className="text-xl md:text-2xl text-[#E3E4E8] max-w-3xl mx-auto leading-relaxed">
@@ -396,16 +396,16 @@ export default function HomePage() {
               className="flex flex-wrap items-center justify-center gap-8 pt-12"
             >
               <div className="text-center">
-                <div className="text-3xl font-bold text-gradient-teal">{trendingCoins.length}+</div>
-                <div className="text-sm text-[#E3E4E8] mt-1">Tokens Created</div>
+                <div className="text-3xl font-bold text-blue-500">{trendingCoins.length}+</div>
+                <div className="text-sm text-slate-400 mt-1">Tokens Created</div>
               </div>
               <div className="text-center">
-                <div className="text-3xl font-bold text-gradient-primary">Instant</div>
-                <div className="text-sm text-[#E3E4E8] mt-1">Trading</div>
+                <div className="text-3xl font-bold text-emerald-500">Instant</div>
+                <div className="text-sm text-slate-400 mt-1">Trading</div>
               </div>
               <div className="text-center">
-                <div className="text-3xl font-bold text-gradient-teal">0.5%</div>
-                <div className="text-sm text-[#E3E4E8] mt-1">Low Fees</div>
+                <div className="text-3xl font-bold text-blue-500">0.5%</div>
+                <div className="text-sm text-slate-400 mt-1">Low Fees</div>
               </div>
             </motion.div>
           </motion.div>
@@ -424,10 +424,10 @@ export default function HomePage() {
               className="mb-12"
             >
               <div className="flex items-center gap-3 mb-4">
-                <TrendingUp className="w-6 h-6 text-[#FF4F84]" />
+                <TrendingUp className="w-6 h-6 text-blue-500" />
                 <h2 className="text-4xl font-bold text-white">Trending Tokens</h2>
               </div>
-              <p className="text-[#E3E4E8] text-lg">Discover the hottest tokens on POL Pump</p>
+              <p className="text-slate-400 text-lg">Discover the hottest tokens on POL Pump</p>
             </motion.div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -459,23 +459,23 @@ export default function HomePage() {
             className="grid grid-cols-1 md:grid-cols-3 gap-8"
           >
             <div className="glass-card p-6">
-              <Zap className="w-10 h-10 text-[#FF4F84] mb-4" />
+              <Zap className="w-10 h-10 text-blue-500 mb-4" />
               <h3 className="text-2xl font-bold text-white mb-2">Instant Launch</h3>
-              <p className="text-[#E3E4E8]">
+              <p className="text-slate-400">
                 Deploy your memecoin with a single click. Bonding curve ensures immediate liquidity.
               </p>
             </div>
             <div className="glass-card p-6">
-              <Sparkles className="w-10 h-10 text-[#12D9C8] mb-4" />
+              <Sparkles className="w-10 h-10 text-emerald-500 mb-4" />
               <h3 className="text-2xl font-bold text-white mb-2">Creator Rewards</h3>
-              <p className="text-[#E3E4E8]">
+              <p className="text-slate-400">
                 Earn XP, climb leaderboards, and unlock exclusive perks as you create tokens.
               </p>
             </div>
             <div className="glass-card p-6">
-              <TrendingUp className="w-10 h-10 text-[#FF4F84] mb-4" />
+              <TrendingUp className="w-10 h-10 text-blue-500 mb-4" />
               <h3 className="text-2xl font-bold text-white mb-2">Built for Trading</h3>
-              <p className="text-[#E3E4E8]">
+              <p className="text-slate-400">
                 Trade instantly with bonding curves. Sell when you're ready or migrate to DEX.
               </p>
             </div>

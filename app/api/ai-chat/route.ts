@@ -8,10 +8,10 @@ type PumpAIToolCall =
 
 // Helper function to safely require modules
 function safeRequire(path: string) {
-  try { 
-    return require(path) 
-  } catch { 
-    return null 
+  try {
+    return require(path)
+  } catch {
+    return null
   }
 }
 
@@ -82,9 +82,9 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('AI Chat error:', error)
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to process AI request',
-        message: error.message 
+        message: error.message
       },
       { status: 500 }
     )
@@ -153,7 +153,7 @@ function generateFallbackResponse(message: string): string {
       return "To analyze token performance, consider these key metrics:\n\n• Market Cap & Liquidity\n• Trading Volume (24h)\n• Holder Distribution\n• Price Trends\n• Community Engagement\n• Development Activity\n\nWould you like me to help analyze a specific token?"
     }
     if (lowerMessage.includes('create') || lowerMessage.includes('launch')) {
-      return "To create a token on POL Pump:\n\n1. Go to the main page and click 'Create Token'\n2. Upload an image (required)\n3. Enter token name, symbol, and initial supply\n4. Add description and social links\n5. The system will deploy your token on Polygon Amoy with a bonding curve\n\nYour token will be immediately tradable! 🎉"
+      return "To create a token on POL Pump:\n\n1. Go to the main page and click 'Create Token'\n2. Upload an image (required)\n3. Enter token name, symbol, and initial supply\n4. Add description and social links\n5. The system will deploy your token on Polygon with a bonding curve\n\nYour token will be immediately tradable! 🎉"
     }
     return "I can help you with token analysis, market trends, and trading strategies on POL Pump. What would you like to know about tokens?"
   }
@@ -161,12 +161,12 @@ function generateFallbackResponse(message: string): string {
   // Polygon network related
   if (lowerMessage.includes('polygon') || lowerMessage.includes('matic') || lowerMessage.includes('network')) {
     if (lowerMessage.includes('benefit') || lowerMessage.includes('advantage')) {
-      return "Polygon Amoy offers several advantages:\n\n✅ Low transaction fees\n✅ Fast block times\n✅ EVM compatibility\n✅ Scalability\n✅ Active developer community\n✅ Growing DeFi ecosystem\n\nPerfect for meme token trading and experimentation!"
+      return "Polygon offers several advantages:\n\n✅ Low transaction fees\n✅ Fast block times\n✅ EVM compatibility\n✅ Scalability\n✅ Active developer community\n✅ Growing DeFi ecosystem\n\nPerfect for meme token trading!"
     }
     if (lowerMessage.includes('how') || lowerMessage.includes('work')) {
-      return "Polygon is a Layer 2 scaling solution for Ethereum. It uses:\n\n• Proof-of-Stake consensus\n• Sidechain architecture\n• Fast and cheap transactions\n• Full EVM compatibility\n\nPOL Pump is built on Polygon Amoy testnet for fast, low-cost trading!"
+      return "Polygon is a Layer 2 scaling solution for Ethereum. It uses:\n\n• Proof-of-Stake consensus\n• Sidechain architecture\n• Fast and cheap transactions\n• Full EVM compatibility\n\nPOL Pump is built on Polygon for fast, low-cost trading!"
     }
-    return "POL Pump runs on Polygon Amoy testnet, providing fast transactions with low fees. What would you like to know about Polygon?"
+    return "POL Pump runs on Polygon mainnet, providing fast transactions with low fees. What would you like to know about Polygon?"
   }
 
   // Trading related

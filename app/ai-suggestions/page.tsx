@@ -58,18 +58,17 @@ export default function AiSuggestionsPage() {
             </div>
             <h2 className="text-2xl font-bold text-slate-900">AI Token Suggestions</h2>
           </div>
-          
+
           {suggestions.length > 0 ? (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
               {suggestions.map((s: any, i: number) => (
                 <div key={i} className="bg-gradient-to-br from-slate-50 to-white rounded-xl p-6 border border-slate-200 hover:shadow-lg transition-all duration-300">
                   <div className="flex items-start justify-between mb-4">
                     <h3 className="text-lg font-semibold text-slate-900">{s.name}</h3>
-                    <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      s.risk_level === 'low' ? 'bg-green-100 text-green-700' :
-                      s.risk_level === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                      'bg-red-100 text-red-700'
-                    }`}>
+                    <div className={`px-3 py-1 rounded-full text-xs font-medium ${s.risk_level === 'low' ? 'bg-green-100 text-green-700' :
+                        s.risk_level === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-red-100 text-red-700'
+                      }`}>
                       {s.risk_level || 'medium'} risk
                     </div>
                   </div>
@@ -95,12 +94,12 @@ export default function AiSuggestionsPage() {
             </div>
             <h2 className="text-2xl font-bold text-slate-900">Trending Topics</h2>
           </div>
-          
+
           {topics.length > 0 ? (
             <div className="flex flex-wrap gap-3">
               {topics.map((topic, i) => (
-                <span 
-                  key={i} 
+                <span
+                  key={i}
                   className="px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 text-slate-700 rounded-full border border-blue-200 hover:from-blue-100 hover:to-indigo-100 transition-all duration-200 cursor-pointer"
                 >
                   {topic}
@@ -123,7 +122,7 @@ export default function AiSuggestionsPage() {
             </div>
             <h2 className="text-2xl font-bold text-slate-900">Frequently Asked Questions</h2>
           </div>
-          
+
           <div className="space-y-4">
             <details className="group">
               <summary className="flex items-center justify-between p-4 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors">
@@ -135,7 +134,7 @@ export default function AiSuggestionsPage() {
                 </div>
               </summary>
               <div className="px-4 pb-4 text-slate-600">
-                We run on the Polygon Amoy testnet. Transactions use MATIC as gas. Set your wallet RPC to https://polygon-amoy.infura.io/v3/b4f237515b084d4bad4e5de070b0452f.
+                We run on the Polygon mainnet. Transactions use MATIC as gas.
               </div>
             </details>
 

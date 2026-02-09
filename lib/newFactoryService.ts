@@ -55,7 +55,7 @@ export class NewFactoryService {
           if (parsed.name === 'PairCreated' && String(parsed.args[2]).toLowerCase() === my) {
             return { token: parsed.args[0], curve: parsed.args[1] }
           }
-        } catch {}
+        } catch { }
       }
       return null
     } catch (e) {
@@ -114,7 +114,7 @@ export class NewFactoryService {
         {
           value: seedOgAmountWei,
           gasPrice: premiumGasPrice,
-          gasLimit: 5000000 // Much higher gas limit for complex deployment
+          gasLimit: 2000000 // Reduced from 5M - still plenty for token deployment
         }
       )
 
@@ -190,7 +190,7 @@ export class NewFactoryService {
               txHash: finalTxHash
             }
           }
-        } catch {}
+        } catch { }
 
         // Fallback: query logs around the tx block for PairCreated from our factory
         try {
@@ -253,7 +253,7 @@ export class NewFactoryService {
         // If we still can't find the event, wait a bit longer and try one more time
         console.log('⏳ Event not found yet, waiting 5 seconds and retrying...')
         await new Promise(r => setTimeout(r, 5000))
-        
+
         const finalResolve = await this.resolveLastPairForCreator(100)
         if (finalResolve?.token && finalResolve.curve) {
           console.log('✅ Resolved addresses after additional wait')

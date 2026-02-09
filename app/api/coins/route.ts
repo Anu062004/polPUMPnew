@@ -25,8 +25,8 @@ const DB_PATH = getDbPath()
 // SECURITY FIX: Removed hardcoded API key
 function getRpcUrl(): string {
   const url = process.env.NEXT_PUBLIC_EVM_RPC ||
-              process.env.POLYGON_AMOY_RPC ||
-              process.env.RPC_URL
+    process.env.POLYGON_AMOY_RPC ||
+    process.env.RPC_URL
   if (!url) {
     if (process.env.NODE_ENV === 'production') {
       throw new Error('NEXT_PUBLIC_EVM_RPC or POLYGON_AMOY_RPC must be set in production')
@@ -113,7 +113,7 @@ async function ensureDataDir() {
 // Initialize database
 async function initDatabase() {
   await ensureDataDir()
-  
+
   const db = await open({
     filename: DB_PATH,
     driver: sqlite3.Database
@@ -144,7 +144,7 @@ async function initDatabase() {
       totalTransactions INTEGER
     )
   `)
-  
+
   // Add curveAddress column if it doesn't exist (migration)
   try {
     await db.exec(`ALTER TABLE coins ADD COLUMN curveAddress TEXT;`)
@@ -167,7 +167,7 @@ async function initDatabase() {
   } catch (e) {
     // Column already exists, ignore error
   }
-  
+
   try {
     await db.exec(`
       ALTER TABLE coins ADD COLUMN xUrl TEXT;
@@ -175,7 +175,7 @@ async function initDatabase() {
   } catch (e) {
     // Column already exists, ignore error
   }
-  
+
   try {
     await db.exec(`
       ALTER TABLE coins ADD COLUMN discordUrl TEXT;
@@ -183,7 +183,7 @@ async function initDatabase() {
   } catch (e) {
     // Column already exists, ignore error
   }
-  
+
   try {
     await db.exec(`
       ALTER TABLE coins ADD COLUMN websiteUrl TEXT;
@@ -266,9 +266,9 @@ export async function GET(request: NextRequest) {
     try {
       // Try PostgreSQL first (used in production / when configured)
       const { initializeSchema, getSql } = await import('../../../lib/postgresManager')
-      
+
       await initializeSchema()
-      
+
       const sql = await getSql()
       if (!sql) {
         throw new Error('Postgres not available')
@@ -278,23 +278,23 @@ export async function GET(request: NextRequest) {
       // Note: Vercel Postgres sql template doesn't support dynamic column names in ORDER BY
       // So we use pg Pool directly for dynamic queries (safe because we validated sortField)
       const searchPattern = search ? `%${search}%` : null
-      
+
       // Get connection string
-      const connectionString = process.env.POSTGRES_PRISMA_URL || 
-                               process.env.POSTGRES_URL || 
-                               process.env.POSTGRES_URL_NON_POOLING
-      
+      const connectionString = process.env.POSTGRES_PRISMA_URL ||
+        process.env.POSTGRES_URL ||
+        process.env.POSTGRES_URL_NON_POOLING
+
       if (!connectionString) {
         throw new Error('Postgres connection string not found')
       }
-      
+
       const { Pool } = await import('pg')
       const pool = new Pool({ connectionString })
-      
+
       try {
         let result
         let countResult
-        
+
         if (search && searchPattern) {
           // Search query with dynamic ORDER BY
           const queryText = `
@@ -309,7 +309,7 @@ export async function GET(request: NextRequest) {
             WHERE LOWER(name) LIKE LOWER($1) 
                OR LOWER(symbol) LIKE LOWER($1)
           `
-          
+
           result = await pool.query(queryText, [searchPattern, limit, offset])
           countResult = await pool.query(countText, [searchPattern])
         } else {
@@ -320,16 +320,16 @@ export async function GET(request: NextRequest) {
             LIMIT $1 OFFSET $2
           `
           const countText = `SELECT COUNT(*) as total FROM coins`
-          
+
           result = await pool.query(queryText, [limit, offset])
           countResult = await pool.query(countText)
         }
 
         total = parseInt(countResult.rows[0]?.total || '0', 10)
         totalPages = Math.ceil(total / limit)
-        
+
         const allCoins = result.rows
-      
+
         const coinMap = new Map<string, any>()
         for (const coin of allCoins) {
           const mappedCoin = {
@@ -350,7 +350,7 @@ export async function GET(request: NextRequest) {
             trades_count: coin.total_transactions || 0, // Map to frontend expected field
             unique_traders: coin.holders || 0, // Use holders as unique_traders for now
           }
-          
+
           // Create a unique key for deduplication
           // Use id as primary key, fallback to other identifiers
           const key =
@@ -359,7 +359,7 @@ export async function GET(request: NextRequest) {
             (mappedCoin.txHash ? `tx_${mappedCoin.txHash.toLowerCase()}` : null) ||
             `${mappedCoin.symbol?.toLowerCase()}-${mappedCoin.name?.toLowerCase()}-${mappedCoin.createdAt}` ||
             `coin_${coinMap.size}` // Fallback to prevent filtering out coins
-          
+
           // Only skip if we have a valid key and it already exists
           if (key && !coinMap.has(key)) {
             coinMap.set(key, mappedCoin)
@@ -368,7 +368,7 @@ export async function GET(request: NextRequest) {
             coinMap.set(`coin_${Date.now()}_${coinMap.size}`, mappedCoin)
           }
         }
-        
+
         coins = Array.from(coinMap.values())
 
         // Backfill addresses if we have sql client
@@ -412,16 +412,16 @@ export async function GET(request: NextRequest) {
       if (allowSqliteFallback) {
         // For SQLite, apply pagination manually
         const allSqliteCoins = await loadCoinsFromSqlite(10000) // Get all, then paginate
-        
+
         // Apply search filter
         let filtered = allSqliteCoins
         if (search) {
-          filtered = allSqliteCoins.filter((c: any) => 
+          filtered = allSqliteCoins.filter((c: any) =>
             c.name?.toLowerCase().includes(search.toLowerCase()) ||
             c.symbol?.toLowerCase().includes(search.toLowerCase())
           )
         }
-        
+
         // Map SQLite coins to include frontend-expected fields
         const mappedSqliteCoins = filtered.map((c: any) => ({
           ...c,
@@ -431,7 +431,7 @@ export async function GET(request: NextRequest) {
           trades_count: c.totalTransactions || 0,
           unique_traders: c.holders || 0,
         }))
-        
+
         // Apply sorting
         mappedSqliteCoins.sort((a: any, b: any) => {
           let aVal: any, bVal: any
@@ -464,19 +464,19 @@ export async function GET(request: NextRequest) {
               aVal = new Date(a.createdAt || 0).getTime()
               bVal = new Date(b.createdAt || 0).getTime()
           }
-          
+
           if (sortOrder === 'ASC') {
             return aVal > bVal ? 1 : aVal < bVal ? -1 : 0
           } else {
             return aVal < bVal ? 1 : aVal > bVal ? -1 : 0
           }
         })
-        
+
         // Apply pagination
         total = mappedSqliteCoins.length
         totalPages = Math.ceil(total / limit)
         coins = mappedSqliteCoins.slice(offset, offset + limit)
-        
+
         return NextResponse.json({
           success: true,
           coins,
@@ -702,38 +702,38 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    
+
     // Validate optional hashes to avoid storing invalid placeholders
     const isCid = (v: any) => typeof v === 'string' && /^bafy[\w\d]+$/i.test(v)
     const isBytes32 = (v: any) => typeof v === 'string' && /^0x[0-9a-fA-F]{64}$/.test(v)
     const safeImageHash = isCid(coinData.imageHash) || isBytes32(coinData.imageHash) ? coinData.imageHash : null
-    
+
     const createdAt = Date.now()
-    const description = coinData.description || `${coinData.name} (${coinData.symbol}) - A memecoin created on Polygon Amoy`
+    const description = coinData.description || `${coinData.name} (${coinData.symbol}) - A memecoin created on Polygon`
 
     // First try PostgreSQL (for production / when configured)
     try {
       const { initializeSchema, getSql } = await import('../../../lib/postgresManager')
-      
+
       await initializeSchema()
-      
+
       const sql = await getSql()
       if (!sql) {
         throw new Error('Postgres not available')
       }
-      
+
       const existingBySymbol = await sql`
         SELECT id, token_address FROM coins 
         WHERE LOWER(symbol) = LOWER(${coinData.symbol}) 
         LIMIT 1
       `
-      
+
       const existingByToken = await sql`
         SELECT id FROM coins 
         WHERE LOWER(token_address) = LOWER(${normalizedTokenAddress})
         LIMIT 1
       `
-      
+
       if (existingByToken.rows.length > 0) {
         return NextResponse.json(
           { success: false, error: 'Token address already exists in database' },
@@ -743,7 +743,7 @@ export async function POST(request: NextRequest) {
 
       if (existingBySymbol.rows.length > 0 && !existingBySymbol.rows[0].token_address) {
         const existingId = existingBySymbol.rows[0].id
-        
+
         await sql`
           UPDATE coins 
           SET 
@@ -759,9 +759,9 @@ export async function POST(request: NextRequest) {
             updated_at = ${createdAt}
           WHERE id = ${existingId}
         `
-        
+
         console.log(`✅ Updated existing coin ${existingId} with token address: ${normalizedTokenAddress}`)
-        
+
         return NextResponse.json({
           success: true,
           coin: {
@@ -780,16 +780,16 @@ export async function POST(request: NextRequest) {
           message: 'Coin updated successfully',
         })
       }
-      
+
       if (existingBySymbol.rows.length > 0) {
         return NextResponse.json(
           { success: false, error: 'Symbol already exists' },
           { status: 409 }
         )
       }
-      
+
       const coinId = `${coinData.symbol.toLowerCase()}-${createdAt}`
-      
+
       await sql`
         INSERT INTO coins (
           id, name, symbol, supply, image_hash, token_address, curve_address, tx_hash, 
@@ -802,9 +802,9 @@ export async function POST(request: NextRequest) {
           ${coinData.discordUrl || null}, ${coinData.websiteUrl || null}
         )
       `
-      
+
       console.log(`✅ New coin added to PostgreSQL: ${coinId} with token address: ${normalizedTokenAddress}`)
-      
+
       const newCoin = {
         id: coinId,
         name: coinData.name,
@@ -818,7 +818,7 @@ export async function POST(request: NextRequest) {
         createdAt: new Date(createdAt).toISOString(),
         description,
       }
-      
+
       return NextResponse.json({
         success: true,
         coin: newCoin,
@@ -837,13 +837,13 @@ export async function POST(request: NextRequest) {
     // Fallback: store in local SQLite database for local development
     try {
       const db = await getDatabase()
-      
+
       // Check for existing coin by token address
       const existingByToken = await db.get(
         'SELECT id FROM coins WHERE LOWER(tokenAddress) = LOWER(?) LIMIT 1',
         [normalizedTokenAddress]
       )
-      
+
       if (existingByToken) {
         await db.close()
         return NextResponse.json(
@@ -885,7 +885,7 @@ export async function POST(request: NextRequest) {
             existingId
           ]
         )
-        
+
         await db.close()
         console.log(`✅ Updated existing coin ${existingId} in SQLite with token address: ${normalizedTokenAddress}`)
 
@@ -945,7 +945,7 @@ export async function POST(request: NextRequest) {
       )
 
       await db.close()
-      
+
       console.log(`✅ New coin added to SQLite: ${coinId} with token address: ${normalizedTokenAddress}`)
 
       const newCoin = {
@@ -970,9 +970,9 @@ export async function POST(request: NextRequest) {
     } catch (sqliteError: any) {
       console.error('❌ SQLite save failed:', sqliteError)
       return NextResponse.json(
-        { 
-          success: false, 
-          error: `Failed to save coin to database: ${sqliteError?.message || 'Unknown error'}. Please check database configuration.` 
+        {
+          success: false,
+          error: `Failed to save coin to database: ${sqliteError?.message || 'Unknown error'}. Please check database configuration.`
         },
         { status: 500 }
       )
@@ -980,9 +980,9 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('❌ Failed to add coin:', error)
     return NextResponse.json(
-      { 
-        success: false, 
-        error: error.message || 'Failed to add coin' 
+      {
+        success: false,
+        error: error.message || 'Failed to add coin'
       },
       { status: 500 }
     )
@@ -1016,7 +1016,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const db = await getDatabase()
-    
+
     if (keepSymbol) {
       // Delete all coins except those with the specified symbol (case-insensitive)
       const result = await db.run(
@@ -1024,17 +1024,17 @@ export async function DELETE(request: NextRequest) {
         [keepSymbol]
       )
       await db.close()
-      
-      return NextResponse.json({ 
-        success: true, 
+
+      return NextResponse.json({
+        success: true,
         message: `All coins deleted except ${keepSymbol}`,
-        deleted: result.changes 
+        deleted: result.changes
       })
     } else {
       // Delete all coins
       await db.exec('DELETE FROM coins')
       await db.close()
-      
+
       return NextResponse.json({ success: true, message: 'All coins deleted' })
     }
   } catch (error) {

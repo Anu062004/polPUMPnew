@@ -153,11 +153,11 @@ export default function AiChatPage() {
       <div className="relative z-10 container mx-auto px-4 pt-24 pb-8 max-w-4xl">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-r from-[#FF4F84] to-[#8C52FF] rounded-2xl mb-6 shadow-lg neon-glow">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl mb-6 shadow-lg">
             <Bot className="w-10 h-10 text-white" />
           </div>
           <h1 className="text-5xl font-bold text-white mb-4">
-            Ask <span className="text-gradient-primary">PumpAI</span>
+            Ask <span className="text-blue-400">PumpAI</span>
           </h1>
           <p className="text-xl text-[#E3E4E8] max-w-2xl mx-auto">
             Chat with our AI assistant powered by POL Pump AI. Get insights on tokens, market trends, and Polygon network.
@@ -175,52 +175,49 @@ export default function AiChatPage() {
               >
                 <div className={`flex max-w-[80%] ${message.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
                   {/* Avatar */}
-                  <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center shadow-lg ${
-                    message.role === 'user' 
-                      ? 'bg-gradient-to-r from-[#12D9C8] to-[#0EA89F] ml-3' 
-                      : 'bg-gradient-to-r from-[#FF4F84] to-[#8C52FF] mr-3'
-                  }`}>
+                  <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center shadow-lg ${message.role === 'user'
+                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 ml-3'
+                      : 'bg-gradient-to-r from-blue-600 to-indigo-600 mr-3'
+                    }`}>
                     {message.role === 'user' ? (
                       <User className="w-5 h-5 text-white" />
                     ) : (
                       <Bot className="w-5 h-5 text-white" />
                     )}
                   </div>
-                  
+
                   {/* Message Content */}
-                  <div className={`rounded-2xl px-5 py-3 shadow-lg backdrop-blur-sm ${
-                    message.role === 'user'
-                      ? 'bg-gradient-to-r from-[#12D9C8]/90 to-[#0EA89F]/90 text-white border border-[#12D9C8]/30'
-                      : 'bg-white/10 text-white border border-white/20'
-                  }`}>
-                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
-                    <p className={`text-xs mt-2 ${
-                      message.role === 'user' ? 'text-white/70' : 'text-[#E3E4E8]/60'
+                  <div className={`rounded-2xl px-5 py-3 shadow-lg backdrop-blur-sm ${message.role === 'user'
+                      ? 'bg-gradient-to-r from-emerald-600/90 to-teal-600/90 text-white border border-emerald-500/30'
+                      : 'bg-slate-800/60 text-white border border-slate-700/50'
                     }`}>
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+                    <p className={`text-xs mt-2 ${message.role === 'user' ? 'text-white/70' : 'text-[#E3E4E8]/60'
+                      }`}>
                       {formatTime(message.timestamp)}
                     </p>
                   </div>
                 </div>
               </div>
             ))}
-            
+
             {/* Loading indicator */}
             {isLoading && (
               <div className="flex justify-start">
                 <div className="flex">
-                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-r from-[#FF4F84] to-[#8C52FF] mr-3 flex items-center justify-center shadow-lg">
+                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 mr-3 flex items-center justify-center shadow-lg">
                     <Bot className="w-5 h-5 text-white" />
                   </div>
                   <div className="bg-white/10 backdrop-blur-sm rounded-2xl px-5 py-3 border border-white/20">
                     <div className="flex items-center space-x-2">
-                      <Loader2 className="w-4 h-4 animate-spin text-[#FF4F84]" />
+                      <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
                       <span className="text-sm text-white">PumpAI is thinking...</span>
                     </div>
                   </div>
                 </div>
               </div>
             )}
-            
+
             <div ref={messagesEndRef} />
           </div>
 
@@ -233,17 +230,17 @@ export default function AiChatPage() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   placeholder="Ask PumpAI anything about tokens, Polygon network, or market trends..."
-                  className="w-full px-5 py-4 pr-12 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl text-white placeholder-[#E3E4E8]/50 focus:outline-none focus:ring-2 focus:ring-[#FF4F84] focus:border-transparent transition-all"
+                  className="w-full px-5 py-4 pr-12 bg-slate-800/60 backdrop-blur-sm border border-slate-700/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   disabled={isLoading}
                 />
                 <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
-                  <Sparkles className="w-5 h-5 text-[#FF4F84]" />
+                  <Sparkles className="w-5 h-5 text-blue-400" />
                 </div>
               </div>
               <button
                 type="submit"
                 disabled={!input.trim() || isLoading}
-                className="px-6 py-4 bg-gradient-to-r from-[#FF4F84] to-[#8C52FF] text-white rounded-xl hover:shadow-lg hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 transition-all duration-200 flex items-center space-x-2 font-semibold"
+                className="px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:shadow-lg hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 transition-all duration-200 flex items-center space-x-2 font-semibold"
               >
                 {isLoading ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
@@ -259,7 +256,7 @@ export default function AiChatPage() {
         {/* Quick Actions */}
         <div className="mt-8">
           <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
-            <Sparkles className="w-6 h-6 text-[#FF4F84]" />
+            <Sparkles className="w-6 h-6 text-blue-400" />
             Quick Questions
           </h3>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -274,9 +271,9 @@ export default function AiChatPage() {
               <button
                 key={index}
                 onClick={() => setInput(question)}
-                className="p-4 text-left glass-card border border-white/20 hover:border-[#FF4F84]/50 hover:shadow-lg hover:scale-105 transition-all duration-200 text-sm text-white group"
+                className="p-4 text-left glass-card border border-slate-700/50 hover:border-blue-500/50 hover:shadow-lg hover:scale-105 transition-all duration-200 text-sm text-white group"
               >
-                <span className="group-hover:text-gradient-primary transition-all">{question}</span>
+                <span className="group-hover:text-blue-400 transition-all">{question}</span>
               </button>
             ))}
           </div>

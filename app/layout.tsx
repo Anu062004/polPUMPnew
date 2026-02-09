@@ -15,7 +15,7 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: 'POL Pump - Memetoken Trading Platform',
-  description: 'Trade memetokens and custom tokens on Polygon Amoy. Fast, secure, and AI-powered trading platform.',
+  description: 'Trade memetokens and custom tokens on Polygon. Fast, secure, and AI-powered trading platform.',
   keywords: 'memetokens, trading, Polygon, blockchain, DeFi, AI trading',
   authors: [{ name: 'POL Pump Team' }],
 }

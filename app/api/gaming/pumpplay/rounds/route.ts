@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
   try {
     // Get Postgres connection (DATA PERSISTENCE FIX)
     const sql = await requirePostgres()
-    
+
     // Also ensure coins schema is initialized
     await initializeSchema()
     const coinsSql = await getSql()
@@ -33,9 +33,13 @@ export async function GET(request: NextRequest) {
       LIMIT 50
     `
 
+
+    // Ensure rounds is an array
+    const roundsArray = Array.isArray(rounds) ? rounds : (rounds?.rows || [])
+
     // Parse candidates JSON and enrich with coin details
     const enrichedRounds = await Promise.all(
-      rounds.map(async (round: any) => {
+      roundsArray.map(async (round: any) => {
         let candidates: string[] = []
         try {
           candidates = JSON.parse(round.candidates || '[]')
@@ -51,7 +55,8 @@ export async function GET(request: NextRequest) {
               WHERE id = ${coinId} OR token_address = ${coinId}
               LIMIT 1
             `
-            const coin = coinResult[0]
+            const coinArray = Array.isArray(coinResult) ? coinResult : (coinResult?.rows || [])
+            const coin = coinArray[0]
             return coin ? {
               id: coin.id,
               name: coin.name,
@@ -69,8 +74,9 @@ export async function GET(request: NextRequest) {
           GROUP BY coin_id
         `
 
+        const betsArray = Array.isArray(bets) ? bets : (bets?.rows || [])
         const betMap: Record<string, number> = {}
-        bets.forEach((bet: any) => {
+        betsArray.forEach((bet: any) => {
           betMap[bet.coin_id] = parseFloat(bet.total) || 0
         })
 
@@ -99,7 +105,8 @@ export async function GET(request: NextRequest) {
         LIMIT 5
       `
 
-      const candidateCoins = candidateCoinsResult.map((c: any) => ({
+      const candidateCoinsArray = Array.isArray(candidateCoinsResult) ? candidateCoinsResult : (candidateCoinsResult?.rows || [])
+      const candidateCoins = candidateCoinsArray.map((c: any) => ({
         id: c.id,
         name: c.name,
         symbol: c.symbol,
@@ -116,7 +123,8 @@ export async function GET(request: NextRequest) {
           RETURNING id
         `
 
-        const roundId = newRound[0].id
+        const newRoundArray = Array.isArray(newRound) ? newRound : (newRound?.rows || [])
+        const roundId = newRoundArray[0]?.id
         const newRoundData = {
           id: roundId,
           createdAt: now,
@@ -139,8 +147,8 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('Error fetching PumpPlay rounds:', error)
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: error.message || 'Failed to fetch rounds',
         details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       },

@@ -66,7 +66,7 @@ export default function ExplorePage() {
         // Fallback to backend server
         response = await fetch(`${API_BASE}/api/coins?${params}`)
       }
-      
+
       const data = await response.json()
       console.log('✅ Loaded tokens:', data.coins?.length || data.tokens?.length || 0)
 
@@ -147,7 +147,7 @@ export default function ExplorePage() {
             className="mb-12"
           >
             <div className="flex items-center gap-3 mb-4">
-              <Sparkles className="w-8 h-8 text-[#FF4F84]" />
+              <Sparkles className="w-8 h-8 text-blue-400" />
               <h1 className="text-5xl font-bold text-white">Explore Tokens</h1>
             </div>
             <p className="text-[#E3E4E8] text-lg">
@@ -228,7 +228,7 @@ export default function ExplorePage() {
           {/* Results */}
           {isLoading ? (
             <div className="text-center py-20">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#FF4F84]"></div>
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
               <p className="text-[#E3E4E8] mt-4">Loading tokens...</p>
             </div>
           ) : filteredTokens.length === 0 ? (

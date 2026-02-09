@@ -14,7 +14,7 @@ export default function Footer() {
                     {/* Brand */}
                     <div className="space-y-4">
                         <Link href="/" className="flex items-center gap-2">
-                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#FF4F84] to-[#8C52FF] flex items-center justify-center">
+                            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center">
                                 <span className="text-xl font-bold text-white">P</span>
                             </div>
                             <span className="text-xl font-bold text-white">POL Pump</span>
@@ -23,8 +23,8 @@ export default function Footer() {
                             Launch. Trade. Pump. The premier memecoin platform on Polygon.
                         </p>
                         <div className="flex items-center gap-1 text-xs">
-                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                                <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                                 Polygon Mainnet
                             </span>
                         </div>

@@ -28,7 +28,7 @@ const faqs: FAQItem[] = [
   },
   {
     question: 'Where are tokens stored?',
-    answer: 'Token metadata and images are stored on decentralized storage networks, making them censorship-resistant and permanently accessible. Smart contracts are deployed on Polygon Amoy testnet.',
+    answer: 'Token metadata and images are stored on decentralized storage networks, making them censorship-resistant and permanently accessible. Smart contracts are deployed on Polygon mainnet.',
     icon: Lock
   },
   {
@@ -48,7 +48,7 @@ const faqs: FAQItem[] = [
   },
   {
     question: 'How do I get testnet MATIC?',
-    answer: 'You can get free testnet MATIC from the Polygon Amoy faucet. Visit faucet.polygon.technology and enter your wallet address to receive test tokens.',
+    answer: 'POL Pump runs on Polygon mainnet. You can acquire MATIC from exchanges like Binance, Coinbase, or use the Polygon bridge to transfer from Ethereum.',
     icon: DollarSign
   }
 ]

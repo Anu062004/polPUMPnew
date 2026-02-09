@@ -51,7 +51,7 @@ export default function TokenDetailPage() {
   const [token, setToken] = useState<TokenDetail | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [copied, setCopied] = useState(false)
-  
+
   // Livestream state
   const [isLive, setIsLive] = useState(false)
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null)
@@ -59,9 +59,9 @@ export default function TokenDetailPage() {
   const { setMemory } = usePumpAI()
 
   const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000'
-  
+
   // Check if current user is creator (handle empty creator string)
-  const isCreator = userAddress && token && token.creator && 
+  const isCreator = userAddress && token && token.creator &&
     userAddress.toLowerCase() === token.creator.toLowerCase()
 
   useEffect(() => {
@@ -74,21 +74,21 @@ export default function TokenDetailPage() {
   // Poll livestream status every 5 seconds
   useEffect(() => {
     if (!address) return
-    
+
     const interval = setInterval(() => {
       checkLivestreamStatus()
     }, 5000)
-    
+
     return () => clearInterval(interval)
   }, [address])
 
   async function checkLivestreamStatus() {
     if (!address) return // address is the token address from URL params
-    
+
     try {
       const res = await fetch(`/api/stream/status?tokenAddress=${encodeURIComponent(address)}`)
       const data = await res.json()
-      
+
       if (data.success) {
         setIsLive(data.isLive)
         if (data.playbackUrl) {
@@ -119,14 +119,14 @@ export default function TokenDetailPage() {
         console.log('✅ Token found:', data.data.name)
         // Map the API response to TokenDetail format
         const tokenData = data.data
-        
+
         // If curve address is missing, try to resolve it
         let curveAddress = tokenData.curveAddress || ''
         if (!curveAddress && tokenData.address) {
           try {
             const curveRes = await fetch(`/api/token/curve?tokenAddress=${tokenData.address}`)
             const curveData = await curveRes.json()
-        if (curveData.success && curveData.curveAddress) {
+            if (curveData.success && curveData.curveAddress) {
               curveAddress = curveData.curveAddress
               console.log('✅ Resolved curve address:', curveAddress)
             }
@@ -134,7 +134,7 @@ export default function TokenDetailPage() {
             console.warn('Failed to resolve curve address:', e)
           }
         }
-        
+
         // Ensure we have a valid token address
         const tokenAddr = tokenData.address || address
         if (!tokenAddr || tokenAddr === 'undefined' || tokenAddr === 'null') {
@@ -198,14 +198,14 @@ export default function TokenDetailPage() {
       try {
         const { ogStorageSDK } = await import('../../../lib/0gStorageSDK')
         const coins = await ogStorageSDK.getAllCoins()
-        const found: any = coins.find((c: any) => 
-          c.tokenAddress === address || 
+        const found: any = coins.find((c: any) =>
+          c.tokenAddress === address ||
           c.id === address ||
           c.symbol?.toLowerCase() === address.toLowerCase()
         )
         if (found) {
           console.log('✅ Token found in localStorage:', found.name)
-          
+
           // Ensure we have a valid token address
           const tokenAddr = found.tokenAddress || address
           if (!tokenAddr || tokenAddr === 'undefined' || tokenAddr === 'null') {
@@ -475,7 +475,7 @@ export default function TokenDetailPage() {
                     </div>
                   )}
                 </div>
-                
+
                 {isLive && playbackUrl ? (
                   <div className="mb-6">
                     <LiveStreamPlayer streamUrl={playbackUrl} />
@@ -527,7 +527,7 @@ export default function TokenDetailPage() {
                 tokenAddress={token.token_address}
                 tokenName={token.name}
                 tokenSymbol={token.symbol}
-                description={`${token.name} (${token.symbol}) - A memecoin on Polygon Amoy`}
+                description={`${token.name} (${token.symbol}) - A memecoin on Polygon`}
                 imageUrl=""
                 metadataUrl=""
                 creator={token.creator}

@@ -1,10 +1,10 @@
 'use client'
 
-import React, { useEffect } from 'react'
-import { motion } from 'framer-motion'
+import React, { useEffect, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
-import { Home, Sparkles, Gamepad2, User, Search, Video, Bot } from 'lucide-react'
+import { Home, Sparkles, Gamepad2, User, Search, Video, Bot, Menu, X, ChevronDown } from 'lucide-react'
 import { useAccount } from 'wagmi'
 import { usePumpAI } from '../providers/PumpAIContext'
 import AuthButton from '../../components/AuthButton'
@@ -13,6 +13,8 @@ import AuthButton from '../../components/AuthButton'
 export default function PremiumNavbar() {
   const { address } = useAccount()
   const { setMemory } = usePumpAI()
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
 
   // Keep Pump AI memory in sync with connected wallet
   useEffect(() => {
@@ -38,79 +40,57 @@ export default function PremiumNavbar() {
                 alt="POL Pump"
                 width={40}
                 height={40}
-                className="rounded-lg neon-glow animate-pulse-slow w-10 h-10 object-cover"
+                className="rounded-lg w-10 h-10 object-cover"
                 onError={(e) => {
                   // Fallback if image doesn't exist
                   e.currentTarget.style.display = 'none'
                 }}
               />
             </div>
-            <span className="font-bold text-xl text-white group-hover:text-gradient-primary transition-all duration-300">
+            <span className="font-bold text-xl text-white group-hover:text-blue-400 transition-all duration-200">
               POL Pump
             </span>
           </Link>
 
-          {/* Navigation Links */}
-          <div className="hidden md:flex items-center gap-8">
-            <Link
-              href="/"
-              className="flex items-center gap-2 text-[#E3E4E8] hover:text-white transition-colors duration-300"
-            >
-              <Home className="w-4 h-4" />
-              <span className="font-medium">Home</span>
+          {/* Hamburger Menu Button */}
+          <button
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            className="md:hidden p-2 text-slate-400 hover:text-white transition-colors"
+            aria-label="Toggle menu"
+          >
+            {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          </button>
+
+          {/* Navigation Links - Desktop */}
+          <div className="hidden md:flex items-center gap-6">
+            <Link href="/" className="text-slate-300 hover:text-white transition-colors duration-200 text-sm font-medium">
+              Home
             </Link>
-            <Link
-              href="/explore"
-              className="flex items-center gap-2 text-[#E3E4E8] hover:text-white transition-colors duration-300"
-            >
-              <Search className="w-4 h-4" />
-              <span className="font-medium">Explore</span>
+            <Link href="/explore" className="text-slate-300 hover:text-white transition-colors duration-200 text-sm font-medium">
+              Explore
             </Link>
-            <Link
-              href="/livestreams"
-              className="flex items-center gap-2 text-[#E3E4E8] hover:text-white transition-colors duration-300"
-            >
-              <Video className="w-4 h-4" />
-              <span className="font-medium">Live</span>
+            <Link href="/livestreams" className="text-slate-300 hover:text-white transition-colors duration-200 text-sm font-medium">
+              Live
             </Link>
-            <Link
-              href="/ai-chat"
-              className="flex items-center gap-2 text-[#E3E4E8] hover:text-white transition-colors duration-300"
-            >
-              <Bot className="w-4 h-4" />
-              <span className="font-medium">Pump AI</span>
+            <Link href="/ai-chat" className="text-slate-300 hover:text-white transition-colors duration-200 text-sm font-medium">
+              AI Chat
             </Link>
-            <Link
-              href="/gaming"
-              className="flex items-center gap-2 text-[#E3E4E8] hover:text-white transition-colors duration-300"
-            >
-              <Gamepad2 className="w-4 h-4" />
-              <span className="font-medium">Gaming</span>
+            <Link href="/gaming" className="text-slate-300 hover:text-white transition-colors duration-200 text-sm font-medium">
+              Gaming
             </Link>
-            <Link
-              href="/profile"
-              className="flex items-center gap-2 text-[#E3E4E8] hover:text-white transition-colors duration-300"
-            >
-              <User className="w-4 h-4" />
-              <span className="font-medium">Profile</span>
+            <Link href="/trader" className="text-slate-300 hover:text-white transition-colors duration-200 text-sm font-medium">
+              Trader
             </Link>
-            {/* Role-based dashboard links */}
-            <Link
-              href="/trader"
-              className="flex items-center gap-2 text-[#E3E4E8] hover:text-white transition-colors duration-300"
-            >
-              <span className="font-medium">Trader</span>
+            <Link href="/creator" className="text-slate-300 hover:text-white transition-colors duration-200 text-sm font-medium">
+              Creator
             </Link>
-            <Link
-              href="/creator"
-              className="flex items-center gap-2 text-[#E3E4E8] hover:text-white transition-colors duration-300"
-            >
-              <span className="font-medium">Creator</span>
+            <Link href="/profile" className="text-slate-300 hover:text-white transition-colors duration-200 text-sm font-medium">
+              Profile
             </Link>
           </div>
 
           {/* Wallet Connect */}
-          <div className="flex items-center gap-4">
+          <div className="hidden md:flex items-center gap-3">
             <ConnectButton.Custom>
               {({
                 account,
@@ -210,6 +190,157 @@ export default function PremiumNavbar() {
             </ConnectButton.Custom>
           </div>
         </div>
+
+        {/* Mobile Menu Dropdown */}
+        <AnimatePresence>
+          {isMenuOpen && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2 }}
+              className="md:hidden border-t border-white/10 mt-4 pt-4"
+            >
+              {/* Mobile Navigation Links - Vertical Stack */}
+              <div className="flex flex-col gap-2 px-2">
+                <Link
+                  href="/"
+                  className="px-4 py-3 rounded-lg bg-slate-800/50 text-slate-300 hover:bg-slate-700 hover:text-white transition-all text-sm font-medium text-center"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Home
+                </Link>
+                <Link
+                  href="/explore"
+                  className="px-4 py-3 rounded-lg bg-slate-800/50 text-slate-300 hover:bg-slate-700 hover:text-white transition-all text-sm font-medium text-center"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Explore
+                </Link>
+                <Link
+                  href="/livestreams"
+                  className="px-4 py-3 rounded-lg bg-slate-800/50 text-slate-300 hover:bg-slate-700 hover:text-white transition-all text-sm font-medium text-center"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Live
+                </Link>
+                <Link
+                  href="/ai-chat"
+                  className="px-4 py-3 rounded-lg bg-slate-800/50 text-slate-300 hover:bg-slate-700 hover:text-white transition-all text-sm font-medium text-center"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Pump AI
+                </Link>
+                <Link
+                  href="/gaming"
+                  className="px-4 py-3 rounded-lg bg-slate-800/50 text-slate-300 hover:bg-slate-700 hover:text-white transition-all text-sm font-medium text-center"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Gaming
+                </Link>
+                <Link
+                  href="/profile"
+                  className="px-4 py-3 rounded-lg bg-slate-800/50 text-slate-300 hover:bg-slate-700 hover:text-white transition-all text-sm font-medium text-center"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Profile
+                </Link>
+                <Link
+                  href="/trader"
+                  className="px-4 py-3 rounded-lg bg-slate-800/50 text-slate-300 hover:bg-slate-700 hover:text-white transition-all text-sm font-medium text-center"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Trader
+                </Link>
+                <Link
+                  href="/creator"
+                  className="px-4 py-3 rounded-lg bg-slate-800/50 text-slate-300 hover:bg-slate-700 hover:text-white transition-all text-sm font-medium text-center"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Creator
+                </Link>
+              </div>
+
+              {/* Mobile Wallet Connect */}
+              <div className="mt-4 px-2">
+                <ConnectButton.Custom>
+                  {({
+                    account,
+                    chain,
+                    openAccountModal,
+                    openChainModal,
+                    openConnectModal,
+                    authenticationStatus,
+                    mounted,
+                  }) => {
+                    const ready = mounted && authenticationStatus !== 'loading'
+                    const connected =
+                      ready &&
+                      account &&
+                      chain &&
+                      (!authenticationStatus ||
+                        authenticationStatus === 'authenticated')
+
+                    return (
+                      <div
+                        {...(!ready && {
+                          'aria-hidden': true,
+                          style: {
+                            opacity: 0,
+                            pointerEvents: 'none',
+                            userSelect: 'none',
+                          },
+                        })}
+                      >
+                        {(() => {
+                          if (!connected) {
+                            return (
+                              <button
+                                onClick={openConnectModal}
+                                className="btn-primary w-full"
+                              >
+                                Connect Wallet
+                              </button>
+                            )
+                          }
+
+                          if (chain.unsupported) {
+                            return (
+                              <button
+                                onClick={openChainModal}
+                                className="btn-secondary w-full"
+                              >
+                                Wrong network
+                              </button>
+                            )
+                          }
+
+                          return (
+                            <div className="flex flex-col gap-2">
+                              <button
+                                onClick={openChainModal}
+                                className="btn-secondary text-sm w-full"
+                              >
+                                {chain.name}
+                              </button>
+                              <button
+                                onClick={openAccountModal}
+                                className="btn-primary text-sm w-full"
+                              >
+                                {account.displayName}
+                              </button>
+                              <AuthButton />
+                            </div>
+                          )
+                        })()}
+                      </div>
+                    )
+                  }}
+                </ConnectButton.Custom>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </motion.nav>
   )

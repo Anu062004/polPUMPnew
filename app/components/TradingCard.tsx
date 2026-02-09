@@ -44,14 +44,14 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
   const [liqTokenAmount, setLiqTokenAmount] = useState('')
   const [liqEthAmount, setLiqEthAmount] = useState('')
   const [isAddingLiquidity, setIsAddingLiquidity] = useState(false)
-  
+
   // Bonding curve trading state
   const [curveAddress, setCurveAddress] = useState<string | null>(null)
   const [curveInfo, setCurveInfo] = useState<any>(null)
   const [buyQuote, setBuyQuote] = useState<any>(null)
   const [sellQuote, setSellQuote] = useState<any>(null)
-  const [slippageTolerance] = useState(0.05) // 5%
-  
+  const [slippageTolerance] = useState(0.10) // 10% - increased for better transaction success rate
+
   // Price history for chart
   const [priceHistory, setPriceHistory] = useState<Array<{ timestamp: number; priceUsd: number }>>([])
   const [showChart, setShowChart] = useState(false)
@@ -67,7 +67,7 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
   const neoButton =
     'border-4 border-black rounded-lg shadow-[6px_6px_0_#000] hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-[3px_3px_0_#000] active:translate-x-[3px] active:translate-y-[3px] active:shadow-[3px_3px_0_#000] transition-all'
   const neoButtonSecondary =
-    'bg-white hover:bg-slate-100 text-slate-900 '+neoButton
+    'bg-white hover:bg-slate-100 text-slate-900 ' + neoButton
 
   // Load market data and check liquidity
   useEffect(() => {
@@ -84,7 +84,7 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
             setEthBalance(bal.eth || '0')
           }
         }
-      } catch {}
+      } catch { }
     }
     // Initialize services
     if (typeof window !== 'undefined' && (window as any).ethereum) {
@@ -107,30 +107,30 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
       loadPriceHistory()
     }
   }, [coin.tokenAddress, isConnected, address])
-  
+
   // Price history tracking
   useEffect(() => {
     if (!coin.tokenAddress || !marketData) return
-    
+
     const interval = setInterval(() => {
       if (marketData.currentPrice > 0) {
         addPricePoint(marketData.currentPrice)
       }
     }, 15000) // Every 15 seconds
-    
+
     return () => clearInterval(interval)
   }, [coin.tokenAddress, marketData])
-  
+
   const resolveCurveAddress = async () => {
     if (!coin.tokenAddress) return
-    
+
     // Check if we already have curve address in coin data
     if ((coin as any).curveAddress) {
       setCurveAddress((coin as any).curveAddress)
       loadCurveInfo((coin as any).curveAddress)
       return
     }
-    
+
     // Try to resolve from API
     try {
       const res = await fetch(`/api/token/curve?tokenAddress=${coin.tokenAddress}`)
@@ -143,7 +143,7 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
       console.warn('Failed to resolve curve address:', e)
     }
   }
-  
+
   const loadCurveInfo = async (curveAddr: string) => {
     try {
       const info = await newBondingCurveTradingService.getCurveInfo(curveAddr)
@@ -152,7 +152,7 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
       console.warn('Failed to load curve info:', e)
     }
   }
-  
+
   const loadPriceHistory = () => {
     if (!coin.tokenAddress) return
     try {
@@ -167,15 +167,15 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
       // Ignore
     }
   }
-  
+
   const addPricePoint = (price: number) => {
     if (!coin.tokenAddress || !price || isNaN(price)) return
-    
+
     const point = {
       timestamp: Date.now(),
       priceUsd: price
     }
-    
+
     setPriceHistory(prev => {
       const updated = [...prev, point].slice(-100) // Keep last 100
       try {
@@ -196,7 +196,7 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
         try {
           const cached = localStorage.getItem(`ti:${coin.tokenAddress}`)
           if (cached) setDisplayCoin(prev => ({ ...prev, ...JSON.parse(cached) }) as any)
-        } catch {}
+        } catch { }
         const info = await blockchainTradingService.getTokenInfo(coin.tokenAddress)
         setDisplayCoin(prev => ({
           ...prev,
@@ -210,7 +210,7 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
           metadataRootHash: (info.metadataRootHash as any) || (prev as any).metadataRootHash
         }) as any)
         try {
-          localStorage.setItem(`ti:${coin.tokenAddress}` , JSON.stringify({
+          localStorage.setItem(`ti:${coin.tokenAddress}`, JSON.stringify({
             name: info.name,
             symbol: info.symbol,
             description: info.description,
@@ -220,7 +220,7 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
             imageRootHash: info.imageRootHash,
             metadataRootHash: info.metadataRootHash
           }))
-        } catch {}
+        } catch { }
       } catch (e) {
         console.warn('Failed to load on-chain token info:', e)
       }
@@ -233,7 +233,7 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
       if (coin.tokenAddress) {
         const data = await blockchainTradingService.getMarketData(coin.tokenAddress)
         setMarketData(data)
-        try { localStorage.setItem(`md:${coin.tokenAddress}`, JSON.stringify(data)) } catch {}
+        try { localStorage.setItem(`md:${coin.tokenAddress}`, JSON.stringify(data)) } catch { }
       }
     } catch (error) {
       console.error('Failed to load market data:', error)
@@ -298,20 +298,20 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
               ])
               setUserBalance(tokenBalance)
               setEthBalance(nativeBalance)
-              try { localStorage.setItem(`bal:${coin.tokenAddress}:${address}`, JSON.stringify({ token: tokenBalance, eth: nativeBalance })) } catch {}
+              try { localStorage.setItem(`bal:${coin.tokenAddress}:${address}`, JSON.stringify({ token: tokenBalance, eth: nativeBalance })) } catch { }
               return
             }
           } catch (e) {
             console.warn('Failed to load balances from curve service:', e)
           }
         }
-        
+
         // Fallback to blockchain trading service
         const tokenBalance = await blockchainTradingService.getTokenBalance(coin.tokenAddress, address)
         const ethBalance = await blockchainTradingService.getETHBalance(address)
         setUserBalance(tokenBalance)
         setEthBalance(ethBalance)
-        try { localStorage.setItem(`bal:${coin.tokenAddress}:${address}`, JSON.stringify({ token: tokenBalance, eth: ethBalance })) } catch {}
+        try { localStorage.setItem(`bal:${coin.tokenAddress}:${address}`, JSON.stringify({ token: tokenBalance, eth: ethBalance })) } catch { }
       }
     } catch (error) {
       console.error('Failed to load balances:', error)
@@ -325,7 +325,7 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
       setSellQuote(null)
       return
     }
-    
+
     const updateQuotes = async () => {
       try {
         if (tradeAction === 'buy') {
@@ -339,7 +339,7 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
         console.warn('Failed to get quote:', e)
       }
     }
-    
+
     updateQuotes()
   }, [tradeAmount, tradeAction, curveAddress])
 
@@ -348,30 +348,30 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
       setError('Enter a valid amount')
       return
     }
-    
+
     if (!isConnected) {
       setError('Please connect your wallet')
       return
     }
-    
+
     if (!coin.tokenAddress) {
       setError('Token address not available')
       return
     }
-    
+
     if (!curveAddress) {
       setError('Trading unavailable: curve not deployed. This token may not have been created with the factory.')
       return
     }
-    
+
     setIsTrading(true)
     setTradeAction(action)
     setError(null)
     setSuccess(null)
-    
+
     try {
       let result
-      
+
       if (action === 'buy') {
         // Buy tokens with MATIC
         if (!buyQuote) {
@@ -381,7 +381,7 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
             throw new Error('Failed to get buy quote')
           }
           setBuyQuote(quote)
-          
+
           // Calculate min tokens out with slippage protection
           const minTokensOut = (parseFloat(quote.outputAmount) * (1 - slippageTolerance)).toString()
           result = await newBondingCurveTradingService.buyTokens(curveAddress, tradeAmount, minTokensOut)
@@ -398,7 +398,7 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
             throw new Error('Failed to get sell quote')
           }
           setSellQuote(quote)
-          
+
           // Calculate min MATIC out with slippage protection
           const minOgOut = (parseFloat(quote.outputAmount) * (1 - slippageTolerance)).toString()
           result = await newBondingCurveTradingService.sellTokens(curveAddress, tradeAmount, minOgOut)
@@ -407,27 +407,27 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
           result = await newBondingCurveTradingService.sellTokens(curveAddress, tradeAmount, minOgOut)
         }
       }
-      
+
       if (result.success && result.txHash) {
         const shortHash = `${result.txHash.slice(0, 6)}...${result.txHash.slice(-4)}`
         setSuccess(`Trade executed successfully! TX: ${shortHash}`)
-        
+
         if (onTrade) {
           onTrade(coin, action, tradeAmount)
         }
-        
+
         // Refresh balances and market data
         await loadUserBalances()
         await loadMarketData()
         if (curveAddress) {
           await loadCurveInfo(curveAddress)
         }
-        
+
         // Add price point to history
         if (marketData && marketData.currentPrice > 0) {
           addPricePoint(marketData.currentPrice)
         }
-        
+
         // Reset form after a delay
         setTimeout(() => {
           setTradeAmount('')
@@ -478,7 +478,7 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
             <span className="text-sm text-slate-700">({displayCoin.symbol})</span>
           </div>
           <p className="text-sm text-slate-800 mb-3 leading-relaxed">{displayCoin.description}</p>
-          
+
           {/* Real Market Data */}
           {marketData && (
             <div className="grid grid-cols-2 gap-4 text-xs text-slate-700 mb-3">
@@ -492,7 +492,7 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
               </div>
             </div>
           )}
-          
+
           {/* Price Chart Toggle */}
           {marketData && marketData.currentPrice > 0 && (
             <div className="mb-3">
@@ -513,7 +513,7 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
               )}
             </div>
           )}
-          
+
           {/* Liquidity Status */}
           <div className="flex items-center gap-2 mb-3">
             {tradingEnabled ? (
@@ -578,7 +578,7 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
                 handleTrade('buy')
               }}
               disabled={isTrading || !tradeAmount || parseFloat(tradeAmount) <= 0 || !isConnected}
-              className={"flex-1 "+neoButton+" bg-green-400 hover:bg-green-300 text-slate-900 font-bold disabled:opacity-50"}
+              className={"flex-1 " + neoButton + " bg-green-400 hover:bg-green-300 text-slate-900 font-bold disabled:opacity-50"}
             >
               {isTrading && tradeAction === 'buy' ? (
                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
@@ -587,14 +587,14 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
               )}
               {isTrading && tradeAction === 'buy' ? 'Buying...' : 'Buy'}
             </Button>
-            
+
             <Button
               onClick={(e) => {
                 e.stopPropagation()
                 handleTrade('sell')
               }}
               disabled={isTrading || !tradeAmount || parseFloat(tradeAmount) <= 0 || !isConnected}
-              className={"flex-1 "+neoButton+" bg-red-400 hover:bg-red-300 text-slate-900 font-bold disabled:opacity-50"}
+              className={"flex-1 " + neoButton + " bg-red-400 hover:bg-red-300 text-slate-900 font-bold disabled:opacity-50"}
             >
               {isTrading && tradeAction === 'sell' ? (
                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
@@ -611,7 +611,7 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
               {error}
             </div>
           )}
-          
+
           {success && (
             <div className="p-3 bg-green-200 border-2 border-black rounded-lg text-green-900 text-xs shadow-[3px_3px_0_#000]">
               {success}
@@ -691,7 +691,7 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
           <BarChart3 className="w-3 h-3 mr-1" />
           Chart
         </Button>
-        
+
         <Button
           variant="secondary"
           size="sm"
@@ -711,15 +711,15 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
           <div>Contract: {coin.tokenAddress ? `${coin.tokenAddress.slice(0, 8)}...${coin.tokenAddress.slice(-6)}` : 'N/A'}</div>
           <div>Creator: {(displayCoin.creator || '').slice(0, 6)}...{(displayCoin.creator || '').slice(-4)}</div>
         </div>
-        
+
         {/* Social Media Links (Real URLs) */}
         {(coin.telegramUrl || coin.xUrl || coin.discordUrl || coin.websiteUrl) && (
           <div className="flex items-center gap-2 mt-2 text-xs text-slate-700">
             <span>Social:</span>
             {coin.telegramUrl && (
-              <a 
-                href={coin.telegramUrl} 
-                target="_blank" 
+              <a
+                href={coin.telegramUrl}
+                target="_blank"
                 rel="noopener noreferrer"
                 className="underline decoration-black decoration-2 underline-offset-2 hover:text-blue-700"
                 onClick={(e) => e.stopPropagation()}
@@ -728,9 +728,9 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
               </a>
             )}
             {coin.xUrl && (
-              <a 
-                href={coin.xUrl} 
-                target="_blank" 
+              <a
+                href={coin.xUrl}
+                target="_blank"
                 rel="noopener noreferrer"
                 className="underline decoration-black decoration-2 underline-offset-2 hover:text-slate-900"
                 onClick={(e) => e.stopPropagation()}
@@ -739,9 +739,9 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
               </a>
             )}
             {coin.discordUrl && (
-              <a 
-                href={coin.discordUrl} 
-                target="_blank" 
+              <a
+                href={coin.discordUrl}
+                target="_blank"
                 rel="noopener noreferrer"
                 className="underline decoration-black decoration-2 underline-offset-2 hover:text-indigo-800"
                 onClick={(e) => e.stopPropagation()}
@@ -750,9 +750,9 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
               </a>
             )}
             {coin.websiteUrl && (
-              <a 
-                href={coin.websiteUrl} 
-                target="_blank" 
+              <a
+                href={coin.websiteUrl}
+                target="_blank"
                 rel="noopener noreferrer"
                 className="underline decoration-black decoration-2 underline-offset-2 hover:text-green-800"
                 onClick={(e) => e.stopPropagation()}

@@ -172,7 +172,7 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
         name,
         symbol,
         seedTokenAmount: supply.replace(/_/g, ''),
-        seedOgAmount: '0.5' // Default seed amount in MATIC - can be made configurable
+        seedOgAmount: '0.1' // Reduced seed amount in MATIC - more affordable
       })
 
       if (!result.success) {
@@ -182,18 +182,18 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
       // Resolve token/curve addresses - MUST have both before proceeding
       let tokenAddr = result.tokenAddress
       let curveAddr = result.curveAddress
-      
+
       // If addresses are missing, resolve them aggressively
       if (!tokenAddr || !curveAddr) {
         console.log('⏳ Resolving bonding curve addresses from transaction...')
         setStatus('⏳ Resolving bonding curve addresses (this may take 30-60 seconds)...')
-        
+
         // Try up to 10 times with increasing delays (total ~2 minutes max)
         let resolved = false
         for (let attempt = 0; attempt < 10; attempt++) {
           if (attempt > 0) {
             const delay = Math.min(3000 * attempt, 10000) // 3s, 6s, 9s, 10s, 10s...
-            setStatus(`⏳ Resolving addresses... (attempt ${attempt + 1}/10, waiting ${delay/1000}s)`)
+            setStatus(`⏳ Resolving addresses... (attempt ${attempt + 1}/10, waiting ${delay / 1000}s)`)
             await new Promise(r => setTimeout(r, delay))
           }
 
@@ -255,27 +255,27 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
         )
       }
 
-      console.log('✅ Final addresses validated:', { 
-        tokenAddress: tokenAddr, 
+      console.log('✅ Final addresses validated:', {
+        tokenAddress: tokenAddr,
         curveAddress: curveAddr,
-        txHash: result.txHash 
+        txHash: result.txHash
       })
 
       // Verify bonding curve is seeded and ready for trading
       setStatus('⏳ Verifying bonding curve is ready for trading...')
       try {
         const isMainnet = process.env.NEXT_PUBLIC_NETWORK === 'polygon'
-        const rpcUrl = process.env.NEXT_PUBLIC_EVM_RPC || 
-                       (isMainnet 
-                         ? 'https://polygon-mainnet.infura.io/v3/2a16fc884a10441eae11c29cd9b9aa5f'
-                         : 'https://polygon-amoy.infura.io/v3/b4f237515b084d4bad4e5de070b0452f')
+        const rpcUrl = process.env.NEXT_PUBLIC_EVM_RPC ||
+          (isMainnet
+            ? 'https://polygon-mainnet.infura.io/v3/2a16fc884a10441eae11c29cd9b9aa5f'
+            : 'https://polygon-amoy.infura.io/v3/b4f237515b084d4bad4e5de070b0452f')
         const readProvider = new ethers.JsonRpcProvider(rpcUrl)
         const curveInfo = await newBondingCurveTradingService.getCurveInfo(curveAddr, readProvider)
-        
+
         if (!curveInfo) {
           throw new Error('Could not verify bonding curve. Please check the curve address.')
         }
-        
+
         if (!curveInfo.seeded) {
           console.warn('⚠️ Bonding curve not seeded yet, but addresses are valid')
           setStatus('⚠️ Bonding curve is being initialized. Trading will be available shortly.')
@@ -592,7 +592,7 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
                       <div className="mt-3 p-2 bg-sky-100 rounded text-xs text-slate-900 border-2 border-black">
                         <div className="font-medium mb-1">How it works:</div>
                         <div>1. Create token with initial supply</div>
-                        <div>2. System automatically seeds 0.5 MATIC liquidity</div>
+                        <div>2. System automatically seeds 0.1 MATIC liquidity</div>
                         <div>3. Trading starts immediately with bonding curve</div>
                         <div>4. Price adjusts dynamically with each trade</div>
                       </div>
