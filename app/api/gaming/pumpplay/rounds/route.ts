@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requirePostgres } from '../../../../../lib/gamingPostgres'
-import { initializeSchema, getSql } from '@/lib/postgresManager'
+import { requirePostgres, initializeGamingSchema } from '@/lib/gamingDb'
+
+// Force dynamic rendering to prevent build-time execution
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
 /**
  * Get PumpPlay rounds

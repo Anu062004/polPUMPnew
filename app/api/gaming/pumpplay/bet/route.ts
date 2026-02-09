@@ -3,6 +3,10 @@ import { requirePostgres } from '../../../../../lib/gamingPostgres'
 import { verifySignatureWithTimestamp, generateSignMessage } from '../../../../../lib/authUtils'
 import { validateRoundId, validateAddress, validatePositiveNumber } from '../../../../../lib/validationUtils'
 
+// Force dynamic rendering to prevent build-time execution
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 /**
  * Place a bet on a PumpPlay round
  * SECURITY: Requires wallet signature verification
@@ -11,12 +15,12 @@ import { validateRoundId, validateAddress, validatePositiveNumber } from '../../
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { 
-      roundId, 
-      userAddress, 
-      coinId, 
-      amount, 
-      tokenAddress, 
+    const {
+      roundId,
+      userAddress,
+      coinId,
+      amount,
+      tokenAddress,
       txHash,
       signature,
       message,
@@ -59,9 +63,9 @@ export async function POST(request: NextRequest) {
     if (process.env.NODE_ENV === 'production' || process.env.REQUIRE_SIGNATURE === 'true') {
       if (!signature || !message) {
         return NextResponse.json(
-          { 
-            success: false, 
-            error: 'Wallet signature required. Please sign the message to place a bet.' 
+          {
+            success: false,
+            error: 'Wallet signature required. Please sign the message to place a bet.'
           },
           { status: 401 }
         )
@@ -76,9 +80,9 @@ export async function POST(request: NextRequest) {
 
       if (!verification.isValid) {
         return NextResponse.json(
-          { 
-            success: false, 
-            error: `Signature verification failed: ${verification.error}` 
+          {
+            success: false,
+            error: `Signature verification failed: ${verification.error}`
           },
           { status: 401 }
         )
@@ -152,8 +156,8 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Error placing bet:', error)
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: error.message || 'Failed to place bet',
         details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       },

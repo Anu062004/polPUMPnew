@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requirePostgres } from '../../../../../lib/gamingPostgres'
+import { DatabaseManager } from '@/lib/databaseManager'
+
+// Force dynamic rendering to prevent build-time execution
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 import { verifySignatureWithTimestamp } from '../../../../../lib/authUtils'
 import { validateGameId, validateAddress, validateInteger } from '../../../../../lib/validationUtils'
 
@@ -11,9 +16,9 @@ import { validateGameId, validateAddress, validateInteger } from '../../../../..
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { 
-      gameId, 
-      tileIndex, 
+    const {
+      gameId,
+      tileIndex,
       userAddress,
       signature,
       message
@@ -48,9 +53,9 @@ export async function POST(request: NextRequest) {
     if (process.env.NODE_ENV === 'production' || process.env.REQUIRE_SIGNATURE === 'true') {
       if (!signature || !message) {
         return NextResponse.json(
-          { 
-            success: false, 
-            error: 'Wallet signature required. Please sign the message to reveal tile.' 
+          {
+            success: false,
+            error: 'Wallet signature required. Please sign the message to reveal tile.'
           },
           { status: 401 }
         )
@@ -65,9 +70,9 @@ export async function POST(request: NextRequest) {
 
       if (!verification.isValid) {
         return NextResponse.json(
-          { 
-            success: false, 
-            error: `Signature verification failed: ${verification.error}` 
+          {
+            success: false,
+            error: `Signature verification failed: ${verification.error}`
           },
           { status: 401 }
         )
@@ -131,14 +136,14 @@ export async function POST(request: NextRequest) {
       let revealedTiles: number[] = []
       try {
         revealedTiles = JSON.parse(game.revealed_tiles || '[]')
-      } catch {}
+      } catch { }
       revealedTiles.push(tileIndex)
 
       // Check if it's a mine
       if (tile.isMine) {
         // Game over - lost
         const allMines = gridState.filter((t: any) => t.isMine).map((t: any) => t.index)
-        
+
         await sql`
           UPDATE gaming_mines 
           SET grid_state = ${JSON.stringify(gridState)}, 
@@ -159,7 +164,7 @@ export async function POST(request: NextRequest) {
           gridState: gridState.map((t: any) => ({ index: t.index, revealed: t.revealed, isMine: t.isMine })),
         })
       }
-      
+
       // Calculate new multiplier (increases with each safe reveal)
       const safeReveals = revealedTiles.length
       const newMultiplier = 1.0 + (safeReveals * 0.1) // 10% increase per safe reveal
@@ -169,7 +174,7 @@ export async function POST(request: NextRequest) {
       if (revealedTiles.length >= totalSafeTiles) {
         // Game won
         const allMines = gridState.filter((t: any) => t.isMine).map((t: any) => t.index)
-        
+
         await sql`
           UPDATE gaming_mines 
           SET grid_state = ${JSON.stringify(gridState)}, 
@@ -218,8 +223,8 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Error revealing tile:', error)
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: error.message || 'Failed to reveal tile',
         details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       },

@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requirePostgres } from '../../../../../lib/gamingPostgres'
+import { requirePostgres, initializeGamingSchema } from '@/lib/gamingDb'
 import { verifySignatureWithTimestamp } from '../../../../../lib/authUtils'
 import { validateAddress, validatePositiveNumber, validateCoinflipChoice } from '../../../../../lib/validationUtils'
 import { ethers } from 'ethers'
 import { getEvmRpcUrl } from '../../../../../lib/rpcConfig'
+
+// Force dynamic rendering to prevent build-time execution
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
 /**
  * Play a coinflip game
@@ -13,9 +17,9 @@ import { getEvmRpcUrl } from '../../../../../lib/rpcConfig'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { 
-      userAddress, 
-      wager, 
+    const {
+      userAddress,
+      wager,
       choice,
       signature,
       message
@@ -50,9 +54,9 @@ export async function POST(request: NextRequest) {
     if (process.env.NODE_ENV === 'production' || process.env.REQUIRE_SIGNATURE === 'true') {
       if (!signature || !message) {
         return NextResponse.json(
-          { 
-            success: false, 
-            error: 'Wallet signature required. Please sign the message to play.' 
+          {
+            success: false,
+            error: 'Wallet signature required. Please sign the message to play.'
           },
           { status: 401 }
         )
@@ -67,9 +71,9 @@ export async function POST(request: NextRequest) {
 
       if (!verification.isValid) {
         return NextResponse.json(
-          { 
-            success: false, 
-            error: `Signature verification failed: ${verification.error}` 
+          {
+            success: false,
+            error: `Signature verification failed: ${verification.error}`
           },
           { status: 401 }
         )
@@ -82,10 +86,10 @@ export async function POST(request: NextRequest) {
     // Get a recent block for randomness (provably fair)
     const rpcUrl = getEvmRpcUrl() // FIX: Removed hardcoded API key
     const provider = new ethers.JsonRpcProvider(rpcUrl)
-    
+
     let blockNumber: number | null = null
     let blockHash: string | null = null
-    
+
     try {
       const block = await provider.getBlock('latest')
       blockNumber = block?.number || null
@@ -130,8 +134,8 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Error playing coinflip:', error)
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: error.message || 'Failed to play coinflip',
         details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       },

@@ -3,6 +3,10 @@ import { requirePostgres } from '../../../../../lib/gamingPostgres'
 import { verifySignatureWithTimestamp } from '../../../../../lib/authUtils'
 import { validateAddress, validatePositiveNumber, validateStakeSide } from '../../../../../lib/validationUtils'
 
+// Force dynamic rendering to prevent build-time execution
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 /**
  * Start a Meme Royale battle
  * SECURITY: Requires wallet signature verification
@@ -11,13 +15,13 @@ import { validateAddress, validatePositiveNumber, validateStakeSide } from '../.
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { 
-      leftCoin, 
-      rightCoin, 
-      userAddress, 
-      stakeAmount, 
-      stakeSide, 
-      tokenAddress, 
+    const {
+      leftCoin,
+      rightCoin,
+      userAddress,
+      stakeAmount,
+      stakeSide,
+      tokenAddress,
       txHash,
       signature,
       message
@@ -76,9 +80,9 @@ export async function POST(request: NextRequest) {
     if (process.env.NODE_ENV === 'production' || process.env.REQUIRE_SIGNATURE === 'true') {
       if (!signature || !message) {
         return NextResponse.json(
-          { 
-            success: false, 
-            error: 'Wallet signature required. Please sign the message to start battle.' 
+          {
+            success: false,
+            error: 'Wallet signature required. Please sign the message to start battle.'
           },
           { status: 401 }
         )
@@ -93,9 +97,9 @@ export async function POST(request: NextRequest) {
 
       if (!verification.isValid) {
         return NextResponse.json(
-          { 
-            success: false, 
-            error: `Signature verification failed: ${verification.error}` 
+          {
+            success: false,
+            error: `Signature verification failed: ${verification.error}`
           },
           { status: 401 }
         )
@@ -122,7 +126,7 @@ export async function POST(request: NextRequest) {
 
     // Check if user won
     const userWon = (stakeSide.toLowerCase() === 'left' && winnerCoinId === leftCoinId) ||
-                    (stakeSide.toLowerCase() === 'right' && winnerCoinId === rightCoinId)
+      (stakeSide.toLowerCase() === 'right' && winnerCoinId === rightCoinId)
 
     return NextResponse.json({
       success: true,
@@ -137,8 +141,8 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Error processing battle:', error)
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: error.message || 'Failed to process battle',
         details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       },

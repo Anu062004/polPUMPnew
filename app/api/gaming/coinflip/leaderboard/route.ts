@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { databaseManager } from '../../../../../lib/databaseManager'
 
+// Force dynamic rendering to prevent build-time execution
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 export async function GET(request: NextRequest) {
   try {
     await databaseManager.initialize()

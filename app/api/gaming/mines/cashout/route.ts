@@ -3,6 +3,10 @@ import { requirePostgres } from '../../../../../lib/gamingPostgres'
 import { verifySignatureWithTimestamp } from '../../../../../lib/authUtils'
 import { validateGameId, validateAddress } from '../../../../../lib/validationUtils'
 
+// Force dynamic rendering to prevent build-time execution
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 /**
  * Cash out from a Mines game
  * SECURITY: Requires wallet signature verification
@@ -11,8 +15,8 @@ import { validateGameId, validateAddress } from '../../../../../lib/validationUt
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { 
-      gameId, 
+    const {
+      gameId,
       userAddress,
       signature,
       message
@@ -39,9 +43,9 @@ export async function POST(request: NextRequest) {
     if (process.env.NODE_ENV === 'production' || process.env.REQUIRE_SIGNATURE === 'true') {
       if (!signature || !message) {
         return NextResponse.json(
-          { 
-            success: false, 
-            error: 'Wallet signature required. Please sign the message to cash out.' 
+          {
+            success: false,
+            error: 'Wallet signature required. Please sign the message to cash out.'
           },
           { status: 401 }
         )
@@ -56,9 +60,9 @@ export async function POST(request: NextRequest) {
 
       if (!verification.isValid) {
         return NextResponse.json(
-          { 
-            success: false, 
-            error: `Signature verification failed: ${verification.error}` 
+          {
+            success: false,
+            error: `Signature verification failed: ${verification.error}`
           },
           { status: 401 }
         )
@@ -89,9 +93,9 @@ export async function POST(request: NextRequest) {
 
       if (game.status !== 'active') {
         return NextResponse.json(
-          { 
-            success: false, 
-            error: `Game is not active (status: ${game.status})` 
+          {
+            success: false,
+            error: `Game is not active (status: ${game.status})`
           },
           { status: 400 }
         )
@@ -114,9 +118,9 @@ export async function POST(request: NextRequest) {
       // Check if update succeeded (another request may have cashed out first)
       if (updateResult.length === 0) {
         return NextResponse.json(
-          { 
-            success: false, 
-            error: 'Game was already cashed out or is no longer active' 
+          {
+            success: false,
+            error: 'Game was already cashed out or is no longer active'
           },
           { status: 409 } // Conflict
         )
@@ -135,8 +139,8 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Error cashing out:', error)
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: error.message || 'Failed to cash out',
         details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       },

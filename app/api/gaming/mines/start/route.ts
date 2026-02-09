@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requirePostgres } from '../../../../../lib/gamingPostgres'
+import { DatabaseManager } from '@/lib/databaseManager'
+
+// Force dynamic rendering to prevent build-time execution
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 import { verifySignatureWithTimestamp } from '../../../../../lib/authUtils'
 import { validateAddress, validatePositiveNumber, validateMinesCount } from '../../../../../lib/validationUtils'
 
@@ -11,10 +15,10 @@ import { validateAddress, validatePositiveNumber, validateMinesCount } from '../
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { 
-      userAddress, 
-      betAmount, 
-      tokenAddress, 
+    const {
+      userAddress,
+      betAmount,
+      tokenAddress,
       minesCount,
       signature,
       message
@@ -57,9 +61,9 @@ export async function POST(request: NextRequest) {
     if (process.env.NODE_ENV === 'production' || process.env.REQUIRE_SIGNATURE === 'true') {
       if (!signature || !message) {
         return NextResponse.json(
-          { 
-            success: false, 
-            error: 'Wallet signature required. Please sign the message to start game.' 
+          {
+            success: false,
+            error: 'Wallet signature required. Please sign the message to start game.'
           },
           { status: 401 }
         )
@@ -74,9 +78,9 @@ export async function POST(request: NextRequest) {
 
       if (!verification.isValid) {
         return NextResponse.json(
-          { 
-            success: false, 
-            error: `Signature verification failed: ${verification.error}` 
+          {
+            success: false,
+            error: `Signature verification failed: ${verification.error}`
           },
           { status: 401 }
         )
@@ -124,8 +128,8 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Error starting mines game:', error)
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: error.message || 'Failed to start game',
         details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       },
