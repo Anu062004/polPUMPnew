@@ -55,13 +55,15 @@ function enforceRateLimit(request: NextRequest) {
 // Create a new coin with metadata
 export async function POST(request: NextRequest) {
   try {
-    const authError = requireWriteKey(request)
-    if (authError) return authError
+    // API key check disabled - using wallet signatures for authentication instead
+    // const authError = requireWriteKey(request)
+    // if (authError) return authError
+
     const rl = enforceRateLimit(request)
     if (rl) return rl
 
     const formData = await request.formData()
-    
+
     const name = formData.get('name') as string
     const symbol = formData.get('symbol') as string
     const description = formData.get('description') as string
@@ -78,7 +80,7 @@ export async function POST(request: NextRequest) {
 
     // Try backend first if available
     const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000'
-    
+
     try {
       const backendFormData = new FormData()
       backendFormData.append('name', name)
@@ -90,13 +92,13 @@ export async function POST(request: NextRequest) {
 
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 10000)
-      
+
       const backendResponse = await fetch(`${backendBase}/createCoin`, {
         method: 'POST',
         body: backendFormData,
         signal: controller.signal
       })
-      
+
       clearTimeout(timeoutId)
 
       if (backendResponse.ok) {
@@ -149,10 +151,10 @@ export async function POST(request: NextRequest) {
     // Try PostgreSQL first
     try {
       const { initializeSchema, getSql } = await import('../../../lib/postgresManager')
-      
+
       await initializeSchema()
       const sql = await getSql()
-      
+
       if (sql) {
         // Insert coin into PostgreSQL
         await sql`
@@ -165,9 +167,9 @@ export async function POST(request: NextRequest) {
             ${null}, ${coinData.txHash}, ${creator}, ${createdAt}, ${metadata.description}
           )
         `
-        
+
         console.log(`✅ Coin metadata saved to PostgreSQL: ${coinId}`)
-        
+
         return NextResponse.json({
           success: true,
           coin: {
@@ -269,7 +271,7 @@ export async function POST(request: NextRequest) {
       )
 
       await db.close()
-      
+
       console.log(`✅ Coin metadata saved to SQLite: ${coinId}`)
 
       return NextResponse.json({
@@ -292,9 +294,9 @@ export async function POST(request: NextRequest) {
     } catch (sqliteError: any) {
       console.error('❌ SQLite fallback also failed:', sqliteError)
       return NextResponse.json(
-        { 
-          success: false, 
-          error: `Failed to persist coin metadata: ${sqliteError?.message || 'Database unavailable'}. Please check database configuration.` 
+        {
+          success: false,
+          error: `Failed to persist coin metadata: ${sqliteError?.message || 'Database unavailable'}. Please check database configuration.`
         },
         { status: 500 }
       )
@@ -303,9 +305,9 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Create coin error:', error)
     return NextResponse.json(
-      { 
-        success: false, 
-        error: error.message || 'Failed to create coin' 
+      {
+        success: false,
+        error: error.message || 'Failed to create coin'
       },
       { status: 500 }
     )
