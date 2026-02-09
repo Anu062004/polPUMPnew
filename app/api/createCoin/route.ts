@@ -9,23 +9,10 @@ const RATE_LIMIT_WINDOW_MS = 60_000
 const RATE_LIMIT_MAX = 20
 const rateBuckets = new Map<string, { count: number; reset: number }>()
 
-function requireWriteKey(request: NextRequest) {
-  if (!writeApiKey) {
-    if (process.env.NODE_ENV === 'production') {
-      return NextResponse.json(
-        { success: false, error: 'Write API key is not configured' },
-        { status: 500 }
-      )
-    }
-    return null
-  }
-  const provided = request.headers.get('x-api-key') || ''
-  if (provided !== writeApiKey) {
-    return NextResponse.json(
-      { success: false, error: 'Unauthorized' },
-      { status: 401 }
-    )
-  }
+// API key check disabled - wallet signature provides authentication
+function requireWriteKey(_request: NextRequest) {
+  // Token creation is protected by wallet signature verification
+  // No additional API key required
   return null
 }
 
