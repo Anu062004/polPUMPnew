@@ -17,12 +17,22 @@ const isVercelPostgres = !!(process.env.POSTGRES_PRISMA_URL || process.env.POSTG
  * Uses @vercel/postgres in production, falls back to pg Pool for local dev
  */
 export async function getDb() {
+  // Debug logging
+  console.log('🔍 getDb() called - Environment check:', {
+    POSTGRES_PRISMA_URL: process.env.POSTGRES_PRISMA_URL ? 'SET' : 'NOT SET',
+    POSTGRES_URL: process.env.POSTGRES_URL ? 'SET' : 'NOT SET',
+    POSTGRES_URL_NON_POOLING: process.env.POSTGRES_URL_NON_POOLING ? 'SET' : 'NOT SET',
+    isVercelPostgres,
+    NODE_ENV: process.env.NODE_ENV,
+    VERCEL: process.env.VERCEL
+  })
+
   // Check if we're in Vercel environment
   if (isVercelPostgres) {
     // Use direct sql import from @vercel/postgres (recommended approach)
     // This automatically reads from POSTGRES_PRISMA_URL environment variable
     const pooledUrl = process.env.POSTGRES_PRISMA_URL
-    
+
     if (!pooledUrl) {
       // No pooled connection available - don't try to use direct connection
       console.warn('⚠️ POSTGRES_PRISMA_URL not found. Postgres operations will be skipped.')
@@ -32,23 +42,23 @@ export async function getDb() {
         'Please configure POSTGRES_PRISMA_URL in your Vercel project settings.'
       )
     }
-    
+
     // Verify sql is available and is a function
     if (!vercelSql || typeof vercelSql !== 'function') {
       throw new Error(`sql from @vercel/postgres is not available or not a function. Type: ${typeof vercelSql}`)
     }
-    
+
     console.log('✅ Using Vercel Postgres sql template tag (POSTGRES_PRISMA_URL from env)')
-    
+
     return { type: 'vercel', sql: vercelSql }
   }
 
   // Fallback to standard pg Pool for local development
   if (!pool) {
-    const connectionString = process.env.DATABASE_URL || 
-                             process.env.POSTGRES_URL ||
-                             'postgresql://localhost:5432/polpump'
-    
+    const connectionString = process.env.DATABASE_URL ||
+      process.env.POSTGRES_URL ||
+      'postgresql://localhost:5432/polpump'
+
     pool = new Pool({
       connectionString,
       max: 20,
@@ -72,25 +82,25 @@ export async function initializeSchema() {
   try {
     // Check if PostgreSQL is configured
     // Prioritize pooled connection string for Vercel
-    const hasPostgres = !!(process.env.POSTGRES_PRISMA_URL || 
-                          process.env.POSTGRES_URL || 
-                          process.env.POSTGRES_URL_NON_POOLING ||
-                          process.env.DATABASE_URL)
-    
+    const hasPostgres = !!(process.env.POSTGRES_PRISMA_URL ||
+      process.env.POSTGRES_URL ||
+      process.env.POSTGRES_URL_NON_POOLING ||
+      process.env.DATABASE_URL)
+
     if (!hasPostgres) {
       console.warn('⚠️ No PostgreSQL connection string found. Using fallback.')
       return
     }
-    
+
     // Check if we have pooled connection (required for Vercel)
     if (isVercelPostgres && !process.env.POSTGRES_PRISMA_URL && process.env.POSTGRES_URL) {
       // Only direct connection available - this won't work with sql template tag
       console.warn('⚠️ Only direct connection string (POSTGRES_URL) found. Pooled connection (POSTGRES_PRISMA_URL) is recommended for Vercel.')
       // Don't throw error, just warn - let it try and fail gracefully
     }
-    
+
     const db = await getDb()
-    
+
     // Check if we're using Vercel Postgres or standard pg
     if (db.type === 'pg') {
       // Standard pg Pool
@@ -337,7 +347,7 @@ export async function initializeSchema() {
         throw new Error('Expected Vercel Postgres')
       }
       const { sql } = db
-      
+
       await sql`
         CREATE TABLE IF NOT EXISTS coins (
           id VARCHAR(255) PRIMARY KEY,
@@ -502,27 +512,27 @@ export async function initializeSchema() {
     if (error?.stack) {
       console.error('Error stack:', error.stack)
     }
-    
+
     // If it's a connection string error, provide helpful message
-    if (error.code === 'invalid_connection_string' || 
-        error.message?.includes('connection string') ||
-        error.message?.includes('POSTGRES_PRISMA_URL')) {
+    if (error.code === 'invalid_connection_string' ||
+      error.message?.includes('connection string') ||
+      error.message?.includes('POSTGRES_PRISMA_URL')) {
       console.error('💡 Tip: Make sure POSTGRES_PRISMA_URL (pooled connection) is configured in Vercel')
       console.error('💡 Check that the environment variable is set in Vercel project settings')
       // Don't throw - let the calling code handle fallback
       return
     }
-    
+
     // If it's a TypeError, log more details
     if (error instanceof TypeError || error?.constructor?.name === 'TypeError') {
       console.error('💡 TypeError detected - this might be a client initialization issue')
       console.error('💡 Make sure @vercel/postgres package is installed: npm install @vercel/postgres')
     }
-    
+
     // Only throw if it's not a connection/client issue (might be a real schema problem)
-    if (!error.message?.includes('connection') && 
-        !error.message?.includes('POSTGRES') &&
-        !(error instanceof TypeError)) {
+    if (!error.message?.includes('connection') &&
+      !error.message?.includes('POSTGRES') &&
+      !(error instanceof TypeError)) {
       throw error
     }
   }
@@ -534,7 +544,7 @@ export async function initializeSchema() {
  */
 export async function query(text: string, params?: any[]) {
   const db = await getDb()
-  
+
   if (db.type === 'pg') {
     return await db.pool.query(text, params)
   } else {
@@ -560,10 +570,10 @@ export async function getSql() {
     return null
   } catch (error: any) {
     // If connection fails, return null so caller can use SQLite fallback
-    if (error.code === 'invalid_connection_string' || 
-        error.message?.includes('connection string') ||
-        error.message?.includes('POSTGRES_PRISMA_URL') ||
-        error.message?.includes('not properly initialized')) {
+    if (error.code === 'invalid_connection_string' ||
+      error.message?.includes('connection string') ||
+      error.message?.includes('POSTGRES_PRISMA_URL') ||
+      error.message?.includes('not properly initialized')) {
       console.warn('⚠️ Cannot get Postgres SQL client, will use SQLite fallback:', error.message)
       return null
     }
