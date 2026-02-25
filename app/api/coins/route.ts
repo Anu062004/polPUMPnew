@@ -5,6 +5,8 @@ import sqlite3 from 'sqlite3'
 import { open } from 'sqlite'
 import { ethers } from 'ethers'
 import { CONTRACT_CONFIG } from '../../../lib/contract-config'
+import { upsertCreatorWallet, linkCreatorToken } from '../../../lib/creatorService'
+import { extractTokenFromHeader, verifyToken } from '../../../lib/jwtUtils'
 
 // Helper function to get database path (handles serverless environments)
 function getDbPath() {
@@ -38,10 +40,12 @@ function getRpcUrl(): string {
 }
 const RPC_URL = getRpcUrl()
 
-// Security/ops controls
+// Allow SQLite fallback for local development when Postgres is unavailable.
+// Keep production on Postgres unless explicitly enabled via env.
 const allowSqliteFallback =
-  process.env.NODE_ENV !== 'production' &&
-  process.env.ALLOW_SQLITE_FALLBACK !== '0'
+  process.env.ENABLE_SQLITE_FALLBACK === '1' ||
+  process.env.ENABLE_SQLITE_FALLBACK === 'true' ||
+  process.env.NODE_ENV !== 'production'
 const writeApiKey = process.env.API_AUTH_TOKEN || ''
 
 const RATE_LIMIT_WINDOW_MS = 60_000
@@ -94,6 +98,52 @@ function requireWriteKey(request: NextRequest) {
     )
   }
   return null
+}
+
+async function authorizeCoinWrite(
+  request: NextRequest,
+  creatorWallet: string
+): Promise<{ creatorWallet: string } | { error: NextResponse }> {
+  // Service-to-service writes are allowed with API key.
+  if (writeApiKey) {
+    const provided = request.headers.get('x-api-key') || ''
+    if (provided === writeApiKey) {
+      return { creatorWallet }
+    }
+  }
+
+  // Frontend writes must come from authenticated CREATOR role.
+  const token = extractTokenFromHeader(request.headers.get('authorization'))
+  if (!token) {
+    return {
+      error: NextResponse.json(
+        { success: false, error: 'CREATOR role required for token creation' },
+        { status: 403 }
+      ),
+    }
+  }
+
+  const payload = await verifyToken(token)
+  if (!payload?.wallet || payload.role !== 'CREATOR') {
+    return {
+      error: NextResponse.json(
+        { success: false, error: 'CREATOR role required for token creation' },
+        { status: 403 }
+      ),
+    }
+  }
+
+  const normalizedAuthenticatedWallet = payload.wallet.toLowerCase()
+  if (normalizedAuthenticatedWallet !== creatorWallet) {
+    return {
+      error: NextResponse.json(
+        { success: false, error: 'Creator wallet must match authenticated CREATOR wallet' },
+        { status: 403 }
+      ),
+    }
+  }
+
+  return { creatorWallet: normalizedAuthenticatedWallet }
 }
 
 const FACTORY_ABI = [
@@ -205,6 +255,12 @@ async function getDatabase() {
  * PostgreSQL isn't available or not configured in local development).
  */
 async function loadCoinsFromSqlite(limit = 100) {
+  try {
+    await fs.access(DB_PATH)
+  } catch {
+    return []
+  }
+
   const db = await getDatabase()
   try {
     const rows = await db.all<any[]>(
@@ -353,11 +409,26 @@ export async function GET(request: NextRequest) {
 
           // Create a unique key for deduplication
           // Use id as primary key, fallback to other identifiers
+          const normalizedId =
+            mappedCoin.id !== undefined && mappedCoin.id !== null
+              ? String(mappedCoin.id).toLowerCase()
+              : null
+          const normalizedTokenAddress =
+            typeof mappedCoin.tokenAddress === 'string'
+              ? mappedCoin.tokenAddress.toLowerCase()
+              : null
+          const normalizedTxHash =
+            typeof mappedCoin.txHash === 'string' ? mappedCoin.txHash.toLowerCase() : null
+          const normalizedSymbol =
+            typeof mappedCoin.symbol === 'string' ? mappedCoin.symbol.toLowerCase() : ''
+          const normalizedName =
+            typeof mappedCoin.name === 'string' ? mappedCoin.name.toLowerCase() : ''
+
           const key =
-            mappedCoin.id?.toLowerCase() ||
-            (mappedCoin.tokenAddress ? `token_${mappedCoin.tokenAddress.toLowerCase()}` : null) ||
-            (mappedCoin.txHash ? `tx_${mappedCoin.txHash.toLowerCase()}` : null) ||
-            `${mappedCoin.symbol?.toLowerCase()}-${mappedCoin.name?.toLowerCase()}-${mappedCoin.createdAt}` ||
+            normalizedId ||
+            (normalizedTokenAddress ? `token_${normalizedTokenAddress}` : null) ||
+            (normalizedTxHash ? `tx_${normalizedTxHash}` : null) ||
+            `${normalizedSymbol}-${normalizedName}-${mappedCoin.createdAt}` ||
             `coin_${coinMap.size}` // Fallback to prevent filtering out coins
 
           // Only skip if we have a valid key and it already exists
@@ -641,8 +712,6 @@ function parsePairCreatedLogs(
 
 export async function POST(request: NextRequest) {
   try {
-    const authError = requireWriteKey(request)
-    if (authError) return authError
     const rl = enforceRateLimit(request, 'coins-post')
     if (rl) return rl
 
@@ -652,6 +721,16 @@ export async function POST(request: NextRequest) {
     if (!coinData.name || !coinData.symbol || !coinData.supply) {
       return NextResponse.json(
         { success: false, error: 'Missing required fields' },
+        { status: 400 }
+      )
+    }
+
+    if (!coinData.creator || !ethers.isAddress(coinData.creator)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Invalid creator wallet address.',
+        },
         { status: 400 }
       )
     }
@@ -686,6 +765,12 @@ export async function POST(request: NextRequest) {
         },
         { status: 400 }
       )
+    }
+
+    const normalizedCreatorWallet = ethers.getAddress(coinData.creator).toLowerCase()
+    const writeAuth = await authorizeCoinWrite(request, normalizedCreatorWallet)
+    if ('error' in writeAuth) {
+      return writeAuth.error
     }
 
     let normalizedTokenAddress: string
@@ -760,6 +845,17 @@ export async function POST(request: NextRequest) {
           WHERE id = ${existingId}
         `
 
+        try {
+          await upsertCreatorWallet(normalizedCreatorWallet)
+          await linkCreatorToken({
+            creatorWallet: normalizedCreatorWallet,
+            tokenAddress: normalizedTokenAddress,
+            coinId: existingId,
+          })
+        } catch (creatorSyncError: any) {
+          console.warn('Failed to sync creator registry after coin update:', creatorSyncError?.message || creatorSyncError)
+        }
+
         console.log(`✅ Updated existing coin ${existingId} with token address: ${normalizedTokenAddress}`)
 
         return NextResponse.json({
@@ -773,7 +869,7 @@ export async function POST(request: NextRequest) {
             tokenAddress: normalizedTokenAddress,
             curveAddress: normalizedCurveAddress,
             txHash: coinData.txHash,
-            creator: coinData.creator,
+            creator: normalizedCreatorWallet,
             createdAt: new Date(createdAt).toISOString(),
             description,
           },
@@ -797,11 +893,22 @@ export async function POST(request: NextRequest) {
         ) VALUES (
           ${coinId}, ${coinData.name}, ${coinData.symbol}, ${coinData.supply},
           ${safeImageHash}, ${normalizedTokenAddress}, ${normalizedCurveAddress}, ${coinData.txHash},
-          ${coinData.creator}, ${createdAt}, ${description},
+          ${normalizedCreatorWallet}, ${createdAt}, ${description},
           ${coinData.telegramUrl || null}, ${coinData.xUrl || null},
           ${coinData.discordUrl || null}, ${coinData.websiteUrl || null}
         )
       `
+
+      try {
+        await upsertCreatorWallet(normalizedCreatorWallet)
+        await linkCreatorToken({
+          creatorWallet: normalizedCreatorWallet,
+          tokenAddress: normalizedTokenAddress,
+          coinId,
+        })
+      } catch (creatorSyncError: any) {
+        console.warn('Failed to sync creator registry after coin insert:', creatorSyncError?.message || creatorSyncError)
+      }
 
       console.log(`✅ New coin added to PostgreSQL: ${coinId} with token address: ${normalizedTokenAddress}`)
 
@@ -814,7 +921,7 @@ export async function POST(request: NextRequest) {
         tokenAddress: normalizedTokenAddress,
         curveAddress: normalizedCurveAddress,
         txHash: coinData.txHash,
-        creator: coinData.creator,
+        creator: normalizedCreatorWallet,
         createdAt: new Date(createdAt).toISOString(),
         description,
       }
@@ -889,6 +996,18 @@ export async function POST(request: NextRequest) {
         await db.close()
         console.log(`✅ Updated existing coin ${existingId} in SQLite with token address: ${normalizedTokenAddress}`)
 
+        try {
+          await upsertCreatorWallet(normalizedCreatorWallet)
+          await linkCreatorToken({
+            creatorWallet: normalizedCreatorWallet,
+            tokenAddress: normalizedTokenAddress,
+            coinId: existingId,
+          })
+        } catch (creatorSyncError: any) {
+          console.warn('Failed to sync creator registry after SQLite coin update:', creatorSyncError?.message || creatorSyncError)
+        }
+
+
         const updatedCoin = {
           id: existingId,
           name: coinData.name,
@@ -898,7 +1017,7 @@ export async function POST(request: NextRequest) {
           tokenAddress: normalizedTokenAddress,
           curveAddress: normalizedCurveAddress,
           txHash: coinData.txHash,
-          creator: coinData.creator,
+          creator: normalizedCreatorWallet,
           createdAt: new Date(createdAt).toISOString(),
           description,
         }
@@ -934,7 +1053,7 @@ export async function POST(request: NextRequest) {
           normalizedTokenAddress,
           normalizedCurveAddress,
           coinData.txHash,
-          coinData.creator,
+          normalizedCreatorWallet,
           createdAt,
           description,
           coinData.telegramUrl || null,
@@ -948,6 +1067,18 @@ export async function POST(request: NextRequest) {
 
       console.log(`✅ New coin added to SQLite: ${coinId} with token address: ${normalizedTokenAddress}`)
 
+      try {
+        await upsertCreatorWallet(normalizedCreatorWallet)
+        await linkCreatorToken({
+          creatorWallet: normalizedCreatorWallet,
+          tokenAddress: normalizedTokenAddress,
+          coinId,
+        })
+      } catch (creatorSyncError: any) {
+        console.warn('Failed to sync creator registry after SQLite coin insert:', creatorSyncError?.message || creatorSyncError)
+      }
+
+
       const newCoin = {
         id: coinId,
         name: coinData.name,
@@ -957,7 +1088,7 @@ export async function POST(request: NextRequest) {
         tokenAddress: normalizedTokenAddress,
         curveAddress: normalizedCurveAddress,
         txHash: coinData.txHash,
-        creator: coinData.creator,
+        creator: normalizedCreatorWallet,
         createdAt: new Date(createdAt).toISOString(),
         description,
       }
@@ -1015,28 +1146,49 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    const db = await getDatabase()
+    const { initializeSchema, getSql } = await import('../../../lib/postgresManager')
+    await initializeSchema()
+    const sql = await getSql()
+    if (!sql) {
+      return NextResponse.json(
+        { success: false, error: 'PostgreSQL unavailable' },
+        { status: 500 }
+      )
+    }
 
     if (keepSymbol) {
-      // Delete all coins except those with the specified symbol (case-insensitive)
-      const result = await db.run(
-        'DELETE FROM coins WHERE LOWER(symbol) != LOWER(?)',
-        [keepSymbol]
-      )
-      await db.close()
+      const deletedResult = await sql`
+        DELETE FROM coins
+        WHERE LOWER(symbol) <> LOWER(${keepSymbol})
+      `
+      const deleted =
+        typeof (deletedResult as any).rowCount === 'number'
+          ? (deletedResult as any).rowCount
+          : Array.isArray(deletedResult)
+            ? deletedResult.length
+            : 0
 
       return NextResponse.json({
         success: true,
         message: `All coins deleted except ${keepSymbol}`,
-        deleted: result.changes
+        deleted
       })
-    } else {
-      // Delete all coins
-      await db.exec('DELETE FROM coins')
-      await db.close()
-
-      return NextResponse.json({ success: true, message: 'All coins deleted' })
     }
+
+    const deletedResult = await sql`
+      DELETE FROM coins
+    `
+    const deleted =
+      typeof (deletedResult as any).rowCount === 'number'
+        ? (deletedResult as any).rowCount
+        : Array.isArray(deletedResult)
+          ? deletedResult.length
+          : 0
+    return NextResponse.json({
+      success: true,
+      message: 'All coins deleted',
+      deleted,
+    })
   } catch (error) {
     console.error('Failed to delete coins:', error)
     return NextResponse.json(

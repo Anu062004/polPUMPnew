@@ -13,6 +13,7 @@ import { InfoTooltip } from '@/components/InfoTooltip'
 import { newFactoryService } from '../../lib/newFactoryService'
 import { newBondingCurveTradingService } from '../../lib/newBondingCurveTradingService'
 import { CONTRACT_CONFIG } from '../../lib/contract-config'
+import { useAuth } from '../providers/AuthContext'
 
 interface ImprovedTokenCreatorModalProps {
   isOpen: boolean
@@ -22,6 +23,8 @@ interface ImprovedTokenCreatorModalProps {
 
 export default function ImprovedTokenCreatorModal({ isOpen, onClose, onTokenCreated }: ImprovedTokenCreatorModalProps) {
   const { isConnected, address } = useAccount()
+  const { user, accessToken, isAuthenticated } = useAuth()
+  const canCreateAsCreator = isAuthenticated && user?.role === 'CREATOR'
 
   const FACTORY_ADDRESS = CONTRACT_CONFIG.FACTORY_ADDRESS
 
@@ -145,6 +148,12 @@ export default function ImprovedTokenCreatorModal({ isOpen, onClose, onTokenCrea
 
     try {
       if (!address) throw new Error('Wallet not connected')
+      if (!canCreateAsCreator || !accessToken) {
+        throw new Error('Only CREATOR role wallets can create tokens. Switch to CREATOR and sign in again.')
+      }
+      if (user?.wallet?.toLowerCase() !== address.toLowerCase()) {
+        throw new Error('Connected wallet does not match your authenticated CREATOR wallet.')
+      }
       if (!imageHash) throw new Error('Please upload an image first')
 
       const networkName = process.env.NEXT_PUBLIC_NETWORK === 'polygon' ? 'Polygon Mainnet' : 'Polygon Amoy'
@@ -175,6 +184,9 @@ export default function ImprovedTokenCreatorModal({ isOpen, onClose, onTokenCrea
 
       const resp = await fetch('/api/createCoin', {
         method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: form
       })
       const json = await resp.json()
@@ -627,16 +639,25 @@ export default function ImprovedTokenCreatorModal({ isOpen, onClose, onTokenCrea
                   </div>
                 )}
 
+                {!canCreateAsCreator && (
+                  <div className="flex items-center gap-3 p-3 bg-amber-200 border-4 border-black rounded-2xl shadow-[4px_4px_0_#000]">
+                    <AlertCircle className="w-5 h-5 text-amber-700" />
+                    <span className="text-sm text-amber-900">
+                      Token creation is CREATOR-only. Log in as a CREATOR wallet to continue.
+                    </span>
+                  </div>
+                )}
+
                 {/* Action buttons */}
                 <div className="flex gap-3 pt-4 mobile-stack">
                   {!success ? (
                     <>
                       <Button
                         onClick={handleReview}
-                        disabled={isCreating || !isConnected}
+                        disabled={isCreating || !isConnected || !canCreateAsCreator}
                         className="flex-1 bg-yellow-300 text-slate-900 border-4 border-black shadow-[6px_6px_0_#000] hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-[3px_3px_0_#000]"
                       >
-                        {!isConnected ? 'Connect Wallet First' : 'Review & Create Token'}
+                        {!isConnected ? 'Connect Wallet First' : !canCreateAsCreator ? 'Creator Role Required' : 'Review & Create Token'}
                       </Button>
 
                       <Button

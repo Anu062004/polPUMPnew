@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { DatabaseManager } from '@/lib/databaseManager'
+import { requirePostgres } from '../../../../../lib/gamingPostgres'
 
 // Force dynamic rendering to prevent build-time execution
 export const dynamic = 'force-dynamic'
@@ -7,6 +7,10 @@ export const runtime = 'nodejs'
 
 import { verifySignatureWithTimestamp } from '../../../../../lib/authUtils'
 import { validateGameId, validateAddress, validateInteger } from '../../../../../lib/validationUtils'
+
+function toRows(result: any): any[] {
+  return Array.isArray(result) ? result : result?.rows || []
+}
 
 /**
  * Reveal a tile in Mines game
@@ -91,15 +95,16 @@ export async function POST(request: NextRequest) {
         AND user_address = ${userAddress.toLowerCase()}
         FOR UPDATE
       `
+      const gameRows = toRows(gameResult)
 
-      if (gameResult.length === 0) {
+      if (gameRows.length === 0) {
         return NextResponse.json(
           { success: false, error: 'Game not found' },
           { status: 404 }
         )
       }
 
-      const game = gameResult[0]
+      const game = gameRows[0]
 
       if (game.status !== 'active') {
         return NextResponse.json(

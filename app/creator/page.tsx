@@ -4,37 +4,162 @@
  * Features:
  * - Start live stream
  * - Promote own token
- * - Creator-only chat rooms
+ * - Creator community chat room
  * - Post trade signals
  * - View analytics (viewers, engagement, volume impact)
  */
 
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '../providers/AuthContext'
 import { useAccount } from 'wagmi'
 import PremiumNavbar from '../components/PremiumNavbar'
 import BlobBackground from '../components/BlobBackground'
 import Link from 'next/link'
-import { 
-  Video, 
-  TrendingUp, 
-  MessageSquare, 
-  BarChart3, 
+import {
+  Video,
+  TrendingUp,
+  MessageSquare,
+  BarChart3,
   Send,
   Users,
   ArrowRight,
   Crown,
-  AlertCircle
+  AlertCircle,
 } from 'lucide-react'
+
+interface ChatMessage {
+  id: number
+  sender_wallet: string
+  role: 'TRADER' | 'CREATOR'
+  room_id: string
+  message: string
+  token_symbol: string | null
+  created_at: number
+}
+
+function shortWallet(wallet: string): string {
+  if (!wallet) return '-'
+  return `${wallet.slice(0, 6)}...${wallet.slice(-4)}`
+}
+
+function formatMessageTime(createdAt: number): string {
+  if (!createdAt) return ''
+  try {
+    return new Date(createdAt).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return ''
+  }
+}
 
 export default function CreatorDashboard() {
   const router = useRouter()
-  const { user, isAuthenticated, isLoading, login } = useAuth()
-  const { isConnected, address } = useAccount()
+  const { user, isAuthenticated, isLoading, login, accessToken } = useAuth()
+  const { isConnected } = useAccount()
   const [mounted, setMounted] = useState(false)
+  const autoLoginAttemptedRef = useRef(false)
+
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const [chatInput, setChatInput] = useState('')
+  const [chatLoading, setChatLoading] = useState(false)
+  const [chatSending, setChatSending] = useState(false)
+  const [chatError, setChatError] = useState<string | null>(null)
+  const [followerCount, setFollowerCount] = useState(0)
+
+  const authHeaders = useMemo<Record<string, string>>(() => {
+    const headers: Record<string, string> = {}
+    if (accessToken) {
+      headers.Authorization = `Bearer ${accessToken}`
+    }
+    return headers
+  }, [accessToken])
+
+  const creatorWallet = user?.wallet?.toLowerCase() || null
+
+  const loadFollowerCount = useCallback(async () => {
+    if (!accessToken || !creatorWallet) return
+
+    try {
+      const response = await fetch(`/api/creator-follow?creatorWallet=${creatorWallet}`, {
+        headers: authHeaders,
+      })
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        setFollowerCount(Number(data.followerCount || 0))
+      }
+    } catch {
+      // Keep UI stable even if follower count fails.
+    }
+  }, [accessToken, creatorWallet, authHeaders])
+
+  const loadChatMessages = useCallback(async () => {
+    if (!accessToken || !creatorWallet) {
+      setChatMessages([])
+      return
+    }
+
+    setChatLoading(true)
+    try {
+      const roomId = `creator:${creatorWallet}`
+      const response = await fetch(`/api/chat/messages?roomId=${encodeURIComponent(roomId)}&limit=50`, {
+        headers: authHeaders,
+      })
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to load chat messages')
+      }
+
+      setChatMessages(Array.isArray(data.messages) ? data.messages : [])
+      setChatError(null)
+    } catch (error: any) {
+      setChatError(error.message || 'Failed to load chat messages')
+    } finally {
+      setChatLoading(false)
+    }
+  }, [accessToken, creatorWallet, authHeaders])
+
+  const handleSendChat = useCallback(async () => {
+    if (!accessToken || !creatorWallet) return
+    const trimmedMessage = chatInput.trim()
+    if (!trimmedMessage) return
+
+    setChatSending(true)
+    setChatError(null)
+
+    try {
+      const roomId = `creator:${creatorWallet}`
+      const response = await fetch('/api/chat/messages', {
+        method: 'POST',
+        headers: {
+          ...authHeaders,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ roomId, message: trimmedMessage }),
+      })
+
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to send message')
+      }
+
+      setChatMessages((prev) => {
+        const next = [...prev, data.message]
+        return next.slice(-50)
+      })
+      setChatInput('')
+    } catch (error: any) {
+      setChatError(error.message || 'Failed to send message')
+    } finally {
+      setChatSending(false)
+    }
+  }, [accessToken, creatorWallet, chatInput, authHeaders])
 
   useEffect(() => {
     setMounted(true)
@@ -42,30 +167,62 @@ export default function CreatorDashboard() {
 
   // Redirect if not authenticated or not CREATOR
   useEffect(() => {
-    if (!isLoading && mounted) {
-      if (!isConnected) {
-        router.push('/')
-        return
-      }
-      
-      if (!isAuthenticated) {
-        // Try to login automatically
-        login().catch(() => {
-          router.push('/')
-        })
+    if (isLoading || !mounted) {
+      return
+    }
+
+    if (!isConnected) {
+      router.replace('/')
+      return
+    }
+
+    if (!isAuthenticated) {
+      if (autoLoginAttemptedRef.current) {
         return
       }
 
-      if (user?.role !== 'CREATOR') {
-        // Redirect to trader dashboard if user is TRADER
-        if (user?.role === 'TRADER') {
-          router.push('/trader')
-        } else {
-          router.push('/')
-        }
+      autoLoginAttemptedRef.current = true
+      login('CREATOR').catch(() => {
+        router.replace('/')
+      })
+      return
+    }
+
+    autoLoginAttemptedRef.current = false
+
+    if (user?.role !== 'CREATOR') {
+      // Redirect to trader dashboard if user is TRADER
+      if (user?.role === 'TRADER') {
+        router.replace('/trader')
+      } else {
+        router.replace('/')
       }
     }
-  }, [isLoading, mounted, isAuthenticated, user, isConnected, router, login])
+  }, [isLoading, mounted, isAuthenticated, user?.role, isConnected, router, login])
+
+  useEffect(() => {
+    if (!mounted || !isAuthenticated || !accessToken || user?.role !== 'CREATOR' || !creatorWallet) {
+      return
+    }
+
+    loadFollowerCount()
+    loadChatMessages()
+
+    const interval = setInterval(() => {
+      loadFollowerCount()
+      loadChatMessages()
+    }, 5000)
+
+    return () => clearInterval(interval)
+  }, [
+    mounted,
+    isAuthenticated,
+    accessToken,
+    user?.role,
+    creatorWallet,
+    loadFollowerCount,
+    loadChatMessages,
+  ])
 
   if (!mounted || isLoading) {
     return (
@@ -90,7 +247,7 @@ export default function CreatorDashboard() {
     <div className="min-h-screen relative overflow-hidden">
       <BlobBackground />
       <PremiumNavbar />
-      
+
       <div className="relative z-10 max-w-7xl mx-auto px-4 pt-24 pb-8">
         {/* Header */}
         <div className="mb-8">
@@ -111,7 +268,7 @@ export default function CreatorDashboard() {
               <h3 className="font-semibold text-white mb-1">Creator Account</h3>
               <p className="text-sm text-gray-400">
                 You have CREATOR privileges! Start live streams, promote your tokens, post trading signals,
-                and lead communities. Your role is automatically maintained based on your token balance.
+                and lead communities. This role is locked to your wallet and separated from TRADER accounts.
               </p>
             </div>
           </div>
@@ -154,13 +311,68 @@ export default function CreatorDashboard() {
           </div>
 
           {/* Creator Chat Rooms */}
-          <div className="glass-card p-6">
+          <div className="glass-card p-6 md:col-span-2 lg:col-span-2">
             <MessageSquare className="w-10 h-10 text-[#FF4F84] mb-4" />
-            <h3 className="text-xl font-bold text-white mb-2">Creator Chat</h3>
+            <h3 className="text-xl font-bold text-white mb-2">Creator Community Chat</h3>
             <p className="text-gray-400 mb-4">
-              Access creator-only chat rooms. Connect with other creators.
+              This room is shared with traders currently following your wallet.
             </p>
-            <div className="text-sm text-gray-500">Coming Soon</div>
+
+            <div className="text-xs text-gray-400 mb-3">
+              Room: <span className="text-[#12D9C8]">{creatorWallet ? shortWallet(creatorWallet) : '-'}</span>
+            </div>
+
+            <div className="h-56 overflow-y-auto rounded border border-white/10 bg-black/20 p-3 space-y-2 mb-3">
+              {chatLoading ? (
+                <div className="text-sm text-gray-500">Loading messages...</div>
+              ) : chatMessages.length === 0 ? (
+                <div className="text-sm text-gray-500">No messages yet. Say hello to your community.</div>
+              ) : (
+                chatMessages.map((msg, index) => {
+                  const ownWallet = user.wallet.toLowerCase()
+                  const senderWallet = (msg.sender_wallet || '').toLowerCase()
+                  const isMine = senderWallet === ownWallet
+
+                  return (
+                    <div key={msg.id || `${msg.created_at}-${index}`} className="text-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={isMine ? 'text-yellow-400' : 'text-white'}>
+                          {isMine ? 'You (Creator)' : shortWallet(msg.sender_wallet)}
+                        </span>
+                        <span className="text-[11px] text-gray-500">{formatMessageTime(msg.created_at)}</span>
+                      </div>
+                      <p className="text-gray-300 break-words">{msg.message}</p>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+
+            {chatError && <div className="text-xs text-red-400 mb-3">{chatError}</div>}
+
+            <div className="flex items-center gap-2">
+              <input
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    handleSendChat()
+                  }
+                }}
+                placeholder="Send update to your community"
+                className="flex-1 rounded bg-black/20 border border-white/10 px-3 py-2 text-sm text-white placeholder:text-gray-500"
+                maxLength={800}
+              />
+              <button
+                type="button"
+                onClick={handleSendChat}
+                disabled={chatSending || !chatInput.trim()}
+                className="px-3 py-2 rounded bg-yellow-500 text-black text-sm font-semibold disabled:opacity-60"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
           {/* Analytics */}
@@ -178,9 +390,9 @@ export default function CreatorDashboard() {
             <Users className="w-10 h-10 text-[#12D9C8] mb-4" />
             <h3 className="text-xl font-bold text-white mb-2">Followers</h3>
             <p className="text-gray-400 mb-4">
-              See who's following you and track your community growth.
+              See who is following you and track your community growth.
             </p>
-            <div className="text-sm text-gray-500">Coming Soon</div>
+            <div className="text-sm text-[#12D9C8]">{followerCount} followers</div>
           </div>
         </div>
 
@@ -195,7 +407,7 @@ export default function CreatorDashboard() {
             <div className="text-gray-400">Total Viewers</div>
           </div>
           <div className="glass-card p-6">
-            <div className="text-3xl font-bold text-white mb-2">0</div>
+            <div className="text-3xl font-bold text-white mb-2">{followerCount}</div>
             <div className="text-gray-400">Followers</div>
           </div>
         </div>
@@ -205,20 +417,10 @@ export default function CreatorDashboard() {
           <h2 className="text-2xl font-bold text-white mb-4">Recent Activity</h2>
           <div className="text-center py-8 text-gray-400">
             <p>No recent activity yet.</p>
-            <p className="text-sm mt-2">Start streaming or promoting your tokens!</p>
+            <p className="text-sm mt-2">Start streaming, posting updates, and chatting with followers.</p>
           </div>
         </div>
       </div>
     </div>
   )
 }
-
-
-
-
-
-
-
-
-
-

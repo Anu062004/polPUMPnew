@@ -1,20 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { promises as fs } from 'fs'
-import path from 'path'
-import sqlite3 from 'sqlite3'
-import { open } from 'sqlite'
+﻿import { NextRequest, NextResponse } from 'next/server'
+import { ethers } from 'ethers'
+import { upsertCreatorWallet } from '../../../lib/creatorService'
+import { withCreatorAuth } from '../../../lib/roleMiddleware'
 
-const writeApiKey = process.env.API_AUTH_TOKEN || ''
 const RATE_LIMIT_WINDOW_MS = 60_000
 const RATE_LIMIT_MAX = 20
 const rateBuckets = new Map<string, { count: number; reset: number }>()
-
-// API key check disabled - wallet signature provides authentication
-function requireWriteKey(_request: NextRequest) {
-  // Token creation is protected by wallet signature verification
-  // No additional API key required
-  return null
-}
 
 function enforceRateLimit(request: NextRequest) {
   const ip =
@@ -39,13 +30,10 @@ function enforceRateLimit(request: NextRequest) {
   return null
 }
 
-// Create a new coin with metadata
-export async function POST(request: NextRequest) {
+// Create a new coin with metadata.
+// Note: SQLite fallback has been retired; Postgres is required.
+export const POST = withCreatorAuth(async (request: NextRequest, user) => {
   try {
-    // API key check disabled - using wallet signatures for authentication instead
-    // const authError = requireWriteKey(request)
-    // if (authError) return authError
-
     const rl = enforceRateLimit(request)
     if (rl) return rl
 
@@ -55,14 +43,32 @@ export async function POST(request: NextRequest) {
     const symbol = formData.get('symbol') as string
     const description = formData.get('description') as string
     const supply = formData.get('supply') as string
-    const creator = formData.get('creator') as string
+    const creator = formData.get('creator') as string | null
     const imageRootHash = formData.get('imageRootHash') as string
 
-    if (!name || !symbol || !supply || !creator) {
+    if (!name || !symbol || !supply) {
       return NextResponse.json(
-        { success: false, error: 'Missing required fields: name, symbol, supply, creator' },
+        { success: false, error: 'Missing required fields: name, symbol, supply' },
         { status: 400 }
       )
+    }
+
+    if (creator && !ethers.isAddress(creator)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid creator wallet address' },
+        { status: 400 }
+      )
+    }
+
+    const normalizedCreatorWallet = ethers.getAddress(user.wallet).toLowerCase()
+    if (creator) {
+      const normalizedProvidedCreatorWallet = ethers.getAddress(creator).toLowerCase()
+      if (normalizedProvidedCreatorWallet !== normalizedCreatorWallet) {
+        return NextResponse.json(
+          { success: false, error: 'Creator wallet must match your authenticated CREATOR role wallet' },
+          { status: 403 }
+        )
+      }
     }
 
     // Try backend first if available
@@ -74,7 +80,7 @@ export async function POST(request: NextRequest) {
       backendFormData.append('symbol', symbol)
       backendFormData.append('description', description || '')
       backendFormData.append('supply', supply)
-      backendFormData.append('creator', creator)
+      backendFormData.append('creator', normalizedCreatorWallet)
       if (imageRootHash) backendFormData.append('imageRootHash', imageRootHash)
 
       const controller = new AbortController()
@@ -83,7 +89,7 @@ export async function POST(request: NextRequest) {
       const backendResponse = await fetch(`${backendBase}/createCoin`, {
         method: 'POST',
         body: backendFormData,
-        signal: controller.signal
+        signal: controller.signal,
       })
 
       clearTimeout(timeoutId)
@@ -95,171 +101,63 @@ export async function POST(request: NextRequest) {
         }
       }
     } catch (backendError: any) {
-      console.log('Backend createCoin not available, using local storage:', backendError?.message || backendError)
+      console.log(
+        'Backend createCoin not available, using local Postgres route:',
+        backendError?.message || backendError
+      )
     }
 
-    // Fallback: Create coin metadata and store in database
     const metadata = {
       name,
       symbol,
       description: description || `${name} (${symbol}) - A memecoin created on Polygon Amoy`,
       supply,
-      creator,
+      creator: normalizedCreatorWallet,
       imageRootHash: imageRootHash || null,
       createdAt: new Date().toISOString(),
-      metadataRootHash: null as string | null // Will be generated
+      metadataRootHash: null as string | null,
     }
 
-    // Generate metadata hash
     const crypto = await import('crypto')
     const metadataString = JSON.stringify(metadata)
     const metadataHash = crypto.createHash('sha256').update(metadataString).digest('hex')
     metadata.metadataRootHash = metadataHash
 
-    // Store in database - try PostgreSQL first, fallback to SQLite
     const coinData = {
-      name,
-      symbol,
-      supply,
-      description: metadata.description,
-      creator,
-      imageHash: imageRootHash || null,
-      tokenAddress: null,
       txHash: `pending-${Date.now()}`,
-      telegramUrl: null,
-      xUrl: null,
-      discordUrl: null,
-      websiteUrl: null
     }
 
     const coinId = `${symbol.toLowerCase()}-${Date.now()}`
     const createdAt = Date.now()
 
-    // Try PostgreSQL first
     try {
       const { initializeSchema, getSql } = await import('../../../lib/postgresManager')
 
       await initializeSchema()
       const sql = await getSql()
-
-      if (sql) {
-        // Insert coin into PostgreSQL
-        await sql`
-          INSERT INTO coins (
-            id, name, symbol, supply, image_hash, token_address, tx_hash, 
-            creator, created_at, description
-          )
-          VALUES (
-            ${coinId}, ${name}, ${symbol}, ${supply}, ${imageRootHash || null}, 
-            ${null}, ${coinData.txHash}, ${creator}, ${createdAt}, ${metadata.description}
-          )
-        `
-
-        console.log(`✅ Coin metadata saved to PostgreSQL: ${coinId}`)
-
-        return NextResponse.json({
-          success: true,
-          coin: {
-            id: coinId,
-            name,
-            symbol,
-            supply,
-            description: metadata.description,
-            creator,
-            imageRootHash: imageRootHash || null,
-            metadataRootHash: metadataHash,
-            txHash: coinData.txHash,
-            tokenAddress: null,
-            curveAddress: null,
-            createdAt: new Date(createdAt).toISOString()
-          }
-        })
-      }
-    } catch (pgError: any) {
-      console.warn('PostgreSQL not available for createCoin, trying SQLite fallback:', pgError?.message || pgError)
-    }
-
-    // Fallback to SQLite
-    const allowSqliteFallback =
-      process.env.NODE_ENV !== 'production' &&
-      process.env.ALLOW_SQLITE_FALLBACK !== '0'
-
-    if (!allowSqliteFallback) {
-      return NextResponse.json(
-        { success: false, error: 'Database unavailable and SQLite fallback disabled. Please configure PostgreSQL.' },
-        { status: 500 }
-      )
-    }
-
-    try {
-      // Get database path
-      const isServerless =
-        process.env.VERCEL === '1' ||
-        process.env.AWS_LAMBDA_FUNCTION_NAME ||
-        process.env.NEXT_RUNTIME === 'nodejs'
-
-      const dbPath = isServerless
-        ? '/tmp/data/coins.db'
-        : path.join(process.cwd(), 'data', 'coins.db')
-
-      // Ensure data directory exists
-      const dataDir = path.dirname(dbPath)
-      try {
-        await fs.access(dataDir)
-      } catch {
-        await fs.mkdir(dataDir, { recursive: true })
+      if (!sql) {
+        throw new Error('Postgres not available')
       }
 
-      // Open database
-      const db = await open({
-        filename: dbPath,
-        driver: sqlite3.Database
-      })
-
-      // Create table if it doesn't exist
-      await db.exec(`
-        CREATE TABLE IF NOT EXISTS coins (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL,
-          symbol TEXT NOT NULL,
-          supply TEXT NOT NULL,
-          imageHash TEXT,
-          tokenAddress TEXT,
-          curveAddress TEXT,
-          txHash TEXT NOT NULL,
-          creator TEXT NOT NULL,
-          createdAt INTEGER NOT NULL,
-          description TEXT,
-          telegramUrl TEXT,
-          xUrl TEXT,
-          discordUrl TEXT,
-          websiteUrl TEXT
+      await sql`
+        INSERT INTO coins (
+          id, name, symbol, supply, image_hash, token_address, tx_hash,
+          creator, created_at, description
         )
-      `)
+        VALUES (
+          ${coinId}, ${name}, ${symbol}, ${supply}, ${imageRootHash || null},
+          ${null}, ${coinData.txHash}, ${normalizedCreatorWallet}, ${createdAt}, ${metadata.description}
+        )
+      `
 
-      // Insert coin
-      await db.run(
-        `INSERT INTO coins (
-          id, name, symbol, supply, imageHash, tokenAddress, txHash,
-          creator, createdAt, description
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          coinId,
-          name,
-          symbol,
-          supply,
-          imageRootHash || null,
-          null,
-          coinData.txHash,
-          creator,
-          createdAt,
-          metadata.description
-        ]
-      )
-
-      await db.close()
-
-      console.log(`✅ Coin metadata saved to SQLite: ${coinId}`)
+      try {
+        await upsertCreatorWallet(normalizedCreatorWallet)
+      } catch (creatorSyncError: any) {
+        console.warn(
+          'Failed to upsert creator wallet during createCoin:',
+          creatorSyncError?.message || creatorSyncError
+        )
+      }
 
       return NextResponse.json({
         success: true,
@@ -269,35 +167,37 @@ export async function POST(request: NextRequest) {
           symbol,
           supply,
           description: metadata.description,
-          creator,
+          creator: normalizedCreatorWallet,
           imageRootHash: imageRootHash || null,
           metadataRootHash: metadataHash,
           txHash: coinData.txHash,
           tokenAddress: null,
           curveAddress: null,
-          createdAt: new Date(createdAt).toISOString()
-        }
+          createdAt: new Date(createdAt).toISOString(),
+        },
       })
-    } catch (sqliteError: any) {
-      console.error('❌ SQLite fallback also failed:', sqliteError)
+    } catch (pgError: any) {
+      console.error(
+        'PostgreSQL not available for createCoin (SQLite fallback retired):',
+        pgError?.message || pgError
+      )
       return NextResponse.json(
         {
           success: false,
-          error: `Failed to persist coin metadata: ${sqliteError?.message || 'Database unavailable'}. Please check database configuration.`
+          error:
+            'Coin metadata could not be saved because PostgreSQL is unavailable. SQLite fallback is disabled.',
         },
         { status: 500 }
       )
     }
-
   } catch (error: any) {
     console.error('Create coin error:', error)
     return NextResponse.json(
       {
         success: false,
-        error: error.message || 'Failed to create coin'
+        error: error.message || 'Failed to create coin',
       },
       { status: 500 }
     )
   }
-}
-
+})

@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticateRequest } from '../../../../lib/roleMiddleware'
-import { revalidateRole } from '../../../../lib/roleService'
+import { resolveLockedRole, type Role } from '../../../../lib/roleService'
 import { issueAccessToken } from '../../../../lib/jwtUtils'
 
 export async function GET(request: NextRequest) {
@@ -23,11 +23,11 @@ export async function GET(request: NextRequest) {
     let role = user.role
 
     if (revalidate) {
-      const roleCheck = await revalidateRole(user.wallet, user.role)
-      role = roleCheck.role
+      const sessionRole = user.role as Role
+      role = await resolveLockedRole(user.wallet, sessionRole)
 
       // If role changed, issue new token
-      if (roleCheck.changed) {
+      if (role !== sessionRole) {
         const newAccessToken = await issueAccessToken(user.wallet, role)
         return NextResponse.json({
           success: true,

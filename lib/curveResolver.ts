@@ -1,8 +1,6 @@
 import { ethers } from 'ethers'
-import path from 'path'
-import sqlite3 from 'sqlite3'
-import { open } from 'sqlite'
 import { CONTRACT_CONFIG } from './contract-config'
+import { getSql, initializeSchema } from './postgresManager'
 
 const RPC_URL =
   process.env.NEXT_PUBLIC_EVM_RPC ||
@@ -12,20 +10,6 @@ const RPC_URL =
 const FACTORY_ABI = [
   'event PairCreated(address indexed token, address indexed curve, address indexed creator, string name, string symbol, uint256 seedOg, uint256 seedTokens)',
 ]
-
-// Helper function to get database path (handles serverless environments)
-function getDbPath() {
-  const isServerless = process.env.VERCEL === '1' || 
-                      process.env.AWS_LAMBDA_FUNCTION_NAME || 
-                      process.env.NEXT_RUNTIME === 'nodejs'
-  
-  if (isServerless) {
-    return '/tmp/data/coins.db'
-  }
-  return path.join(process.cwd(), 'data', 'coins.db')
-}
-
-const DB_PATH = getDbPath()
 
 export interface CoinLike {
   id: string
@@ -56,32 +40,21 @@ export async function resolveCoinAddresses(coin: CoinLike): Promise<ResolvedAddr
 export async function updateCoinAddresses(
   coinId: string,
   tokenAddress: string,
-  curveAddress: string,
-  db?: sqlite3.Database
+  curveAddress: string
 ) {
-  let localDb = db
-  if (!localDb) {
-    localDb = await open({
-      filename: DB_PATH,
-      driver: sqlite3.Database,
-    })
+  await initializeSchema()
+  const sql = await getSql()
+  if (!sql) {
+    throw new Error('Postgres not available for curve address backfill')
   }
 
-  await localDb.run(
-    'UPDATE coins SET tokenAddress = ?, curveAddress = ? WHERE id = ?',
-    [tokenAddress.toLowerCase(), curveAddress.toLowerCase(), coinId]
-  )
-
-  if (!db) {
-    await localDb.close()
-  }
-}
-
-export async function openCoinsDb() {
-  return await open({
-    filename: DB_PATH,
-    driver: sqlite3.Database,
-  })
+  await sql`
+    UPDATE coins
+    SET token_address = ${tokenAddress.toLowerCase()},
+        curve_address = ${curveAddress.toLowerCase()},
+        updated_at = ${Date.now()}
+    WHERE id = ${coinId}
+  `
 }
 
 async function resolveFromTxHash(txHash: string): Promise<ResolvedAddresses | null> {
@@ -182,4 +155,3 @@ function parsePairLogs(logs: any[] = [], iface: ethers.Interface, topic: string)
   }
   return null
 }
-

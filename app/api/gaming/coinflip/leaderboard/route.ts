@@ -1,42 +1,44 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { databaseManager } from '../../../../../lib/databaseManager'
+﻿import { NextRequest, NextResponse } from 'next/server'
+import { requirePostgres } from '../../../../../lib/gamingPostgres'
 
-// Force dynamic rendering to prevent build-time execution
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
-    await databaseManager.initialize()
-    const db = await databaseManager.getConnection()
+    const sql = await requirePostgres()
 
-    // Get leaderboard: users with most wins and total winnings
-    const leaderboard = await db.all(`
-      SELECT 
-        userAddress,
-        COUNT(*) as totalGames,
-        SUM(CASE WHEN outcome = 'win' THEN 1 ELSE 0 END) as wins,
-        SUM(CASE WHEN outcome = 'win' THEN wager ELSE 0 END) as totalWinnings,
-        SUM(wager) as totalWagered
+    const leaderboardResult = await sql`
+      SELECT
+        user_address,
+        COUNT(*)::int AS total_games,
+        SUM(CASE WHEN outcome = 'win' THEN 1 ELSE 0 END)::int AS wins,
+        SUM(CASE WHEN outcome = 'win' THEN wager ELSE 0 END) AS total_winnings,
+        SUM(wager) AS total_wagered
       FROM gaming_coinflip
-      GROUP BY userAddress
-      ORDER BY wins DESC, totalWinnings DESC
+      GROUP BY user_address
+      ORDER BY wins DESC, total_winnings DESC
       LIMIT 50
-    `)
-
-    await db.close()
+    `
+    const leaderboard = Array.isArray(leaderboardResult)
+      ? leaderboardResult
+      : (leaderboardResult as any).rows || []
 
     return NextResponse.json({
       success: true,
-      leaderboard: leaderboard.map((entry: any) => ({
-        userAddress: entry.userAddress,
-        totalGames: entry.totalGames,
-        wins: entry.wins,
-        losses: entry.totalGames - entry.wins,
-        totalWinnings: entry.totalWinnings || 0,
-        totalWagered: entry.totalWagered || 0,
-        winRate: entry.totalGames > 0 ? (entry.wins / entry.totalGames * 100).toFixed(2) : '0.00',
-      })),
+      leaderboard: leaderboard.map((entry: any) => {
+        const totalGames = Number(entry.total_games || 0)
+        const wins = Number(entry.wins || 0)
+        return {
+          userAddress: entry.user_address,
+          totalGames,
+          wins,
+          losses: Math.max(0, totalGames - wins),
+          totalWinnings: Number(entry.total_winnings || 0),
+          totalWagered: Number(entry.total_wagered || 0),
+          winRate: totalGames > 0 ? ((wins / totalGames) * 100).toFixed(2) : '0.00',
+        }
+      }),
     })
   } catch (error: any) {
     console.error('Error fetching leaderboard:', error)
@@ -46,4 +48,3 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-

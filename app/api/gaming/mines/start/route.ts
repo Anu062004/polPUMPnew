@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { DatabaseManager } from '@/lib/databaseManager'
+import { requirePostgres } from '../../../../../lib/gamingPostgres'
 
 // Force dynamic rendering to prevent build-time execution
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 import { verifySignatureWithTimestamp } from '../../../../../lib/authUtils'
 import { validateAddress, validatePositiveNumber, validateMinesCount } from '../../../../../lib/validationUtils'
+
+function toRows(result: any): any[] {
+  return Array.isArray(result) ? result : result?.rows || []
+}
 
 /**
  * Start a new Mines game
@@ -115,8 +119,12 @@ export async function POST(request: NextRequest) {
       VALUES (${userAddress.toLowerCase()}, ${betAmount}, ${tokenAddress.toLowerCase()}, ${minesCount}, ${JSON.stringify(gridState)}, ${JSON.stringify([])}, 'active', 1.0, ${Date.now()})
       RETURNING id
     `
+    const rows = toRows(result)
+    const gameId = rows[0]?.id
 
-    const gameId = result[0].id
+    if (!gameId) {
+      throw new Error('Failed to create mines game')
+    }
 
     return NextResponse.json({
       success: true,

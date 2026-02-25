@@ -1,27 +1,18 @@
 'use client'
-import { WagmiProvider, createConfig, http } from 'wagmi'
-import { getDefaultWallets, RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit'
+import { WagmiProvider, http } from 'wagmi'
+import { getDefaultConfig, RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { polygon, polygonAmoy } from 'wagmi/chains'
 import '@rainbow-me/rainbowkit/styles.css'
 
-const { connectors } = getDefaultWallets({
-  appName: 'POL Pump - Polygon Meme Token Creator',
-  projectId: 'a14234612450c639dd0adcbb729ddfd8',
-})
-
 // Determine which chain to use based on environment
 const isMainnet = process.env.NEXT_PUBLIC_NETWORK === 'polygon'
-const targetChain = isMainnet 
-  ? {
-      ...polygon,
-      name: 'Polygon Mainnet', // Override name to ensure correct display
-    }
-  : polygonAmoy
+const targetChain = isMainnet ? polygon : polygonAmoy
 
-const config = createConfig({
+const config = getDefaultConfig({
+  appName: 'POL Pump - Polygon Meme Token Creator',
+  projectId: 'a14234612450c639dd0adcbb729ddfd8',
   chains: [targetChain],
-  connectors,
   transports: {
     [targetChain.id]: http(
       isMainnet 
@@ -29,6 +20,7 @@ const config = createConfig({
         : 'https://polygon-amoy.infura.io/v3/b4f237515b084d4bad4e5de070b0452f'
     ),
   },
+  ssr: true,
 })
 
 const qc = new QueryClient()
@@ -44,4 +36,3 @@ export function Providers({ children }: { children: React.ReactNode }) {
     </WagmiProvider>
   )
 }
-

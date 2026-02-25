@@ -39,7 +39,7 @@ export function RoleGuard({
 
     // If not authenticated, try to login
     if (!isAuthenticated) {
-      login().catch(() => {
+      login(requiredRole).catch(() => {
         router.push(redirectTo)
       })
       return

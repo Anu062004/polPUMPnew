@@ -316,6 +316,125 @@ export async function initializeSchema() {
         CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
       `)
 
+
+      // Creators registry table
+      await db.pool.query(`
+        CREATE TABLE IF NOT EXISTS creators (
+          wallet VARCHAR(255) PRIMARY KEY,
+          created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000,
+          updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000
+        )
+      `)
+
+      await db.pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_creators_wallet ON creators(wallet);
+      `)
+
+      // Creator -> token association table
+      await db.pool.query(`
+        CREATE TABLE IF NOT EXISTS creator_tokens (
+          token_address VARCHAR(255) PRIMARY KEY,
+          creator_wallet VARCHAR(255) NOT NULL,
+          coin_id VARCHAR(255),
+          created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000,
+          updated_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000
+        )
+      `)
+
+      await db.pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_creator_tokens_creator ON creator_tokens(creator_wallet);
+        CREATE INDEX IF NOT EXISTS idx_creator_tokens_coin_id ON creator_tokens(coin_id);
+      `)
+
+      // Backfill creators from existing role and coin data.
+      await db.pool.query(`
+        INSERT INTO creators (wallet, created_at, updated_at)
+        SELECT LOWER(wallet), created_at, updated_at
+        FROM users
+        WHERE role = 'CREATOR'
+        ON CONFLICT (wallet)
+        DO UPDATE SET updated_at = GREATEST(creators.updated_at, EXCLUDED.updated_at)
+      `)
+
+      await db.pool.query(`
+        INSERT INTO creators (wallet, created_at, updated_at)
+        SELECT
+          LOWER(creator),
+          COALESCE(created_at, EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+          EXTRACT(EPOCH FROM NOW()) * 1000
+        FROM coins
+        WHERE creator IS NOT NULL AND creator <> ''
+        ON CONFLICT (wallet)
+        DO UPDATE SET updated_at = GREATEST(creators.updated_at, EXCLUDED.updated_at)
+      `)
+
+      // Normalize and dedupe legacy creators rows case-insensitively.
+      await db.pool.query(`
+        WITH ranked AS (
+          SELECT
+            ctid,
+            ROW_NUMBER() OVER (
+              PARTITION BY LOWER(wallet)
+              ORDER BY updated_at DESC, created_at DESC, wallet ASC
+            ) AS rn
+          FROM creators
+        )
+        DELETE FROM creators
+        WHERE ctid IN (SELECT ctid FROM ranked WHERE rn > 1)
+      `)
+
+      await db.pool.query(`
+        UPDATE creators
+        SET wallet = LOWER(wallet)
+        WHERE wallet <> LOWER(wallet)
+      `)
+
+      // Backfill creator-token associations from existing coin rows.
+      await db.pool.query(`
+        INSERT INTO creator_tokens (token_address, creator_wallet, coin_id, created_at, updated_at)
+        SELECT
+          LOWER(token_address),
+          LOWER(creator),
+          id,
+          COALESCE(created_at, EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+          EXTRACT(EPOCH FROM NOW()) * 1000
+        FROM coins
+        WHERE token_address IS NOT NULL
+          AND token_address <> ''
+          AND creator IS NOT NULL
+          AND creator <> ''
+        ON CONFLICT (token_address)
+        DO UPDATE SET
+          creator_wallet = EXCLUDED.creator_wallet,
+          coin_id = COALESCE(EXCLUDED.coin_id, creator_tokens.coin_id),
+          updated_at = EXCLUDED.updated_at
+      `)
+
+      // Normalize and dedupe creator-token rows by case-insensitive token address.
+      await db.pool.query(`
+        WITH ranked AS (
+          SELECT
+            ctid,
+            ROW_NUMBER() OVER (
+              PARTITION BY LOWER(token_address)
+              ORDER BY updated_at DESC, created_at DESC, token_address ASC
+            ) AS rn
+          FROM creator_tokens
+        )
+        DELETE FROM creator_tokens
+        WHERE ctid IN (SELECT ctid FROM ranked WHERE rn > 1)
+      `)
+
+      await db.pool.query(`
+        UPDATE creator_tokens
+        SET
+          token_address = LOWER(token_address),
+          creator_wallet = LOWER(creator_wallet)
+        WHERE
+          token_address <> LOWER(token_address) OR
+          creator_wallet <> LOWER(creator_wallet)
+      `)
+
       // Copy trading signals table
       await db.pool.query(`
         CREATE TABLE IF NOT EXISTS trading_signals (
@@ -348,6 +467,73 @@ export async function initializeSchema() {
       await db.pool.query(`
         CREATE INDEX IF NOT EXISTS idx_followers_creator ON creator_followers(creator_wallet);
         CREATE INDEX IF NOT EXISTS idx_followers_follower ON creator_followers(follower_wallet);
+      `)
+
+      // Remove duplicate creator-follower pairs regardless of case.
+      await db.pool.query(`
+        WITH ranked AS (
+          SELECT
+            ctid,
+            ROW_NUMBER() OVER (
+              PARTITION BY LOWER(creator_wallet), LOWER(follower_wallet)
+              ORDER BY created_at DESC, creator_wallet ASC
+            ) AS rn
+          FROM creator_followers
+        )
+        DELETE FROM creator_followers
+        WHERE ctid IN (SELECT ctid FROM ranked WHERE rn > 1)
+      `)
+
+      await db.pool.query(`
+        UPDATE creator_followers
+        SET
+          creator_wallet = LOWER(creator_wallet),
+          follower_wallet = LOWER(follower_wallet)
+        WHERE
+          creator_wallet <> LOWER(creator_wallet) OR
+          follower_wallet <> LOWER(follower_wallet)
+      `)
+
+
+      // Enforce one followed creator per follower wallet.
+      await db.pool.query(`
+        WITH ranked AS (
+          SELECT
+            ctid,
+            ROW_NUMBER() OVER (
+              PARTITION BY LOWER(follower_wallet)
+              ORDER BY created_at DESC, creator_wallet ASC
+            ) AS rn
+          FROM creator_followers
+        )
+        DELETE FROM creator_followers
+        WHERE ctid IN (SELECT ctid FROM ranked WHERE rn > 1)
+      `)
+
+      await db.pool.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_followers_single_creator_per_wallet
+        ON creator_followers(follower_wallet);
+      `)
+
+
+      // Community chat messages table
+      await db.pool.query(`
+        CREATE TABLE IF NOT EXISTS chat_messages (
+          id BIGSERIAL PRIMARY KEY,
+          sender_wallet VARCHAR(255) NOT NULL,
+          role VARCHAR(20) NOT NULL CHECK (role IN ('TRADER','CREATOR')),
+          room_id VARCHAR(255) NOT NULL,
+          message TEXT NOT NULL,
+          token_symbol VARCHAR(100),
+          created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000
+        )
+      `)
+
+      await db.pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_chat_messages_room_created
+        ON chat_messages(room_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_chat_messages_sender
+        ON chat_messages(sender_wallet);
       `)
 
       console.log('✅ PostgreSQL schema initialized successfully')

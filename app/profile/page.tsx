@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { useAccount } from 'wagmi'
 import { BrowserProvider } from 'ethers'
 import { userProfileManager, UserProfile, TokenCreated } from '../../lib/userProfileManager'
+import { useAuth } from '../providers/AuthContext'
 import {
   User,
   Edit3,
@@ -23,9 +24,14 @@ import {
 
 export default function ProfilePage() {
   const { address: userAddress, isConnected } = useAccount()
+  const { user } = useAuth()
+  const isTraderRoleLocked = user?.role === 'TRADER'
 
   // Profile state
   const [profile, setProfile] = useState<UserProfile | null>(null)
+  const visibleTokensCreated: TokenCreated[] = isTraderRoleLocked
+    ? []
+    : (profile?.tokensCreated || [])
   const [isLoading, setIsLoading] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -597,13 +603,19 @@ export default function ProfilePage() {
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-bold text-white">Tokens Created</h2>
                 <span className="px-3 py-1 bg-[#FF4F84]/20 text-[#FF4F84] text-sm font-medium rounded-full border border-[#FF4F84]/30">
-                  {profile?.tokensCreated?.length || 0}
+                  {visibleTokensCreated.length}
                 </span>
               </div>
 
-              {profile?.tokensCreated?.length ? (
+              {isTraderRoleLocked ? (
+                <div className="empty-state">
+                  <Coins className="empty-state-icon" />
+                  <p className="empty-state-title">Creator-only section</p>
+                  <p className="empty-state-description">Your role is locked as TRADER, so token creation history is hidden.</p>
+                </div>
+              ) : visibleTokensCreated.length ? (
                 <div className="space-y-3">
-                  {profile.tokensCreated.map((token, index) => (
+                  {visibleTokensCreated.map((token, index) => (
                     <div key={index} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
                       <div className="flex items-center space-x-3">
                         <div className="w-10 h-10 bg-gradient-to-br from-[#12D9C8] to-[#00D1FF] rounded-full flex items-center justify-center text-white text-sm font-bold">

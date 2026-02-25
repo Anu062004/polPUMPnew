@@ -1,45 +1,45 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { databaseManager } from '../../../../../lib/databaseManager'
+﻿import { NextRequest, NextResponse } from 'next/server'
+import { requirePostgres } from '../../../../../lib/gamingPostgres'
 
-// Force dynamic rendering to prevent build-time execution
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const limit = parseInt(searchParams.get('limit') || '20')
+    const limitRaw = parseInt(searchParams.get('limit') || '20', 10)
+    const limit = Math.max(1, Math.min(100, Number.isFinite(limitRaw) ? limitRaw : 20))
 
-    await databaseManager.initialize()
-    const db = await databaseManager.getConnection()
+    const sql = await requirePostgres()
 
-    const recent = await db.all(`
-      SELECT 
+    const recentResult = await sql`
+      SELECT
         id,
-        userAddress,
+        user_address,
         wager,
         outcome,
-        blockNumber,
-        blockHash,
-        createdAt
+        block_number,
+        block_hash,
+        created_at
       FROM gaming_coinflip
-      ORDER BY createdAt DESC
-      LIMIT ?
-    `, [limit])
-
-    await db.close()
+      ORDER BY created_at DESC
+      LIMIT ${limit}
+    `
+    const recent = Array.isArray(recentResult)
+      ? recentResult
+      : (recentResult as any).rows || []
 
     return NextResponse.json({
       success: true,
       recent: recent.map((game: any) => ({
         id: game.id,
-        userAddress: game.userAddress,
+        userAddress: game.user_address,
         wager: game.wager,
         outcome: game.outcome,
         won: game.outcome === 'win',
-        blockNumber: game.blockNumber,
-        blockHash: game.blockHash,
-        createdAt: game.createdAt,
+        blockNumber: game.block_number,
+        blockHash: game.block_hash,
+        createdAt: game.created_at,
       })),
     })
   } catch (error: any) {
@@ -50,4 +50,3 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-

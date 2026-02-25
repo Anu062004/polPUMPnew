@@ -5,7 +5,7 @@
 
 'use client'
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { useAccount, useSignMessage } from 'wagmi'
 import { generateSignMessage } from '../../lib/authUtils'
 
@@ -21,7 +21,7 @@ interface AuthContextType {
   isAuthenticated: boolean
   isLoading: boolean
   accessToken: string | null
-  login: () => Promise<void>
+  login: (preferredRole?: Role) => Promise<void>
   logout: () => Promise<void>
   refreshAuth: () => Promise<void>
   checkRole: () => Promise<void>
@@ -35,8 +35,9 @@ const REFRESH_TOKEN_KEY = 'polpump_refresh_token'
 const USER_KEY = 'polpump_user'
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { address, isConnected } = useAccount()
+  const { address, isConnected, connector } = useAccount()
   const { signMessageAsync } = useSignMessage()
+  const loginInFlightRef = useRef<Promise<void> | null>(null)
   
   const [user, setUser] = useState<AuthUser | null>(null)
   const [accessToken, setAccessToken] = useState<string | null>(null)
@@ -71,56 +72,101 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isConnected, address, user])
 
-  const login = useCallback(async () => {
+  const login = useCallback(async (preferredRole?: Role) => {
+    if (loginInFlightRef.current) {
+      return loginInFlightRef.current
+    }
+
     if (!address || !isConnected) {
       throw new Error('Wallet not connected')
     }
 
-    try {
-      setIsLoading(true)
+    loginInFlightRef.current = (async () => {
+      try {
+        setIsLoading(true)
 
-      // Generate message to sign
-      const nonce = Date.now().toString()
-      const timestamp = Date.now()
-      const message = generateSignMessage(address, 'authenticate', nonce, timestamp)
+        if (!connector || typeof connector.getChainId !== 'function') {
+          throw new Error('Wallet connector is not ready. Please reconnect your wallet and try again.')
+        }
 
-      // Request signature
-      const signature = await signMessageAsync({ message })
+        // Generate message to sign
+        const nonce = Date.now().toString()
+        const timestamp = Date.now()
+        const message = generateSignMessage(address, 'authenticate', nonce, timestamp)
 
-      // Send to backend
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          wallet: address,
-          signature,
-          message,
-          nonce,
-        }),
-      })
+        // Request signature
+        let signature: string
+        try {
+          signature = await signMessageAsync({ message })
+        } catch (error: any) {
+          const shouldUseFallback = String(error?.message || '').includes('getChainId is not a function')
+          const injectedProvider = (
+            globalThis as typeof globalThis & {
+              ethereum?: { request?: (args: { method: string; params?: unknown[] }) => Promise<unknown> }
+            }
+          ).ethereum
 
-      const data = await response.json()
+          if (!shouldUseFallback || !injectedProvider?.request) {
+            throw error
+          }
 
-      if (!data.success) {
-        throw new Error(data.error || 'Login failed')
+          const fallbackSignature = await injectedProvider.request({
+            method: 'personal_sign',
+            params: [message, address],
+          })
+
+          if (typeof fallbackSignature !== 'string') {
+            throw new Error('Wallet did not return a valid signature')
+          }
+
+          signature = fallbackSignature
+        }
+
+        // Send to backend
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            wallet: address,
+            signature,
+            message,
+            nonce,
+            desiredRole: preferredRole || null,
+          }),
+        })
+
+        const data = await response.json()
+
+        if (!data.success) {
+          const authError: any = new Error(data.error || 'Login failed')
+          if (data.errorCode) authError.code = data.errorCode
+          if (data.roleSelectionRequired) authError.roleSelectionRequired = true
+          throw authError
+        }
+
+        // Store tokens and user info
+        localStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken)
+        localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken)
+        localStorage.setItem(USER_KEY, JSON.stringify({ wallet: data.wallet, role: data.role }))
+
+        setAccessToken(data.accessToken)
+        setUser({ wallet: data.wallet, role: data.role })
+      } catch (error: any) {
+        console.error('Login error:', error)
+        throw error
+      } finally {
+        setIsLoading(false)
       }
+    })()
 
-      // Store tokens and user info
-      localStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken)
-      localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken)
-      localStorage.setItem(USER_KEY, JSON.stringify({ wallet: data.wallet, role: data.role }))
-
-      setAccessToken(data.accessToken)
-      setUser({ wallet: data.wallet, role: data.role })
-    } catch (error: any) {
-      console.error('Login error:', error)
-      throw error
+    try {
+      await loginInFlightRef.current
     } finally {
-      setIsLoading(false)
+      loginInFlightRef.current = null
     }
-  }, [address, isConnected, signMessageAsync])
+  }, [address, isConnected, connector, signMessageAsync])
 
   const logout = useCallback(async () => {
     try {
@@ -264,4 +310,3 @@ export function useAuth() {
   }
   return context
 }
-

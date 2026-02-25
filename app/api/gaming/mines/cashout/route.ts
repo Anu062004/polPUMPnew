@@ -7,6 +7,10 @@ import { validateGameId, validateAddress } from '../../../../../lib/validationUt
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
+function toRows(result: any): any[] {
+  return Array.isArray(result) ? result : result?.rows || []
+}
+
 /**
  * Cash out from a Mines game
  * SECURITY: Requires wallet signature verification
@@ -81,15 +85,16 @@ export async function POST(request: NextRequest) {
         AND user_address = ${userAddress.toLowerCase()}
         FOR UPDATE
       `
+      const gameRows = toRows(gameResult)
 
-      if (gameResult.length === 0) {
+      if (gameRows.length === 0) {
         return NextResponse.json(
           { success: false, error: 'Game not found' },
           { status: 404 }
         )
       }
 
-      const game = gameResult[0]
+      const game = gameRows[0]
 
       if (game.status !== 'active') {
         return NextResponse.json(
@@ -114,9 +119,10 @@ export async function POST(request: NextRequest) {
         AND status = 'active'
         RETURNING *
       `
+      const updatedRows = toRows(updateResult)
 
       // Check if update succeeded (another request may have cashed out first)
-      if (updateResult.length === 0) {
+      if (updatedRows.length === 0) {
         return NextResponse.json(
           {
             success: false,

@@ -1,19 +1,23 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useMemo } from 'react'
 
 export default function BlobBackground() {
-  const [particles, setParticles] = useState<Array<{ left: string; delay: string; duration: string }>>([])
-
-  useEffect(() => {
-    // Generate particles only on client side to avoid hydration mismatch
-    const generatedParticles = Array.from({ length: 30 }).map(() => ({
-      left: `${Math.random() * 100}%`,
-      delay: `${Math.random() * 15}s`,
-      duration: `${15 + Math.random() * 10}s`,
-    }))
-    setParticles(generatedParticles)
-  }, [])
+  const particles = useMemo<Array<{ left: string; delay: string; duration: string }>>(
+    () =>
+      Array.from({ length: 30 }, (_, index) => {
+        // Deterministic values avoid client re-renders from effect-driven state updates.
+        const left = (index * 37.137) % 100
+        const delay = (index * 1.73) % 15
+        const duration = 15 + ((index * 2.11) % 10)
+        return {
+          left: `${left.toFixed(2)}%`,
+          delay: `${delay.toFixed(2)}s`,
+          duration: `${duration.toFixed(2)}s`,
+        }
+      }),
+    []
+  )
 
   return (
     <>

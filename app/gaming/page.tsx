@@ -1,15 +1,24 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useAccount } from 'wagmi'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { ethers } from 'ethers'
 import { useRouter } from 'next/navigation'
 import TokenCreatorModal from '../components/TokenCreatorModal'
 import BlobBackground from '../components/BlobBackground'
+import { useAuth } from '../providers/AuthContext'
+
+const COIN_CREATED_EVENT = 'polpump:coin-created'
+const COIN_CREATED_STORAGE_KEY = 'polpump:last-coin-created'
+
+function getCoinKey(coin: any): string {
+  return ((coin?.tokenAddress || coin?.id || '') as string).toLowerCase()
+}
 
 export default function GamingPage() {
   const { address } = useAccount()
+  const { accessToken } = useAuth()
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<'pumpplay' | 'meme-royale' | 'mines' | 'arcade'>('pumpplay')
   const backend = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000'
@@ -70,18 +79,56 @@ export default function GamingPage() {
   // Wallet Balance Tracking
   const [nativeBalance, setNativeBalance] = useState<string>('0.0')
   const [isLoadingBalance, setIsLoadingBalance] = useState(false)
+  const coinsRequestInFlightRef = useRef(false)
+  const scheduledRefreshRef = useRef<number[]>([])
 
   // Derived data: tokens created by the connected user
-  const createdCoins = address
-    ? allCoins.filter(
+  const createdCoins = useMemo(() => {
+    if (!address) return []
+    return allCoins.filter(
       (c) =>
         typeof c.creator === 'string' &&
         c.creator.toLowerCase() === address.toLowerCase()
     )
-    : []
+  }, [address, allCoins])
+
+  const userCoinKeys = useMemo(
+    () => new Set(userCoins.map((coin) => getCoinKey(coin)).filter(Boolean)),
+    [userCoins]
+  )
+
+  const platformOnlyCoins = useMemo(
+    () => allCoins.filter((coin) => !userCoinKeys.has(getCoinKey(coin))),
+    [allCoins, userCoinKeys]
+  )
+
+  const optimisticUpsertCoin = useCallback((tokenData: any) => {
+    const optimisticCoin = {
+      id: tokenData.txHash || tokenData.tokenAddress || `pending-${Date.now()}`,
+      name: tokenData.name || 'Unknown Token',
+      symbol: tokenData.symbol || 'UNKNOWN',
+      tokenAddress: tokenData.tokenAddress || null,
+      curveAddress: tokenData.curveAddress || null,
+      imageHash: tokenData.imageHash || null,
+      description: tokenData.description || '',
+      createdAt: tokenData.createdAt || new Date().toISOString(),
+      creator: tokenData.creator || address || 'Unknown',
+      txHash: tokenData.txHash || null,
+      supply: tokenData.supply || '0',
+      isPending: !tokenData.tokenAddress,
+    }
+
+    setAllCoins((prev) => {
+      const key = getCoinKey(optimisticCoin)
+      const merged = [optimisticCoin, ...prev.filter((coin) => getCoinKey(coin) !== key)]
+      return merged.sort(
+        (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+      )
+    })
+  }, [address])
 
   // Load native MATIC balance
-  const loadNativeBalance = async () => {
+  const loadNativeBalance = useCallback(async () => {
     if (!address) return
     try {
       setIsLoadingBalance(true)
@@ -93,7 +140,7 @@ export default function GamingPage() {
       console.error('Failed to load balance:', e)
       setIsLoadingBalance(false)
     }
-  }
+  }, [address])
 
   // Set mounted state on client
   useEffect(() => {
@@ -103,23 +150,25 @@ export default function GamingPage() {
   // Auto-refresh native balance
   useEffect(() => {
     if (!address) return
-    loadNativeBalance()
+    void loadNativeBalance()
     const interval = setInterval(loadNativeBalance, 10000) // Refresh every 10s
     return () => clearInterval(interval)
-  }, [address])
+  }, [address, loadNativeBalance])
 
   // Load platform coins and user holdings with real-time balance updates
-  // Uses Next.js API route as fallback if backend is not available
-  const loadCoinsData = async () => {
+  // Uses backend first, with Next.js API fallback.
+  const loadCoinsData = useCallback(async (force = false) => {
     if (!address) return
+    if (coinsRequestInFlightRef.current && !force) return
+
+    coinsRequestInFlightRef.current = true
     setLoadingCoins(true)
 
     try {
-      // Try backend first with better error handling
       let response: Response | null = null
       try {
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 5000) // 5s timeout
+        const timeoutId = setTimeout(() => controller.abort(), 5000)
         const timestamp = Date.now()
 
         response = await fetch(`${backend}/gaming/coins/${address}?t=${timestamp}`, {
@@ -133,19 +182,19 @@ export default function GamingPage() {
 
         clearTimeout(timeoutId)
       } catch (fetchError: any) {
-        // Silently handle connection errors - backend is not available
-        if (fetchError.name === 'AbortError' || fetchError.message?.includes('Failed to fetch') || fetchError.message?.includes('ERR_CONNECTION_REFUSED')) {
-          // Backend not available, will use fallback
+        if (
+          fetchError.name === 'AbortError' ||
+          fetchError.message?.includes('Failed to fetch') ||
+          fetchError.message?.includes('ERR_CONNECTION_REFUSED')
+        ) {
           response = null
         } else {
           throw fetchError
         }
       }
 
-      // Fallback to Next.js API route if backend failed
       if (!response || !response.ok) {
         try {
-          // Add timestamp to force cache-busting and ensure fresh data
           const timestamp = Date.now()
           response = await fetch(`/api/gaming/coins/${address}?t=${timestamp}`, {
             cache: 'no-store',
@@ -154,50 +203,99 @@ export default function GamingPage() {
               'Pragma': 'no-cache'
             }
           })
-        } catch (apiError) {
+        } catch {
           console.warn('Both backend and API route failed, using empty data')
           setAllCoins([])
           setUserCoins([])
-          setLoadingCoins(false)
           return
         }
       }
 
       if (response && response.ok) {
         const data = await response.json()
-        console.log(`✅ Coins loaded: ${data.totalCoins || 0} total, ${data.coinsWithBalance || 0} with balance`)
-        console.log(`📋 All coin symbols:`, (data.coins || []).map((c: any) => c.symbol).join(', '))
-        console.log(`👤 Created by you:`, (data.coins || []).filter((c: any) =>
-          c.creator?.toLowerCase() === address?.toLowerCase()
-        ).map((c: any) => c.symbol).join(', '))
+        console.log(`Coins loaded: ${data.totalCoins || 0} total, ${data.coinsWithBalance || 0} with balance`)
         setAllCoins(data.coins || [])
         setUserCoins(data.userHoldings || [])
-        setLoadingCoins(false)
-        // Also refresh native balance
-        loadNativeBalance()
+        void loadNativeBalance()
       } else {
-        // Log error for debugging
         const errorText = response ? await response.text() : 'No response'
-        console.error(`❌ Failed to load coins: ${response?.status} ${response?.statusText}`, errorText)
+        console.error(`Failed to load coins: ${response?.status} ${response?.statusText}`, errorText)
         setAllCoins([])
         setUserCoins([])
-        setLoadingCoins(false)
       }
     } catch (e: any) {
-      // Log error for debugging
-      console.error('❌ Error loading coins:', e)
+      console.error('Error loading coins:', e)
       setAllCoins([])
       setUserCoins([])
+    } finally {
       setLoadingCoins(false)
+      coinsRequestInFlightRef.current = false
     }
-  }
+  }, [address, backend, loadNativeBalance])
+
+  const scheduleCoinRefreshes = useCallback((delays: number[] = [250, 1500]) => {
+    if (typeof window === 'undefined') return
+    scheduledRefreshRef.current.forEach((id) => window.clearTimeout(id))
+    scheduledRefreshRef.current = delays.map((delay) =>
+      window.setTimeout(() => {
+        void loadCoinsData(true)
+      }, delay)
+    )
+  }, [loadCoinsData])
 
   useEffect(() => {
     if (!address) return
-    loadCoinsData()
-    const interval = setInterval(loadCoinsData, 10000) // Refresh every 10s
+    void loadCoinsData(true)
+    const interval = setInterval(() => {
+      void loadCoinsData()
+    }, 10000)
     return () => clearInterval(interval)
-  }, [address, backend])
+  }, [address, loadCoinsData])
+
+  useEffect(() => {
+    return () => {
+      if (typeof window === 'undefined') return
+      scheduledRefreshRef.current.forEach((id) => window.clearTimeout(id))
+      scheduledRefreshRef.current = []
+    }
+  }, [])
+
+  // Listen for coin-creation events to reflect new coins instantly in gaming.
+  useEffect(() => {
+    if (!address || typeof window === 'undefined') return
+
+    const applyCreatedCoin = (payload: any) => {
+      if (!payload || typeof payload !== 'object') return
+      optimisticUpsertCoin({
+        ...payload,
+        creator: payload.creator || address,
+      })
+      scheduleCoinRefreshes([300, 1400])
+    }
+
+    const onCoinCreated = (event: Event) => {
+      const customEvent = event as CustomEvent<any>
+      applyCreatedCoin(customEvent.detail)
+    }
+
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== COIN_CREATED_STORAGE_KEY || !event.newValue) return
+      try {
+        const parsed = JSON.parse(event.newValue)
+        applyCreatedCoin(parsed)
+      } catch {
+        // Ignore malformed storage payloads.
+      }
+    }
+
+    window.addEventListener(COIN_CREATED_EVENT, onCoinCreated as EventListener)
+    window.addEventListener('storage', onStorage)
+
+    return () => {
+      window.removeEventListener(COIN_CREATED_EVENT, onCoinCreated as EventListener)
+      window.removeEventListener('storage', onStorage)
+    }
+  }, [address, optimisticUpsertCoin, scheduleCoinRefreshes])
 
   // Load PumpPlay rounds
   useEffect(() => {
@@ -262,7 +360,7 @@ export default function GamingPage() {
     loadBattles()
     const interval = setInterval(loadBattles, 10000)
     return () => clearInterval(interval)
-  }, [activeTab, backend, battleResult])
+  }, [activeTab, backend])
 
   // Load Coinflip leaderboard
   useEffect(() => {
@@ -295,7 +393,7 @@ export default function GamingPage() {
     load()
     const interval = setInterval(load, 10000)
     return () => clearInterval(interval)
-  }, [activeTab, backend, coinflipResult])
+  }, [activeTab, backend])
 
   // PumpPlay: Place Bet
   const placeBet = async () => {
@@ -386,8 +484,8 @@ export default function GamingPage() {
         alert(`✅ Bet placed successfully!\n\nYou bet ${betAmount} tokens on ${selectedRound.coinDetails?.find((c: any) => c.id == betCoin)?.symbol || betCoin}\n\nWait for round to end!`)
         // Reload rounds and refresh balances
         setTimeout(() => {
-          loadCoinsData()
-          loadNativeBalance()
+          void loadCoinsData(true)
+          void loadNativeBalance()
         }, 2000)
         setSelectedRound(null)
         setBetCoin('')
@@ -506,8 +604,8 @@ export default function GamingPage() {
 
         // Refresh balances immediately after battle
         setTimeout(() => {
-          loadCoinsData()
-          loadNativeBalance()
+          void loadCoinsData(true)
+          void loadNativeBalance()
         }, 2000)
       }
 
@@ -616,8 +714,8 @@ export default function GamingPage() {
 
       // Refresh balances immediately after game ends
       setTimeout(() => {
-        loadCoinsData()
-        loadNativeBalance()
+        void loadCoinsData(true)
+        void loadNativeBalance()
       }, 2000)
 
     } catch (e: any) {
@@ -781,7 +879,7 @@ export default function GamingPage() {
                   <button
                     onClick={() => {
                       console.log('🔄 Manual refresh triggered')
-                      loadCoinsData()
+                      void loadCoinsData(true)
                     }}
                     className="px-4 py-2.5 bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white font-bold rounded-lg shadow-lg transform hover:scale-105 transition-all duration-200 border border-blue-400/50"
                     title="Refresh coins list"
@@ -809,15 +907,18 @@ export default function GamingPage() {
                   <select
                     value={selectedCoin}
                     onChange={(e) => {
-                      setSelectedCoin(e.target.value)
-                      if (e.target.value) {
-                        const coin = userCoins.find(c => c.tokenAddress === e.target.value) ||
-                          allCoins.find(c => c.tokenAddress === e.target.value)
+                      const value = e.target.value
+                      setSelectedCoin(value)
+                      if (value) {
+                        const lookup = value.toLowerCase()
+                        const coin = userCoins.find((c) => getCoinKey(c) === lookup) ||
+                          allCoins.find((c) => getCoinKey(c) === lookup)
                         if (coin) {
-                          setBetToken(e.target.value)
-                          setStakeToken(e.target.value)
-                          setMinesToken(e.target.value)
-                          setFlipToken(e.target.value)
+                          const selectedValue = coin.tokenAddress || coin.id || value
+                          setBetToken(selectedValue)
+                          setStakeToken(selectedValue)
+                          setMinesToken(selectedValue)
+                          setFlipToken(selectedValue)
                         }
                       }
                     }}
@@ -833,15 +934,13 @@ export default function GamingPage() {
                         ))}
                       </optgroup>
                     )}
-                    {allCoins.filter(c => !userCoins.find(uc => (uc.tokenAddress || uc.id) === (c.tokenAddress || c.id))).length > 0 && (
+                    {platformOnlyCoins.length > 0 && (
                       <optgroup label="All Platform Coins" className="bg-[#1a0b2e]">
-                        {allCoins
-                          .filter(c => !userCoins.find(uc => (uc.tokenAddress || uc.id) === (c.tokenAddress || c.id)))
-                          .map((c) => (
-                            <option key={c.tokenAddress || c.id || `pending-${c.id}`} value={c.tokenAddress || c.id || ''} className="bg-[#1a0b2e" disabled={!c.tokenAddress}>
-                              {c.symbol || 'UNKNOWN'} (0.0000) - {c.name || 'Unknown Token'} {!c.tokenAddress ? '- Pending Creation' : '- Buy first to play'}
-                            </option>
-                          ))}
+                        {platformOnlyCoins.map((c) => (
+                          <option key={c.tokenAddress || c.id || `pending-${c.id}`} value={c.tokenAddress || c.id || ''} className="bg-[#1a0b2e]" disabled={!c.tokenAddress}>
+                            {c.symbol || 'UNKNOWN'} (0.0000) - {c.name || 'Unknown Token'} {!c.tokenAddress ? '- Pending Creation' : '- Buy first to play'}
+                          </option>
+                        ))}
                       </optgroup>
                     )}
                   </select>
@@ -1703,7 +1802,9 @@ export default function GamingPage() {
                           if (data.success) {
                             setGameStatus('cashed');
                             alert(`💰 Cashed out ${data.cashoutAmount.toFixed(4)} tokens!`);
-                            setTimeout(() => loadCoinsData(), 2000);
+                            setTimeout(() => {
+                              void loadCoinsData(true)
+                            }, 2000);
                           } else {
                             alert(data.error || 'Failed to cash out')
                           }
@@ -2050,6 +2151,13 @@ export default function GamingPage() {
         onTokenCreated={async (tokenData) => {
           console.log('✅ Token created:', tokenData)
 
+          // Optimistically insert the newly created coin so it appears instantly in gaming.
+          optimisticUpsertCoin({
+            ...tokenData,
+            creator: address || 'Unknown',
+            createdAt: new Date().toISOString(),
+          })
+
           // Save token to database via API
           let saveSuccess = false
           if (tokenData.tokenAddress && tokenData.curveAddress && tokenData.txHash) {
@@ -2069,13 +2177,14 @@ export default function GamingPage() {
               websiteUrl: tokenData.websiteUrl,
             }
 
-            const attemptSave = async (delayMs: number) => {
-              await new Promise((r) => setTimeout(r, delayMs))
-              const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-              if (apiKey) headers['x-api-key'] = apiKey
-              const resp = await fetch('/api/coins', {
-                method: 'POST',
-                headers,
+              const attemptSave = async (delayMs: number) => {
+                await new Promise((r) => setTimeout(r, delayMs))
+                const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+                if (apiKey) headers['x-api-key'] = apiKey
+                if (accessToken) headers.Authorization = `Bearer ${accessToken}`
+                const resp = await fetch('/api/coins', {
+                  method: 'POST',
+                  headers,
                 body: JSON.stringify(payload),
               })
               if (!resp.ok) {
@@ -2102,25 +2211,13 @@ export default function GamingPage() {
             }
           }
 
-          // Refresh coins list after creation - force immediate refresh with multiple attempts
+          // Refresh coin data after persistence attempts complete.
           if (address) {
-            // Wait a moment for database write to complete, then refresh
-            const refreshCoins = () => {
-              console.log('🔄 Refreshing coins list...')
-              loadCoinsData()
-            }
-
-            // Immediate refresh (after save completes)
             if (saveSuccess) {
-              setTimeout(refreshCoins, 500) // Wait 500ms for DB write
+              scheduleCoinRefreshes([500, 1500, 3000])
             } else {
-              refreshCoins() // Try immediately if save failed
+              scheduleCoinRefreshes([0, 1500, 3000])
             }
-
-            // Additional refreshes to ensure the new token appears
-            setTimeout(refreshCoins, 1500) // After 1.5 seconds
-            setTimeout(refreshCoins, 3000) // After 3 seconds
-            setTimeout(refreshCoins, 5000) // After 5 seconds
           }
           setIsCreateCoinModalOpen(false)
         }}
@@ -2128,3 +2225,4 @@ export default function GamingPage() {
     </div>
   )
 }
+

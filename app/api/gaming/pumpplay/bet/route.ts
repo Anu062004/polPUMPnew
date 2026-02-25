@@ -7,6 +7,10 @@ import { validateRoundId, validateAddress, validatePositiveNumber } from '../../
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
+function toRows(result: any): any[] {
+  return Array.isArray(result) ? result : result?.rows || []
+}
+
 /**
  * Place a bet on a PumpPlay round
  * SECURITY: Requires wallet signature verification
@@ -100,15 +104,16 @@ export async function POST(request: NextRequest) {
         WHERE id = ${roundId} 
         FOR UPDATE
       `
+      const roundRows = toRows(roundResult)
 
-      if (roundResult.length === 0) {
+      if (roundRows.length === 0) {
         return NextResponse.json(
           { success: false, error: 'Round not found' },
           { status: 404 }
         )
       }
 
-      const round = roundResult[0]
+      const round = roundRows[0]
 
       if (round.status !== 'open') {
         return NextResponse.json(

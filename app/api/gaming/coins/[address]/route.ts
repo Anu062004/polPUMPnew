@@ -1,9 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { ethers } from 'ethers'
 import { initializeSchema, getSql } from '@/lib/postgresManager'
-import sqlite3 from 'sqlite3'
-import { open } from 'sqlite'
-import path from 'path'
 
 // ERC20 ABI for balance checking
 const ERC20_ABI = [
@@ -13,21 +10,27 @@ const ERC20_ABI = [
   'function name() view returns (string)'
 ]
 
-// MemeToken ABI (from bonding curve system)
-const MEME_TOKEN_ABI = [
-  'function balanceOf(address account) view returns (uint256)',
-  'function decimals() view returns (uint8)',
-  'function symbol() view returns (string)',
-  'function name() view returns (string)'
-]
-
-const allowSqliteFallback =
-  process.env.NODE_ENV !== 'production' &&
-  process.env.ALLOW_SQLITE_FALLBACK !== '0'
+const allowSqliteFallback = false
 
 const RATE_LIMIT_WINDOW_MS = 60_000
 const RATE_LIMIT_MAX = 120 // Increased for gaming page auto-refresh
 const rateBuckets = new Map<string, { count: number; reset: number }>()
+const BALANCE_CACHE_TTL_MS = 20_000
+const BALANCE_FETCH_CONCURRENCY = 8
+const balanceCache = new Map<string, { value: string; expiresAt: number }>()
+
+function getBalanceCacheKey(userAddress: string, tokenAddress: string): string {
+  return `${userAddress.toLowerCase()}:${tokenAddress.toLowerCase()}`
+}
+
+function pruneExpiredBalanceCache() {
+  const now = Date.now()
+  for (const [key, cached] of balanceCache.entries()) {
+    if (cached.expiresAt <= now) {
+      balanceCache.delete(key)
+    }
+  }
+}
 
 function getClientKey(request: NextRequest) {
   const ip =
@@ -62,13 +65,29 @@ async function getTokenBalance(
   tokenAddress: string,
   userAddress: string
 ): Promise<string> {
+  const cacheKey = getBalanceCacheKey(userAddress, tokenAddress)
+  const cached = balanceCache.get(cacheKey)
+  const now = Date.now()
+  if (cached && cached.expiresAt > now) {
+    return cached.value
+  }
+
   try {
     const token = new ethers.Contract(tokenAddress, ERC20_ABI, provider)
     const balance = await token.balanceOf(userAddress)
     const decimals = await token.decimals().catch(() => 18) // Default to 18 if decimals() fails
-    return ethers.formatUnits(balance, decimals)
+    const formatted = ethers.formatUnits(balance, decimals)
+    balanceCache.set(cacheKey, {
+      value: formatted,
+      expiresAt: now + BALANCE_CACHE_TTL_MS,
+    })
+    return formatted
   } catch (error: any) {
     console.warn(`Failed to get balance for ${tokenAddress}:`, error.message)
+    balanceCache.set(cacheKey, {
+      value: '0',
+      expiresAt: now + 5_000,
+    })
     return '0'
   }
 }
@@ -76,75 +95,33 @@ async function getTokenBalance(
 export const dynamic = 'force-dynamic'
 
 async function loadCoinsFromSqlite() {
-  try {
-    if (!allowSqliteFallback) {
-      console.warn('SQLite fallback disabled; returning empty coin list')
-      return []
-    }
-    // Use the same database path logic as the coins API
-    const isServerless = process.env.VERCEL === '1' || 
-                        process.env.AWS_LAMBDA_FUNCTION_NAME || 
-                        process.env.NEXT_RUNTIME === 'nodejs'
-    
-    const dbPath = isServerless 
-      ? '/tmp/data/coins.db'
-      : path.join(process.cwd(), 'data', 'coins.db')
-    
-    const fs = await import('fs/promises')
-    
-    // Check if database file exists
-    try {
-      await fs.access(dbPath)
-      console.log(`📂 Reading SQLite database from: ${dbPath}`)
-    } catch {
-      console.log('⚠️ SQLite database file does not exist:', dbPath)
-      // Try to create the directory if it doesn't exist
-      try {
-        await fs.mkdir(path.dirname(dbPath), { recursive: true })
-        console.log(`📁 Created data directory: ${path.dirname(dbPath)}`)
-      } catch (mkdirError) {
-        console.warn('⚠️ Could not create data directory:', mkdirError)
+  return []
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  if (items.length === 0) return []
+
+  const results = new Array<R>(items.length)
+  let nextIndex = 0
+
+  const runners = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    async () => {
+      while (true) {
+        const currentIndex = nextIndex
+        nextIndex += 1
+        if (currentIndex >= items.length) break
+        results[currentIndex] = await worker(items[currentIndex], currentIndex)
       }
-      return []
     }
+  )
 
-    const db = await open({
-      filename: dbPath,
-      driver: sqlite3.Database,
-    })
-
-    // Get all coins from SQLite - include ALL tokens regardless of status
-    // Get ALL coins from SQLite - no filtering, include everything
-    // Removed limit to show ALL coins
-    const rows = await db.all<any[]>(
-      `SELECT * FROM coins ORDER BY createdAt DESC`
-    )
-
-    await db.close()
-
-    console.log(`📊 SQLite query returned ${rows.length} rows from ${dbPath}`)
-    if (rows.length > 0) {
-      console.log(`📋 SQLite coin symbols:`, rows.map((r: any) => r.symbol).join(', '))
-      console.log(`📋 SQLite coin names:`, rows.map((r: any) => r.name).join(', '))
-    }
-
-    return rows.map((coin: any) => ({
-      id: coin.id,
-      name: coin.name,
-      symbol: coin.symbol,
-      supply: coin.supply,
-      imageHash: coin.imageHash,
-      tokenAddress: coin.tokenAddress,
-      curveAddress: coin.curveAddress,
-      txHash: coin.txHash,
-      creator: coin.creator,
-      createdAt: coin.createdAt,
-      description: coin.description,
-    }))
-  } catch (error: any) {
-    console.error('❌ SQLite fallback for gaming coins failed:', error?.message || error)
-    return []
-  }
+  await Promise.all(runners)
+  return results
 }
 
 export async function GET(
@@ -159,10 +136,10 @@ export async function GET(
     const resolvedParams = params instanceof Promise ? await params : params
     const userAddress = resolvedParams.address
 
-    console.log(`🔍 Gaming coins API called with address: ${userAddress}`)
+    console.log(`ðŸ” Gaming coins API called with address: ${userAddress}`)
 
     if (!userAddress || !ethers.isAddress(userAddress)) {
-      console.error(`❌ Invalid address provided: ${userAddress}`)
+      console.error(`âŒ Invalid address provided: ${userAddress}`)
       return NextResponse.json(
         { success: false, error: 'Invalid address', coins: [], userHoldings: [], totalCoins: 0, coinsWithBalance: 0 },
         { status: 400 }
@@ -187,10 +164,10 @@ export async function GET(
           schemaError.message?.includes('POSTGRES_PRISMA_URL') ||
           schemaError.message?.includes('not properly initialized') ||
           schemaError.message?.includes('Cannot read properties')) {
-        console.warn('⚠️ PostgreSQL connection/client issue, will use SQLite fallback:', schemaError.message)
-        console.warn('⚠️ Error type:', schemaError.constructor?.name || typeof schemaError)
+        console.warn('âš ï¸ PostgreSQL connection/client issue, will use SQLite fallback:', schemaError.message)
+        console.warn('âš ï¸ Error type:', schemaError.constructor?.name || typeof schemaError)
       } else {
-        console.warn('⚠️ Schema initialization warning (may already exist):', schemaError.message)
+        console.warn('âš ï¸ Schema initialization warning (may already exist):', schemaError.message)
       }
       // Don't throw - let the code continue to SQLite fallback
     }
@@ -204,7 +181,7 @@ export async function GET(
       
       // If sql is null, Postgres is not available - skip to SQLite fallback
       if (!sql) {
-        console.log('📊 Postgres not available, skipping to SQLite fallback')
+        console.log('ðŸ“Š Postgres not available, skipping to SQLite fallback')
         throw new Error('Postgres not available')
       }
       
@@ -217,7 +194,7 @@ export async function GET(
       
       // Vercel Postgres sql template returns array directly, not { rows: [...] }
       const rows = Array.isArray(result) ? result : (result as any).rows || []
-      console.log(`📊 PostgreSQL query returned ${rows.length} rows`)
+      console.log(`ðŸ“Š PostgreSQL query returned ${rows.length} rows`)
       
       coins = rows.map((coin: any) => ({
         ...coin,
@@ -234,12 +211,12 @@ export async function GET(
         description: coin.description
       }))
       usedPostgres = true
-      console.log(`✅ Fetched ${coins.length} coins from PostgreSQL (including pending)`)
+      console.log(`âœ… Fetched ${coins.length} coins from PostgreSQL (including pending)`)
       if (coins.length > 0) {
-        console.log(`📝 Sample coin:`, { id: coins[0].id, name: coins[0].name, symbol: coins[0].symbol, tokenAddress: coins[0].tokenAddress })
+        console.log(`ðŸ“ Sample coin:`, { id: coins[0].id, name: coins[0].name, symbol: coins[0].symbol, tokenAddress: coins[0].tokenAddress })
       }
     } catch (dbError: any) {
-      console.warn('⚠️ PostgreSQL query failed:', dbError?.message || dbError)
+      console.warn('âš ï¸ PostgreSQL query failed:', dbError?.message || dbError)
       // On PostgreSQL failure, fall back to local SQLite database only when allowed
       if (allowSqliteFallback) {
         coins = await loadCoinsFromSqlite()
@@ -261,141 +238,107 @@ export async function GET(
     // If Postgres succeeded but returned no rows, try SQLite fallback (local dev only)
     // Note: On Vercel, SQLite is ephemeral and won't persist data
     if (usedPostgres && coins.length === 0) {
-      console.log('📊 PostgreSQL returned 0 rows, trying SQLite fallback (local dev only)...')
+      console.log('ðŸ“Š PostgreSQL returned 0 rows, trying SQLite fallback (local dev only)...')
       if (allowSqliteFallback) {
         const sqliteCoins = await loadCoinsFromSqlite()
         if (sqliteCoins.length > 0) {
-          console.log(`✅ SQLite fallback found ${sqliteCoins.length} coins`)
+          console.log(`âœ… SQLite fallback found ${sqliteCoins.length} coins`)
           coins = sqliteCoins
         } else {
-          console.warn('⚠️ No coins found in Postgres or SQLite. On Vercel, ensure POSTGRES_PRISMA_URL is configured and coins are saved to Postgres when created.')
+          console.warn('âš ï¸ No coins found in Postgres or SQLite. On Vercel, ensure POSTGRES_PRISMA_URL is configured and coins are saved to Postgres when created.')
         }
       }
     } else if (!usedPostgres && coins.length > 0) {
-      console.log(`✅ Using SQLite data: ${coins.length} coins found`)
+      console.log(`âœ… Using SQLite data: ${coins.length} coins found`)
     }
     
     // Ensure we have coins - log what we found
-    console.log(`📊 Total coins loaded: ${coins.length}`)
+    console.log(`ðŸ“Š Total coins loaded: ${coins.length}`)
     if (coins.length > 0) {
-      console.log(`📋 Coin symbols:`, coins.map(c => c.symbol).join(', '))
-      console.log(`📋 Coin names:`, coins.map(c => c.name).join(', '))
+      console.log(`ðŸ“‹ Coin symbols:`, coins.map(c => c.symbol).join(', '))
+      console.log(`ðŸ“‹ Coin names:`, coins.map(c => c.name).join(', '))
     } else {
-      console.warn('⚠️ No coins found in database!')
+      console.warn('âš ï¸ No coins found in database!')
     }
 
-    // Fetch balances for all coins in parallel (with rate limiting)
-    const userHoldings: any[] = []
-    const coinsWithData: any[] = []
+    pruneExpiredBalanceCache()
 
-    // Process coins in batches to avoid rate limits
-    const batchSize = 10
-    for (let i = 0; i < coins.length; i += batchSize) {
-      const batch = coins.slice(i, i + batchSize)
-      
-      await Promise.all(
-        batch.map(async (coin: any) => {
-          try {
-            // Include all coins, even without tokenAddress
-            // For coins without tokenAddress, skip balance check but still include them
-            if (!coin.tokenAddress) {
-              // Add coin without balance check
-              coinsWithData.push({
-                id: coin.id || coin.txHash,
-                name: coin.name,
-                symbol: coin.symbol,
-                tokenAddress: null,
-                curveAddress: coin.curveAddress || null,
-                imageHash: coin.imageHash,
-                description: coin.description,
-                createdAt: coin.createdAt,
-                creator: coin.creator,
-                txHash: coin.txHash,
-                supply: coin.supply,
-                isPending: true // Mark as pending
-              })
-              return
-            }
+    // Fetch balances with capped concurrency to avoid RPC overload while staying responsive.
+    const processedCoins = await mapWithConcurrency<any, { coinData: any; holding: any | null }>(
+      coins,
+      BALANCE_FETCH_CONCURRENCY,
+      async (coin: any) => {
+        const coinData = {
+          id: coin.id || coin.txHash,
+          name: coin.name,
+          symbol: coin.symbol,
+          tokenAddress: coin.tokenAddress || null,
+          curveAddress: coin.curveAddress || null,
+          imageHash: coin.imageHash,
+          description: coin.description,
+          createdAt: coin.createdAt,
+          creator: coin.creator,
+          txHash: coin.txHash,
+          supply: coin.supply,
+          isPending: !coin.tokenAddress,
+        }
 
-            const balance = await getTokenBalance(provider, coin.tokenAddress, userAddress)
-            const hasBalance = parseFloat(balance) > 0
+        if (!coin.tokenAddress) {
+          return { coinData, holding: null }
+        }
 
-            const coinData = {
-              id: coin.id || coin.txHash,
-              name: coin.name,
-              symbol: coin.symbol,
-              tokenAddress: coin.tokenAddress,
-              curveAddress: coin.curveAddress || null,
-              imageHash: coin.imageHash,
-              description: coin.description,
-              createdAt: coin.createdAt,
-              creator: coin.creator,
-              txHash: coin.txHash,
-              supply: coin.supply
-            }
-
-            coinsWithData.push(coinData)
-
-            // Add to user holdings if they have balance
-            if (hasBalance) {
-              userHoldings.push({
-                ...coinData,
-                balance,
-                hasBalance: true
-              })
-            }
-          } catch (error: any) {
-            console.warn(`Error processing coin ${coin.id}:`, error.message)
-            // Still add coin without balance
-            coinsWithData.push({
-              id: coin.id || coin.txHash,
-              name: coin.name,
-              symbol: coin.symbol,
-              tokenAddress: coin.tokenAddress,
-              curveAddress: coin.curveAddress || null,
-              imageHash: coin.imageHash,
-              description: coin.description,
-              createdAt: coin.createdAt,
-              creator: coin.creator,
-              txHash: coin.txHash,
-              supply: coin.supply
-            })
+        try {
+          const balance = await getTokenBalance(provider, coin.tokenAddress, userAddress)
+          const hasBalance = parseFloat(balance) > 0
+          if (!hasBalance) {
+            return { coinData, holding: null }
           }
-        })
-      )
 
-      // Small delay between batches to avoid rate limits
-      if (i + batchSize < coins.length) {
-        await new Promise(resolve => setTimeout(resolve, 100))
+          return {
+            coinData,
+            holding: {
+              ...coinData,
+              balance,
+              hasBalance: true,
+            },
+          }
+        } catch (error: any) {
+          console.warn(`Error processing coin ${coin.id}:`, error.message)
+          return { coinData, holding: null }
+        }
       }
-    }
+    )
 
-    // Also try to load from storage SDK as fallback
-    try {
-      const { ogStorageSDK } = await import('@/lib/0gStorageSDK')
-      const storedCoins = await ogStorageSDK.getAllCoins()
-      
-      // Merge stored coins that aren't already in database.
-      // Many legacy coins were stored without an explicit tokenAddress field,
-      // using `id` as the token address instead. We handle both shapes here.
-      for (const coin of storedCoins) {
-        const rawTokenAddress =
-          (coin as any).tokenAddress ||
-          (typeof coin.id === 'string' &&
-            coin.id.startsWith('0x') &&
-            coin.id.length === 42
-              ? coin.id
-              : null)
+    const coinsWithData = processedCoins.map((entry) => entry.coinData)
+    const userHoldings = processedCoins
+      .map((entry) => entry.holding)
+      .filter((entry): entry is any => !!entry)
 
-        if (!rawTokenAddress) continue
-
-        const tokenAddress = rawTokenAddress.toLowerCase()
-
-        const exists = coinsWithData.find(
-          (c) => c.tokenAddress?.toLowerCase() === tokenAddress
+    // Only hit storage fallback when DB sources returned no coins.
+    if (coinsWithData.length === 0) {
+      try {
+        const { ogStorageSDK } = await import('@/lib/0gStorageSDK')
+        const storedCoins = await ogStorageSDK.getAllCoins()
+        const existingTokens = new Set(
+          coinsWithData
+            .map((coin) => coin.tokenAddress?.toLowerCase())
+            .filter((token): token is string => !!token)
         )
 
-        if (!exists) {
+        for (const coin of storedCoins) {
+          const rawTokenAddress =
+            (coin as any).tokenAddress ||
+            (typeof coin.id === 'string' &&
+              coin.id.startsWith('0x') &&
+              coin.id.length === 42
+                ? coin.id
+                : null)
+
+          if (!rawTokenAddress) continue
+
+          const tokenAddress = rawTokenAddress.toLowerCase()
+          if (existingTokens.has(tokenAddress)) continue
+
           try {
             const balance = await getTokenBalance(provider, tokenAddress, userAddress)
             const hasBalance = parseFloat(balance) > 0
@@ -415,6 +358,7 @@ export async function GET(
             }
 
             coinsWithData.push(coinData)
+            existingTokens.add(tokenAddress)
 
             if (hasBalance) {
               userHoldings.push({
@@ -423,18 +367,18 @@ export async function GET(
                 hasBalance: true
               })
             }
-          } catch (error) {
-            // Skip if error
+          } catch {
+            // Skip coin if balance lookup fails.
           }
         }
+      } catch (error) {
+        console.log('Storage SDK fallback failed:', error)
       }
-    } catch (error) {
-      console.log('Storage SDK fallback failed:', error)
     }
 
-    console.log(`✅ Gaming coins API: Returning ${coinsWithData.length} coins, ${userHoldings.length} user holdings`)
-    console.log(`📋 Coin symbols:`, coinsWithData.map(c => c.symbol).join(', '))
-    console.log(`👤 Created by user:`, coinsWithData.filter(c => c.creator?.toLowerCase() === userAddress.toLowerCase()).map(c => c.symbol).join(', '))
+    console.log(`âœ… Gaming coins API: Returning ${coinsWithData.length} coins, ${userHoldings.length} user holdings`)
+    console.log(`ðŸ“‹ Coin symbols:`, coinsWithData.map(c => c.symbol).join(', '))
+    console.log(`ðŸ‘¤ Created by user:`, coinsWithData.filter(c => c.creator?.toLowerCase() === userAddress.toLowerCase()).map(c => c.symbol).join(', '))
     
     return NextResponse.json({
       success: true,
@@ -445,7 +389,7 @@ export async function GET(
     })
 
   } catch (error: any) {
-    console.error('❌ Error fetching gaming coins:', error)
+    console.error('âŒ Error fetching gaming coins:', error)
     console.error('Error stack:', error.stack)
     
     // Return empty arrays instead of failing completely

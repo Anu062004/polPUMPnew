@@ -1,57 +1,78 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { DatabaseManager } from '@/lib/databaseManager'
+﻿import { NextRequest, NextResponse } from 'next/server'
+import { requirePostgres } from '../../../../../lib/gamingPostgres'
 
-// Force dynamic rendering to prevent build-time execution
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
-    await databaseManager.initialize()
-    const db = await databaseManager.getConnection()
+    const sql = await requirePostgres()
+    const toRows = (result: any) =>
+      Array.isArray(result) ? result : result?.rows || []
 
-    // Get recent battles
-    const battles = await db.all(`
-      SELECT 
+    const battlesResult = await sql`
+      SELECT
         id,
-        leftCoinId,
-        rightCoinId,
-        leftScore,
-        rightScore,
-        winnerCoinId,
+        left_coin_id,
+        right_coin_id,
+        left_score,
+        right_score,
+        winner_coin_id,
         judge,
-        createdAt
+        created_at
       FROM gaming_meme_royale
-      ORDER BY createdAt DESC
+      ORDER BY created_at DESC
       LIMIT 20
-    `)
+    `
+    const battles = toRows(battlesResult)
 
-    // Enrich with coin details
     const enrichedBattles = await Promise.all(
       battles.map(async (battle: any) => {
-        const [leftCoin, rightCoin, winnerCoin] = await Promise.all([
-          db.get('SELECT * FROM coins WHERE id = ? OR tokenAddress = ?', [battle.leftCoinId, battle.leftCoinId]),
-          db.get('SELECT * FROM coins WHERE id = ? OR tokenAddress = ?', [battle.rightCoinId, battle.rightCoinId]),
-          battle.winnerCoinId
-            ? db.get('SELECT * FROM coins WHERE id = ? OR tokenAddress = ?', [battle.winnerCoinId, battle.winnerCoinId])
-            : null,
+        const [leftCoinResult, rightCoinResult, winnerCoinResult] = await Promise.all([
+          sql`
+            SELECT id, name, symbol, token_address
+            FROM coins
+            WHERE id = ${battle.left_coin_id}
+               OR token_address = ${battle.left_coin_id}
+            LIMIT 1
+          `,
+          sql`
+            SELECT id, name, symbol, token_address
+            FROM coins
+            WHERE id = ${battle.right_coin_id}
+               OR token_address = ${battle.right_coin_id}
+            LIMIT 1
+          `,
+          battle.winner_coin_id
+            ? sql`
+                SELECT id, name, symbol, token_address
+                FROM coins
+                WHERE id = ${battle.winner_coin_id}
+                   OR token_address = ${battle.winner_coin_id}
+                LIMIT 1
+              `
+            : Promise.resolve([] as any[]),
         ])
+
+        const leftCoin = toRows(leftCoinResult)[0]
+        const rightCoin = toRows(rightCoinResult)[0]
+        const winnerCoin = toRows(winnerCoinResult)[0]
 
         return {
           id: battle.id,
-          leftCoin: leftCoin || { id: battle.leftCoinId, name: 'Unknown', symbol: 'UNK' },
-          rightCoin: rightCoin || { id: battle.rightCoinId, name: 'Unknown', symbol: 'UNK' },
-          leftScore: battle.leftScore,
-          rightScore: battle.rightScore,
-          winnerCoinId: battle.winnerCoinId,
+          leftCoin:
+            leftCoin || { id: battle.left_coin_id, name: 'Unknown', symbol: 'UNK' },
+          rightCoin:
+            rightCoin || { id: battle.right_coin_id, name: 'Unknown', symbol: 'UNK' },
+          leftScore: battle.left_score,
+          rightScore: battle.right_score,
+          winnerCoinId: battle.winner_coin_id,
           winnerCoin: winnerCoin || null,
           judge: battle.judge,
-          createdAt: battle.createdAt,
+          createdAt: battle.created_at,
         }
       })
     )
-
-    await db.close()
 
     return NextResponse.json({
       success: true,
@@ -65,4 +86,3 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-

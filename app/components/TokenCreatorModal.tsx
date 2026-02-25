@@ -16,6 +16,7 @@ import { newFactoryService } from '../../lib/newFactoryService'
 import { newBondingCurveTradingService } from '../../lib/newBondingCurveTradingService'
 import { CONTRACT_CONFIG, verifyFactoryContract } from '../../lib/contract-config'
 import { usePumpAI } from '../providers/PumpAIContext'
+import { useAuth } from '../providers/AuthContext'
 
 interface TokenCreatorModalProps {
   isOpen: boolean
@@ -25,7 +26,9 @@ interface TokenCreatorModalProps {
 
 export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: TokenCreatorModalProps) {
   const { isConnected, address } = useAccount()
+  const { user, accessToken, isAuthenticated } = useAuth()
   const publicClient = usePublicClient()
+  const canCreateAsCreator = isAuthenticated && user?.role === 'CREATOR'
 
   // New bonding curve factory configuration - uses centralized config
   const FACTORY_ADDRESS = CONTRACT_CONFIG.FACTORY_ADDRESS
@@ -114,6 +117,12 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
 
     try {
       if (!address) throw new Error('Wallet not connected')
+      if (!canCreateAsCreator || !accessToken) {
+        throw new Error('Only CREATOR role wallets can create tokens. Switch to CREATOR and sign in again.')
+      }
+      if (user?.wallet?.toLowerCase() !== address.toLowerCase()) {
+        throw new Error('Connected wallet does not match your authenticated CREATOR wallet.')
+      }
 
       const networkName = process.env.NEXT_PUBLIC_NETWORK === 'polygon' ? 'Polygon Mainnet' : 'Polygon Amoy'
       let finalImageHash = ''
@@ -156,6 +165,9 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
       // Use Next.js API route instead of direct backend
       const resp = await fetch('/api/createCoin', {
         method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: form
       })
       const json = await resp.json()
@@ -320,6 +332,21 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
         curveAddress: tokenData.curveAddress,
         txHash: tokenData.txHash
       })
+
+      // Broadcast token creation so other pages (including gaming) can refresh immediately.
+      try {
+        if (typeof window !== 'undefined') {
+          const createdPayload = {
+            ...tokenData,
+            creator: address || '',
+            createdAt: new Date().toISOString(),
+          }
+          window.dispatchEvent(new CustomEvent('polpump:coin-created', { detail: createdPayload }))
+          localStorage.setItem('polpump:last-coin-created', JSON.stringify({ ...createdPayload, ts: Date.now() }))
+        }
+      } catch (broadcastError) {
+        console.warn('Failed to broadcast token-created event:', broadcastError)
+      }
 
       if (onTokenCreated) onTokenCreated(tokenData)
 
@@ -615,6 +642,15 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
                   </div>
                 )}
 
+                {!canCreateAsCreator && (
+                  <div className="flex items-center gap-3 p-3 bg-amber-200 border-4 border-black rounded-2xl shadow-[4px_4px_0_#000]">
+                    <AlertCircle className="w-5 h-5 text-amber-700" />
+                    <span className="text-sm text-amber-900">
+                      Token creation is CREATOR-only. Log in as a CREATOR wallet to continue.
+                    </span>
+                  </div>
+                )}
+
                 {success && (
                   <div className="space-y-3">
                     <div className="flex items-center gap-3 p-3 bg-green-500/20 border border-green-500/30 rounded-lg">
@@ -698,13 +734,18 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
                     <>
                       <Button
                         onClick={handleCreate}
-                        disabled={isCreating || !name || !symbol || !supply || !isConnected || !selectedImage}
+                        disabled={isCreating || !name || !symbol || !supply || !isConnected || !selectedImage || !canCreateAsCreator}
                         className="flex-1 bg-yellow-300 text-slate-900 border-4 border-black shadow-[6px_6px_0_#000] hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-[3px_3px_0_#000]"
                       >
                         {!isConnected ? (
                           <>
                             <Plus className="w-4 h-4 mr-2" />
                             Connect Wallet First
+                          </>
+                        ) : !canCreateAsCreator ? (
+                          <>
+                            <AlertCircle className="w-4 h-4 mr-2" />
+                            Creator Role Required
                           </>
                         ) : !selectedImage ? (
                           <>

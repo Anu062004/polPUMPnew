@@ -5,21 +5,28 @@
  * Flow:
  * 1. Client signs a message with their wallet
  * 2. Backend verifies signature
- * 3. Backend checks ERC-20 token balance to assign role
+ * 3. Backend resolves wallet-locked role (assigned once per wallet)
  * 4. Backend issues JWT tokens (access + refresh)
  * 5. Client stores tokens for authenticated requests
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { verifySignatureWithTimestamp } from '../../../../lib/authUtils'
-import { assignRole } from '../../../../lib/roleService'
+import { getLockedRole, resolveLockedRole, Role } from '../../../../lib/roleService'
 import { issueAccessToken, issueRefreshToken } from '../../../../lib/jwtUtils'
 import { getDb } from '../../../../lib/postgresManager'
+
+function normalizeDesiredRole(input: any): Role | null {
+  if (typeof input !== 'string') return null
+  const role = input.toUpperCase()
+  return role === 'TRADER' || role === 'CREATOR' ? role : null
+}
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { wallet, signature, message, nonce } = body
+    const desiredRole = normalizeDesiredRole(body?.desiredRole)
 
     // Validate input
     if (!wallet || !signature || !message) {
@@ -38,8 +45,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Assign role based on token balance
-    const role = await assignRole(wallet)
+    // Resolve wallet-locked role (created once per wallet, then immutable).
+    const existingLockedRole = await getLockedRole(wallet)
+    if (!existingLockedRole && !desiredRole) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Role selection required for first-time wallet registration',
+          errorCode: 'ROLE_SELECTION_REQUIRED',
+          roleSelectionRequired: true,
+          availableRoles: ['TRADER', 'CREATOR'],
+        },
+        { status: 409 }
+      )
+    }
+
+    const role = existingLockedRole
+      ? existingLockedRole
+      : await resolveLockedRole(wallet, desiredRole as Role)
 
     // Issue JWT tokens
     const accessToken = await issueAccessToken(wallet, role)
@@ -66,18 +89,6 @@ export async function POST(request: NextRequest) {
             new Date().toISOString(),
           ]
         )
-      } else if (db.type === 'vercel') {
-        const { sql } = db
-        await sql`
-          INSERT INTO user_sessions (wallet, role, refresh_token, expires_at, created_at)
-          VALUES (${wallet.toLowerCase()}, ${role}, ${refreshToken}, ${new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()}, ${new Date().toISOString()})
-          ON CONFLICT (wallet) 
-          DO UPDATE SET 
-            role = ${role},
-            refresh_token = ${refreshToken},
-            expires_at = ${new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()},
-            updated_at = ${new Date().toISOString()}
-        `
       }
     } catch (dbError: any) {
       // Log but don't fail - session storage is optional

@@ -4,8 +4,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyToken, extractTokenFromHeader, issueAccessToken } from '../../../../lib/jwtUtils'
-import { revalidateRole } from '../../../../lib/roleService'
+import { verifyToken, issueAccessToken } from '../../../../lib/jwtUtils'
+import { resolveLockedRole, type Role } from '../../../../lib/roleService'
 
 export async function POST(request: NextRequest) {
   try {
@@ -28,9 +28,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Revalidate role (important: role may have changed)
-    const roleCheck = await revalidateRole(payload.wallet, payload.role)
-    const newRole = roleCheck.role
+    // Resolve wallet-locked role (prevents role switching per wallet)
+    const sessionRole = payload.role as Role
+    const newRole = await resolveLockedRole(payload.wallet, sessionRole)
 
     // Issue new access token with updated role
     const newAccessToken = await issueAccessToken(payload.wallet, newRole)
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       success: true,
       accessToken: newAccessToken,
       role: newRole,
-      roleChanged: roleCheck.changed,
+      roleChanged: newRole !== sessionRole,
     })
   } catch (error: any) {
     console.error('Refresh error:', error)

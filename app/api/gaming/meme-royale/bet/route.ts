@@ -7,6 +7,10 @@ import { validateAddress, validatePositiveNumber, validateStakeSide } from '../.
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
+function toRows(result: any): any[] {
+  return Array.isArray(result) ? result : result?.rows || []
+}
+
 /**
  * Start a Meme Royale battle
  * SECURITY: Requires wallet signature verification
@@ -121,8 +125,12 @@ export async function POST(request: NextRequest) {
       VALUES (${leftCoinId}, ${rightCoinId}, ${leftScore}, ${rightScore}, ${winnerCoinId}, 'random-judge', ${Date.now()})
       RETURNING id
     `
+    const rows = toRows(result)
+    const battleId = rows[0]?.id
 
-    const battleId = result[0].id
+    if (!battleId) {
+      throw new Error('Failed to create battle')
+    }
 
     // Check if user won
     const userWon = (stakeSide.toLowerCase() === 'left' && winnerCoinId === leftCoinId) ||
