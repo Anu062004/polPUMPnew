@@ -718,14 +718,18 @@ export async function POST(request: NextRequest) {
     if (rl) return rl
 
     const coinData = await request.json()
+    const normalizedName = String(coinData?.name || '').trim()
+    const normalizedSymbol = String(coinData?.symbol || '').trim()
 
     // Validate required fields
-    if (!coinData.name || !coinData.symbol || !coinData.supply) {
+    if (!normalizedName || !normalizedSymbol || !coinData.supply) {
       return NextResponse.json(
         { success: false, error: 'Missing required fields' },
         { status: 400 }
       )
     }
+    coinData.name = normalizedName
+    coinData.symbol = normalizedSymbol
 
     if (!coinData.creator || !ethers.isAddress(coinData.creator)) {
       return NextResponse.json(
@@ -815,6 +819,12 @@ export async function POST(request: NextRequest) {
         LIMIT 1
       `
 
+      const existingByName = await sql`
+        SELECT id, token_address FROM coins
+        WHERE LOWER(TRIM(name)) = LOWER(${coinData.name})
+        LIMIT 1
+      `
+
       const existingByToken = await sql`
         SELECT id FROM coins 
         WHERE LOWER(token_address) = LOWER(${normalizedTokenAddress})
@@ -826,6 +836,22 @@ export async function POST(request: NextRequest) {
           { success: false, error: 'Token address already exists in database' },
           { status: 409 }
         )
+      }
+
+      if (existingByName.rows.length > 0) {
+        const existingNameRow = existingByName.rows[0]
+        const existingSymbolRow = existingBySymbol.rows[0]
+        const isSamePendingRow =
+          !!existingSymbolRow &&
+          String(existingSymbolRow.id) === String(existingNameRow.id) &&
+          !existingSymbolRow.token_address
+
+        if (!isSamePendingRow) {
+          return NextResponse.json(
+            { success: false, error: 'Token name already exists' },
+            { status: 409 }
+          )
+        }
       }
 
       if (existingBySymbol.rows.length > 0 && !existingBySymbol.rows[0].token_address) {
@@ -966,6 +992,26 @@ export async function POST(request: NextRequest) {
         'SELECT id, tokenAddress FROM coins WHERE LOWER(symbol) = LOWER(?) LIMIT 1',
         [coinData.symbol.toLowerCase()]
       )
+
+      const existingByName = await db.get(
+        'SELECT id, tokenAddress FROM coins WHERE LOWER(TRIM(name)) = LOWER(?) LIMIT 1',
+        [coinData.name]
+      )
+
+      if (existingByName) {
+        const isSamePendingRow =
+          !!existingBySymbol &&
+          String(existingBySymbol.id) === String(existingByName.id) &&
+          !existingBySymbol.tokenAddress
+
+        if (!isSamePendingRow) {
+          await db.close()
+          return NextResponse.json(
+            { success: false, error: 'Token name already exists' },
+            { status: 409 }
+          )
+        }
+      }
 
       if (existingBySymbol && !existingBySymbol.tokenAddress) {
         const existingId = existingBySymbol.id

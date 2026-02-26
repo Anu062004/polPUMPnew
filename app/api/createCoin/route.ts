@@ -39,12 +39,14 @@ export const POST = withCreatorAuth(async (request: NextRequest, user) => {
 
     const formData = await request.formData()
 
-    const name = formData.get('name') as string
-    const symbol = formData.get('symbol') as string
+    const rawName = formData.get('name') as string
+    const rawSymbol = formData.get('symbol') as string
     const description = formData.get('description') as string
     const supply = formData.get('supply') as string
     const creator = formData.get('creator') as string | null
     const imageRootHash = formData.get('imageRootHash') as string
+    const name = (rawName || '').trim()
+    const symbol = (rawSymbol || '').trim()
 
     if (!name || !symbol || !supply) {
       return NextResponse.json(
@@ -69,6 +71,44 @@ export const POST = withCreatorAuth(async (request: NextRequest, user) => {
           { status: 403 }
         )
       }
+    }
+
+    // Enforce case-insensitive unique token names across all coins.
+    // This check runs before backend forwarding so the rule is consistent.
+    try {
+      const { initializeSchema, getSql } = await import('../../../lib/postgresManager')
+      await initializeSchema()
+      const sql = await getSql()
+      if (!sql) {
+        throw new Error('Postgres not available')
+      }
+
+      const existingByName = await sql`
+        SELECT id
+        FROM coins
+        WHERE LOWER(TRIM(name)) = LOWER(${name})
+        LIMIT 1
+      `
+
+      if (existingByName.rows.length > 0) {
+        return NextResponse.json(
+          { success: false, error: 'Token name already exists' },
+          { status: 409 }
+        )
+      }
+    } catch (pgError: any) {
+      console.error(
+        'PostgreSQL not available for createCoin name uniqueness check:',
+        pgError?.message || pgError
+      )
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            'Coin metadata could not be saved because PostgreSQL is unavailable. SQLite fallback is disabled.',
+        },
+        { status: 500 }
+      )
     }
 
     // Try backend first if available
