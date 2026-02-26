@@ -93,11 +93,8 @@ export default function TokenDetailPage() {
         setIsLive(data.isLive)
         if (data.playbackUrl) {
           setPlaybackUrl(data.playbackUrl)
-        } else if (data.isLive) {
-          // Build playback URL if live but URL not provided
-          const streamKey = `token_${address.toLowerCase()}`
-          const playbackBase = process.env.NEXT_PUBLIC_LIVE_PLAYBACK_BASE_URL || 'https://your-stream-server.com/hls'
-          setPlaybackUrl(`${playbackBase.replace(/\/$/, '')}/${streamKey}.m3u8`)
+        } else {
+          setPlaybackUrl(null)
         }
       }
     } catch (e) {

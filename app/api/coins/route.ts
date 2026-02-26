@@ -336,9 +336,11 @@ export async function GET(request: NextRequest) {
       const searchPattern = search ? `%${search}%` : null
 
       // Get connection string
-      const connectionString = process.env.POSTGRES_PRISMA_URL ||
+      const connectionString =
+        process.env.POSTGRES_PRISMA_URL ||
         process.env.POSTGRES_URL ||
-        process.env.POSTGRES_URL_NON_POOLING
+        process.env.POSTGRES_URL_NON_POOLING ||
+        process.env.DATABASE_URL
 
       if (!connectionString) {
         throw new Error('Postgres connection string not found')

@@ -81,29 +81,37 @@ async function ensureCreatorSchema(db: any): Promise<void> {
     try {
       await db.pool.query(`
         INSERT INTO creators (wallet, created_at, updated_at)
-        SELECT
-          LOWER(creator),
-          COALESCE(created_at, EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
-          EXTRACT(EPOCH FROM NOW()) * 1000
-        FROM coins
-        WHERE creator IS NOT NULL AND creator <> ''
+        SELECT src.wallet, src.created_at, src.updated_at
+        FROM (
+          SELECT DISTINCT ON (LOWER(creator))
+            LOWER(creator) AS wallet,
+            COALESCE(created_at, EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT AS created_at,
+            EXTRACT(EPOCH FROM NOW()) * 1000 AS updated_at
+          FROM coins
+          WHERE creator IS NOT NULL AND creator <> ''
+          ORDER BY LOWER(creator), COALESCE(created_at, 0) DESC
+        ) src
         ON CONFLICT (wallet)
         DO UPDATE SET updated_at = GREATEST(creators.updated_at, EXCLUDED.updated_at)
       `)
 
       await db.pool.query(`
         INSERT INTO creator_tokens (token_address, creator_wallet, coin_id, created_at, updated_at)
-        SELECT
-          LOWER(token_address),
-          LOWER(creator),
-          id,
-          COALESCE(created_at, EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
-          EXTRACT(EPOCH FROM NOW()) * 1000
-        FROM coins
-        WHERE token_address IS NOT NULL
-          AND token_address <> ''
-          AND creator IS NOT NULL
-          AND creator <> ''
+        SELECT src.token_address, src.creator_wallet, src.coin_id, src.created_at, src.updated_at
+        FROM (
+          SELECT DISTINCT ON (LOWER(token_address))
+            LOWER(token_address) AS token_address,
+            LOWER(creator) AS creator_wallet,
+            id AS coin_id,
+            COALESCE(created_at, EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT AS created_at,
+            EXTRACT(EPOCH FROM NOW()) * 1000 AS updated_at
+          FROM coins
+          WHERE token_address IS NOT NULL
+            AND token_address <> ''
+            AND creator IS NOT NULL
+            AND creator <> ''
+          ORDER BY LOWER(token_address), COALESCE(created_at, 0) DESC
+        ) src
         ON CONFLICT (token_address)
         DO UPDATE SET
           creator_wallet = EXCLUDED.creator_wallet,

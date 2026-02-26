@@ -12,8 +12,23 @@ export interface LivestreamRecord {
   streamKey: string
   ingestBaseUrl: string
   playbackBaseUrl: string
+  channelArn: string | null
+  streamKeyArn: string | null
+  ingestEndpoint: string | null
+  playbackUrl: string | null
+  provider: string | null
+  channelType: string | null
   status: 'offline' | 'live'
   updatedAt: number
+}
+
+export interface LivestreamMetadata {
+  channelArn?: string | null
+  streamKeyArn?: string | null
+  ingestEndpoint?: string | null
+  playbackUrl?: string | null
+  provider?: string | null
+  channelType?: string | null
 }
 
 function mapLivestreamRow(row: any): LivestreamRecord {
@@ -23,6 +38,12 @@ function mapLivestreamRow(row: any): LivestreamRecord {
     streamKey: row.stream_key,
     ingestBaseUrl: row.ingest_base_url,
     playbackBaseUrl: row.playback_base_url,
+    channelArn: row.channel_arn || null,
+    streamKeyArn: row.stream_key_arn || null,
+    ingestEndpoint: row.ingest_endpoint || null,
+    playbackUrl: row.playback_url || null,
+    provider: row.provider || null,
+    channelType: row.channel_type || null,
     status: row.status === 'live' ? 'live' : 'offline',
     updatedAt: Number(row.updated_at || Date.now()),
   }
@@ -76,7 +97,8 @@ export async function upsertLivestream(
   status: 'offline' | 'live',
   streamKey?: string,
   ingestBaseUrl?: string,
-  playbackBaseUrl?: string
+  playbackBaseUrl?: string,
+  metadata?: LivestreamMetadata
 ): Promise<LivestreamRecord> {
   const sql = await requireSqlClient()
   const normalizedToken = tokenAddress.toLowerCase()
@@ -90,6 +112,12 @@ export async function upsertLivestream(
   const finalIngestBaseUrl = ingestBaseUrl || existing?.ingestBaseUrl || defaults.ingestBaseUrl
   const finalPlaybackBaseUrl =
     playbackBaseUrl || existing?.playbackBaseUrl || defaults.playbackBaseUrl
+  const finalChannelArn = metadata?.channelArn ?? existing?.channelArn ?? null
+  const finalStreamKeyArn = metadata?.streamKeyArn ?? existing?.streamKeyArn ?? null
+  const finalIngestEndpoint = metadata?.ingestEndpoint ?? existing?.ingestEndpoint ?? null
+  const finalPlaybackUrl = metadata?.playbackUrl ?? existing?.playbackUrl ?? null
+  const finalProvider = metadata?.provider ?? existing?.provider ?? null
+  const finalChannelType = metadata?.channelType ?? existing?.channelType ?? null
 
   const result = await sql`
     INSERT INTO livestreams (
@@ -98,6 +126,12 @@ export async function upsertLivestream(
       stream_key,
       ingest_base_url,
       playback_base_url,
+      channel_arn,
+      stream_key_arn,
+      ingest_endpoint,
+      playback_url,
+      provider,
+      channel_type,
       status,
       updated_at
     )
@@ -107,6 +141,12 @@ export async function upsertLivestream(
       ${finalStreamKey},
       ${finalIngestBaseUrl},
       ${finalPlaybackBaseUrl},
+      ${finalChannelArn},
+      ${finalStreamKeyArn},
+      ${finalIngestEndpoint},
+      ${finalPlaybackUrl},
+      ${finalProvider},
+      ${finalChannelType},
       ${status},
       ${now}
     )
@@ -116,6 +156,12 @@ export async function upsertLivestream(
       stream_key = EXCLUDED.stream_key,
       ingest_base_url = EXCLUDED.ingest_base_url,
       playback_base_url = EXCLUDED.playback_base_url,
+      channel_arn = EXCLUDED.channel_arn,
+      stream_key_arn = EXCLUDED.stream_key_arn,
+      ingest_endpoint = EXCLUDED.ingest_endpoint,
+      playback_url = EXCLUDED.playback_url,
+      provider = EXCLUDED.provider,
+      channel_type = EXCLUDED.channel_type,
       status = EXCLUDED.status,
       updated_at = EXCLUDED.updated_at
     RETURNING *

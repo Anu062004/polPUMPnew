@@ -8,8 +8,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { ethers } from 'ethers'
-import { getLivestream } from '../../../../lib/livestreamDatabase'
+import { getLivestream, upsertLivestream } from '../../../../lib/livestreamDatabase'
 import { buildLivestreamUrls } from '../../../../lib/livestreamHelpers'
+import { getIvsLiveStream, isIvsConfigured } from '../../../../lib/ivsService'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,12 +41,45 @@ export async function GET(request: NextRequest) {
 
     // Build playback URL if live
     let playbackUrl: string | null = null
-    if (livestream.status === 'live') {
-      // Use stored playback base URL or build from config
-      if (livestream.playbackBaseUrl) {
+    let isLive = livestream.status === 'live'
+
+    // If this stream is backed by AWS IVS, verify live status from IVS
+    // to avoid stale "live" state after browser or network disconnects.
+    if (livestream.channelArn && isIvsConfigured()) {
+      const ivsStream = await getIvsLiveStream(livestream.channelArn)
+      if (ivsStream) {
+        isLive = true
+        playbackUrl = ivsStream.playbackUrl || livestream.playbackUrl || livestream.playbackBaseUrl || null
+      } else {
+        isLive = false
+        if (livestream.status !== 'offline') {
+          await upsertLivestream(
+            livestream.tokenAddress,
+            livestream.creatorAddress,
+            'offline',
+            livestream.streamKey,
+            livestream.ingestBaseUrl,
+            livestream.playbackBaseUrl,
+            {
+              channelArn: livestream.channelArn,
+              streamKeyArn: livestream.streamKeyArn,
+              ingestEndpoint: livestream.ingestEndpoint,
+              playbackUrl: livestream.playbackUrl,
+              provider: livestream.provider,
+              channelType: livestream.channelType,
+            }
+          )
+        }
+      }
+    } else if (isLive) {
+      // Legacy self-hosted streaming fallback.
+      if (livestream.playbackUrl) {
+        playbackUrl = livestream.playbackUrl
+      } else if (livestream.playbackBaseUrl?.includes('.m3u8')) {
+        playbackUrl = livestream.playbackBaseUrl
+      } else if (livestream.playbackBaseUrl) {
         playbackUrl = `${livestream.playbackBaseUrl.replace(/\/$/, '')}/${livestream.streamKey}/index.m3u8`
       } else {
-        // Fallback: build from environment
         const urls = buildLivestreamUrls(normalizedAddress)
         playbackUrl = urls.playbackUrl
       }
@@ -53,11 +87,12 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      isLive: livestream.status === 'live',
+      isLive,
       tokenAddress: livestream.tokenAddress,
       playbackUrl,
       streamKey: livestream.streamKey,
       creatorAddress: livestream.creatorAddress,
+      provider: livestream.provider,
     })
   } catch (error: any) {
     console.error('Error getting livestream status:', error)
@@ -67,6 +102,5 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-
 
 

@@ -8,6 +8,8 @@ import { authenticateRequest } from '../../../../lib/roleMiddleware'
 import { resolveLockedRole, type Role } from '../../../../lib/roleService'
 import { issueAccessToken } from '../../../../lib/jwtUtils'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
     const authResult = await authenticateRequest(request)

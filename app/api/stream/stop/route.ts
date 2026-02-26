@@ -1,20 +1,14 @@
-/**
- * API Route: Stop Live Stream
- * 
- * POST /api/stream/stop
- * Body: { tokenAddress: string, creatorAddress: string }
- * 
- * Validates creator and marks the stream as "offline".
- */
-
 import { NextRequest, NextResponse } from 'next/server'
 import { ethers } from 'ethers'
 import { upsertLivestream, getLivestream, getTokenCreator } from '../../../../lib/livestreamDatabase'
+import { withCreatorAuth } from '../../../../lib/roleMiddleware'
 
-export async function POST(request: NextRequest) {
+export const dynamic = 'force-dynamic'
+
+export const POST = withCreatorAuth(async (request: NextRequest, user) => {
   try {
     const body = await request.json()
-    const { tokenAddress, creatorAddress } = body
+    const tokenAddress = body?.tokenAddress as string
 
     // Validate inputs
     if (!tokenAddress || !ethers.isAddress(tokenAddress)) {
@@ -24,12 +18,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!creatorAddress || !ethers.isAddress(creatorAddress)) {
-      return NextResponse.json(
-        { success: false, error: 'Creator address required' },
-        { status: 400 }
-      )
-    }
+    const creatorAddress = user.wallet.toLowerCase()
 
     // Check if stream exists
     const existing = await getLivestream(tokenAddress.toLowerCase())
@@ -56,7 +45,15 @@ export async function POST(request: NextRequest) {
       'offline',
       existing.streamKey,
       existing.ingestBaseUrl,
-      existing.playbackBaseUrl
+      existing.playbackBaseUrl,
+      {
+        channelArn: existing.channelArn,
+        streamKeyArn: existing.streamKeyArn,
+        ingestEndpoint: existing.ingestEndpoint,
+        playbackUrl: existing.playbackUrl,
+        provider: existing.provider,
+        channelType: existing.channelType,
+      }
     )
 
     return NextResponse.json({
@@ -70,7 +67,7 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
-}
+})
 
 
 

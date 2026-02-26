@@ -1,25 +1,25 @@
-/**
- * API Route: Start Live Stream
- * 
- * POST /api/stream/start
- * Body: { tokenAddress: string, creatorAddress: string }
- * 
- * Validates that caller is the token creator, generates a stream key,
- * and marks the stream as "live" in the database.
- */
-
 import { NextRequest, NextResponse } from 'next/server'
 import { ethers } from 'ethers'
-import { upsertLivestream, getTokenCreator } from '../../../../lib/livestreamDatabase'
-import { generateStreamKey } from '../../../../lib/livestreamHelpers'
-import crypto from 'crypto'
+import { withCreatorAuth } from '../../../../lib/roleMiddleware'
+import { getLivestream, getTokenCreator, upsertLivestream } from '../../../../lib/livestreamDatabase'
+import {
+  createIvsChannel,
+  getConfiguredIvsChannelType,
+  isIvsConfigured,
+} from '../../../../lib/ivsService'
 
-export async function POST(request: NextRequest) {
+export const dynamic = 'force-dynamic'
+
+function normalizeRtmpIngestUrl(ingestEndpoint: string): string {
+  const trimmed = ingestEndpoint.replace(/^https?:\/\//i, '').replace(/\/+$/, '')
+  return `rtmps://${trimmed}:443/app`
+}
+
+export const POST = withCreatorAuth(async (request: NextRequest, user) => {
   try {
     const body = await request.json()
-    const { tokenAddress, creatorAddress } = body
+    const tokenAddress = body?.tokenAddress as string
 
-    // Validate inputs
     if (!tokenAddress || !ethers.isAddress(tokenAddress)) {
       return NextResponse.json(
         { success: false, error: 'Invalid token address' },
@@ -27,59 +27,88 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!creatorAddress || !ethers.isAddress(creatorAddress)) {
+    if (!isIvsConfigured()) {
       return NextResponse.json(
-        { success: false, error: 'Creator address required' },
-        { status: 400 }
+        {
+          success: false,
+          error:
+            'AWS IVS is not configured. Set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION.',
+        },
+        { status: 500 }
       )
     }
 
-    // Verify creator is the token creator
-    const tokenCreator = await getTokenCreator(tokenAddress)
-    
-    if (tokenCreator) {
-      // Check if caller is the creator (case-insensitive)
-      if (tokenCreator.toLowerCase() !== creatorAddress.toLowerCase()) {
-        return NextResponse.json(
-          { success: false, error: 'Only token creator can start livestream' },
-          { status: 403 }
-        )
-      }
+    const normalizedTokenAddress = tokenAddress.toLowerCase()
+    const creatorAddress = user.wallet.toLowerCase()
+
+    const tokenCreator = await getTokenCreator(normalizedTokenAddress)
+    if (tokenCreator && tokenCreator.toLowerCase() !== creatorAddress) {
+      return NextResponse.json(
+        { success: false, error: 'Only token creator can start livestream' },
+        { status: 403 }
+      )
     }
-    // If token creator not found in DB, allow if address is valid (for on-chain tokens)
 
-    // Generate stream key: tokenAddress-randomSecret
-    const randomSecret = crypto.randomBytes(16).toString('hex')
-    const streamKey = `${tokenAddress.toLowerCase()}-${randomSecret}`
+    const existing = await getLivestream(normalizedTokenAddress)
+    const configuredChannelType = getConfiguredIvsChannelType()
 
-    // Get streaming server URLs from environment
-    const rtmpUrl = process.env.RTMP_URL || 'rtmp://localhost:1935/live'
-    const hlsBaseUrl = process.env.NEXT_PUBLIC_HLS_BASE_URL || 'http://localhost:8000/live'
-    const ingestBaseUrl = rtmpUrl.replace(/\/[^/]+$/, '') // Remove /live part for base URL
+    let channelArn = existing?.channelArn || null
+    let streamKeyArn = existing?.streamKeyArn || null
+    let streamKey = existing?.streamKey || null
+    let ingestEndpoint = existing?.ingestEndpoint || null
+    let playbackUrl = existing?.playbackUrl || null
+    let channelType = (existing?.channelType || configuredChannelType).toUpperCase()
 
-    // Create or update livestream record
+    const hasProvisionedIvsChannel =
+      !!channelArn && !!streamKeyArn && !!streamKey && !!ingestEndpoint && !!playbackUrl
+
+    if (!hasProvisionedIvsChannel || !streamKey?.startsWith('sk_')) {
+      const provisioned = await createIvsChannel({
+        tokenAddress: normalizedTokenAddress,
+        creatorAddress,
+        channelType,
+      })
+      channelArn = provisioned.channelArn
+      streamKeyArn = provisioned.streamKeyArn
+      streamKey = provisioned.streamKey
+      ingestEndpoint = provisioned.ingestEndpoint
+      playbackUrl = provisioned.playbackUrl
+      channelType = provisioned.channelType
+    }
+
+    if (!channelArn || !streamKeyArn || !streamKey || !ingestEndpoint || !playbackUrl) {
+      throw new Error('Failed to provision IVS channel and stream key')
+    }
+
+    const ingestUrl = normalizeRtmpIngestUrl(ingestEndpoint)
     const livestream = await upsertLivestream(
-      tokenAddress,
+      normalizedTokenAddress,
       creatorAddress,
       'live',
       streamKey,
-      ingestBaseUrl,
-      hlsBaseUrl
+      ingestUrl,
+      playbackUrl,
+      {
+        channelArn,
+        streamKeyArn,
+        ingestEndpoint,
+        playbackUrl,
+        provider: 'aws-ivs',
+        channelType,
+      }
     )
-
-    // Build full URLs
-    const playbackUrl = `${hlsBaseUrl.replace(/\/$/, '')}/${streamKey}/index.m3u8`
-    const ingestUrlFull = `${rtmpUrl}/${streamKey}`
 
     return NextResponse.json({
       success: true,
       tokenAddress: livestream.tokenAddress,
+      creatorAddress: livestream.creatorAddress,
       streamKey: livestream.streamKey,
-      rtmpUrl: rtmpUrl, // Base RTMP URL (without stream key)
-      ingestUrl: ingestBaseUrl, // Base ingest URL
-      ingestUrlFull: ingestUrlFull, // Full RTMP URL with stream key
-      playbackUrl: playbackUrl,
-      hlsBaseUrl: hlsBaseUrl,
+      ingestEndpoint,
+      ingestUrl,
+      ingestUrlFull: ingestUrl,
+      playbackUrl,
+      provider: 'aws-ivs',
+      channelType,
     })
   } catch (error: any) {
     console.error('Error starting livestream:', error)
@@ -88,7 +117,7 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
-}
+})
 
 
 

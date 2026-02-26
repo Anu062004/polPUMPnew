@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getDb } from '../../../../lib/postgresManager'
+import { getDb, initializeSchema } from '../../../../lib/postgresManager'
+
+export const dynamic = 'force-dynamic'
 
 function clampLimit(raw: string | null, fallback = 24, max = 200): number {
   const value = parseInt(raw || `${fallback}`, 10)
@@ -9,6 +11,8 @@ function clampLimit(raw: string | null, fallback = 24, max = 200): number {
 
 export async function GET(request: NextRequest) {
   try {
+    await initializeSchema()
+
     const search = (request.nextUrl.searchParams.get('search') || '').trim().toLowerCase()
     const limit = clampLimit(request.nextUrl.searchParams.get('limit'))
     const likePattern = `%${search}%`
@@ -71,4 +75,3 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-

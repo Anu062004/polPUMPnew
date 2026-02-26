@@ -42,6 +42,32 @@ postgresql://username:password@host-pooler.region.provider.tech/database?connect
 
 ---
 
+### 4. Livestream Configuration (AWS IVS, Browser-Native)
+
+**Variable:** `AWS_ACCESS_KEY_ID`  
+**Description:** IAM access key for AWS IVS API operations
+
+**Variable:** `AWS_SECRET_ACCESS_KEY`  
+**Description:** IAM secret key for AWS IVS API operations
+
+**Variable:** `AWS_REGION`  
+**Description:** AWS region where IVS channels are created (for example `us-east-1`)
+
+**Variable:** `AWS_IVS_CHANNEL_TYPE` (Optional)  
+**Description:** IVS channel type. Recommended default: `BASIC`  
+**Allowed:** `BASIC`, `STANDARD`, `ADVANCED_SD`, `ADVANCED_HD`
+
+**Variable:** `NEXT_PUBLIC_IVS_BROADCAST_SDK_URL` (Optional)  
+**Description:** Override browser SDK script URL for IVS Web Broadcast
+
+IAM permissions required for the configured AWS credentials:
+- `ivs:CreateChannel`
+- `ivs:CreateStreamKey`
+- `ivs:GetStream`
+- `ivs:GetStreamKey`
+
+---
+
 ## How to Add Environment Variables in Vercel
 
 1. Go to your [Vercel Dashboard](https://vercel.com/dashboard)
@@ -81,3 +107,6 @@ After deployment, check the build logs for:
 
 ### Issue: "SQLite in /tmp is not allowed"
 **Solution:** This means Postgres isn't configured. Add `POSTGRES_PRISMA_URL` to fix this.
+
+### Issue: "AWS IVS is not configured"
+**Solution:** Set `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_REGION` in Vercel project env vars.
