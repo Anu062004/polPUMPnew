@@ -315,7 +315,9 @@ export default function TokenLiveStreamControls({
         ingestEndpoint,
       })
 
-      await client.addVideoInputDevice(media, 'camera')
+      // AWS IVS Web Broadcast SDK expects a VideoComposition object for video input.
+      // At minimum, provide layer index 0.
+      await client.addVideoInputDevice(media, 'camera', { index: 0 })
       await client.addAudioInputDevice(media, 'microphone')
 
       const preview = client.attachPreview()
