@@ -315,20 +315,39 @@ export default function TokenLiveStreamControls({
         ingestEndpoint,
       })
 
-      // AWS IVS Web Broadcast SDK expects a VideoComposition object for video input.
-      // At minimum, provide layer index 0.
-      await client.addVideoInputDevice(media, 'camera', { index: 0 })
-      await client.addAudioInputDevice(media, 'microphone')
+      const videoWidth = streamConfig?.maxResolution?.width ?? 1280
+      const videoHeight = streamConfig?.maxResolution?.height ?? 720
+      const videoComposition = {
+        index: 0,
+        x: 0,
+        y: 0,
+        width: videoWidth,
+        height: videoHeight,
+      }
 
-      const preview = client.attachPreview()
-      preview.muted = true
-      preview.autoplay = true
-      preview.playsInline = true
-      preview.className = 'w-full h-full rounded-xl object-cover'
+      const videoStream = new MediaStream(media.getVideoTracks())
+      const audioStream = new MediaStream(media.getAudioTracks())
+      await client.addVideoInputDevice(videoStream, 'camera', videoComposition)
+      await client.addAudioInputDevice(audioStream, 'microphone')
 
       if (previewContainerRef.current) {
         previewContainerRef.current.innerHTML = ''
-        previewContainerRef.current.appendChild(preview)
+
+        // Newer IVS SDK versions require passing a preview element.
+        const previewCanvas = document.createElement('canvas')
+        previewCanvas.className = 'w-full h-full rounded-xl object-cover'
+        previewCanvas.width = videoWidth
+        previewCanvas.height = videoHeight
+        previewContainerRef.current.appendChild(previewCanvas)
+
+        const previewResult = client.attachPreview(previewCanvas)
+
+        // Backward compatibility for SDKs returning an element.
+        if (previewResult instanceof HTMLElement && previewResult !== previewCanvas) {
+          previewResult.className = 'w-full h-full rounded-xl object-cover'
+          previewContainerRef.current.innerHTML = ''
+          previewContainerRef.current.appendChild(previewResult)
+        }
       }
 
       await client.startBroadcast(streamKey)
