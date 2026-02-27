@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation'
 import TokenCreatorModal from '../components/TokenCreatorModal'
 import BlobBackground from '../components/BlobBackground'
 import { useAuth } from '../providers/AuthContext'
+import { generateSignMessage } from '../../lib/authUtils'
 
 const COIN_CREATED_EVENT = 'polpump:coin-created'
 const COIN_CREATED_STORAGE_KEY = 'polpump:last-coin-created'
@@ -141,6 +142,45 @@ export default function GamingPage() {
       setIsLoadingBalance(false)
     }
   }, [address])
+
+  const signGamingAction = useCallback(
+    async (action: string) => {
+      if (!address) {
+        throw new Error('Connect wallet first')
+      }
+
+      if (typeof window === 'undefined' || !(window as any).ethereum) {
+        throw new Error('Wallet provider not found')
+      }
+
+      const provider = new ethers.BrowserProvider((window as any).ethereum)
+      const signer = await provider.getSigner()
+      const nonce = `${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`
+      const message = generateSignMessage(address, action, nonce, Date.now())
+      const signature = await signer.signMessage(message)
+
+      return { signature, message, nonce }
+    },
+    [address]
+  )
+
+  const getErrorMessageFromResponse = useCallback(async (res: Response | null, fallback: string) => {
+    if (!res) return fallback
+    try {
+      const payload = await res.json()
+      if (payload?.error && typeof payload.error === 'string') {
+        return payload.error
+      }
+      return fallback
+    } catch {
+      try {
+        const text = await res.text()
+        return text || fallback
+      } catch {
+        return fallback
+      }
+    }
+  }, [])
 
   // Set mounted state on client
   useEffect(() => {
@@ -437,6 +477,7 @@ export default function GamingPage() {
 
       // Transfer stake to backend
       const backendWallet = '0x2dC274ABC0df37647CEd9212e751524708a68996'
+      const signaturePayload = await signGamingAction('place a PumpPlay bet')
       console.log('Transferring bet stake...')
       const tx = await tokenContract.transfer(backendWallet, amount)
       await tx.wait()
@@ -452,7 +493,8 @@ export default function GamingPage() {
           coinId: betCoin,
           amount: parseFloat(betAmount),
           tokenAddress: betToken,
-          txHash: tx.hash
+          txHash: tx.hash,
+          ...signaturePayload
         }),
         signal: AbortSignal.timeout(5000)
       }).catch(() => null)
@@ -468,7 +510,8 @@ export default function GamingPage() {
             coinId: betCoin,
             amount: parseFloat(betAmount),
             tokenAddress: betToken,
-            txHash: tx.hash
+            txHash: tx.hash,
+            ...signaturePayload
           })
         })
       }
@@ -545,6 +588,7 @@ export default function GamingPage() {
       }
 
       const backendWallet = '0x2dC274ABC0df37647CEd9212e751524708a68996'
+      const signaturePayload = await signGamingAction('start a Meme Royale battle')
 
       console.log('Transferring stake...')
       const transferTx = await tokenContract.transfer(backendWallet, amount)
@@ -562,7 +606,8 @@ export default function GamingPage() {
           stakeAmount: parseFloat(stakeAmount),
           stakeSide,
           tokenAddress: stakeToken,
-          txHash: transferTx.hash
+          txHash: transferTx.hash,
+          ...signaturePayload
         }),
         signal: AbortSignal.timeout(5000)
       }).catch(() => null)
@@ -579,7 +624,8 @@ export default function GamingPage() {
             stakeAmount: parseFloat(stakeAmount),
             stakeSide,
             tokenAddress: stakeToken,
-            txHash: transferTx.hash
+            txHash: transferTx.hash,
+            ...signaturePayload
           })
         })
       }
@@ -589,6 +635,10 @@ export default function GamingPage() {
         data = await res.json()
       } catch (e) {
         throw new Error('Invalid response from server')
+      }
+
+      if (!data.success) {
+        throw new Error(data.error || 'Battle failed')
       }
 
       setBattleResult(data)
@@ -658,6 +708,7 @@ export default function GamingPage() {
       }
 
       const backendWallet = '0x2dC274ABC0df37647CEd9212e751524708a68996'
+      const signaturePayload = await signGamingAction('play coinflip')
 
       console.log('Transferring stake...')
       const transferTx = await tokenContract.transfer(backendWallet, amount)
@@ -673,7 +724,8 @@ export default function GamingPage() {
           wager: parseFloat(flipWager),
           guess: flipGuess,
           tokenAddress: flipToken,
-          txHash: transferTx.hash
+          txHash: transferTx.hash,
+          ...signaturePayload
         }),
         signal: AbortSignal.timeout(5000)
       }).catch(() => null)
@@ -688,7 +740,8 @@ export default function GamingPage() {
             wager: parseFloat(flipWager),
             choice: flipGuess, // API uses 'choice' not 'guess'
             tokenAddress: flipToken,
-            txHash: transferTx.hash
+            txHash: transferTx.hash,
+            ...signaturePayload
           })
         })
       }
@@ -698,6 +751,10 @@ export default function GamingPage() {
         data = await res.json()
       } catch (e) {
         throw new Error('Invalid response from server')
+      }
+
+      if (!data.success) {
+        throw new Error(data.error || 'Coinflip failed')
       }
 
       setCoinflipResult(data)
@@ -1690,6 +1747,7 @@ export default function GamingPage() {
 
                         const tx = await tokenContract.transfer('0x2dC274ABC0df37647CEd9212e751524708a68996', amount)
                         await tx.wait()
+                        const signaturePayload = await signGamingAction('start mines game')
 
                         // Try backend first, fallback to Next.js API
                         let res = await fetch(`${backend}/gaming/mines/start`, {
@@ -1700,7 +1758,8 @@ export default function GamingPage() {
                             betAmount: parseFloat(minesBet),
                             minesCount,
                             tokenAddress: minesToken,
-                            txHash: tx.hash
+                            txHash: tx.hash,
+                            ...signaturePayload
                           }),
                           signal: AbortSignal.timeout(5000)
                         }).catch(() => null)
@@ -1715,13 +1774,18 @@ export default function GamingPage() {
                               betAmount: parseFloat(minesBet),
                               minesCount,
                               tokenAddress: minesToken,
-                              txHash: tx.hash
+                              txHash: tx.hash,
+                              ...signaturePayload
                             })
                           })
                         }
 
                         if (!res || !res.ok) {
-                          throw new Error('Failed to start game. Please try again.')
+                          const errorMessage = await getErrorMessageFromResponse(
+                            res,
+                            'Failed to start game. Please try again.'
+                          )
+                          throw new Error(errorMessage)
                         }
 
                         let data
@@ -1771,13 +1835,15 @@ export default function GamingPage() {
                           return
                         }
                         try {
+                          const signaturePayload = await signGamingAction('cash out mines game')
                           // Try backend first
                           let res = await fetch(`${backend}/gaming/mines/cashout`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                               gameId: minesGame.gameId,
-                              userAddress: address
+                              userAddress: address,
+                              ...signaturePayload
                             }),
                             signal: AbortSignal.timeout(5000)
                           }).catch(() => null)
@@ -1789,13 +1855,18 @@ export default function GamingPage() {
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({
                                 gameId: minesGame.gameId,
-                                userAddress: address
+                                userAddress: address,
+                                ...signaturePayload
                               })
                             })
                           }
 
                           if (!res || !res.ok) {
-                            throw new Error('Failed to cash out. Please try again.')
+                            const errorMessage = await getErrorMessageFromResponse(
+                              res,
+                              'Failed to cash out. Please try again.'
+                            )
+                            throw new Error(errorMessage)
                           }
 
                           const data = await res.json();
@@ -1829,6 +1900,7 @@ export default function GamingPage() {
                           onClick={async () => {
                             if (isRevealed || !address) return;
                             try {
+                              const signaturePayload = await signGamingAction('reveal mines tile')
                               // Try backend first
                               let res = await fetch(`${backend}/gaming/mines/reveal`, {
                                 method: 'POST',
@@ -1836,7 +1908,8 @@ export default function GamingPage() {
                                 body: JSON.stringify({
                                   gameId: minesGame.gameId,
                                   tileIndex: i,
-                                  userAddress: address
+                                  userAddress: address,
+                                  ...signaturePayload
                                 }),
                                 signal: AbortSignal.timeout(5000)
                               }).catch(() => null)
@@ -1849,13 +1922,18 @@ export default function GamingPage() {
                                   body: JSON.stringify({
                                     gameId: minesGame.gameId,
                                     tileIndex: i,
-                                    userAddress: address
+                                    userAddress: address,
+                                    ...signaturePayload
                                   })
                                 })
                               }
 
                               if (!res || !res.ok) {
-                                throw new Error('Failed to reveal tile. Please try again.')
+                                const errorMessage = await getErrorMessageFromResponse(
+                                  res,
+                                  'Failed to reveal tile. Please try again.'
+                                )
+                                throw new Error(errorMessage)
                               }
 
                               const data = await res.json();
