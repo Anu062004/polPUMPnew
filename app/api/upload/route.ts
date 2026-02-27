@@ -1,8 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pinataService } from '../../../lib/pinataService'
 
-// Check if we're in a serverless environment (Vercel, etc.)
-const isServerless = process.env.VERCEL === '1' || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NEXT_RUNTIME === 'nodejs'
+function isServerlessRuntime() {
+  return process.env.VERCEL === '1' || !!process.env.AWS_LAMBDA_FUNCTION_NAME
+}
+
+function shouldUseRemoteBackend(backendBase: string) {
+  const lowered = backendBase.toLowerCase()
+  return (
+    !!backendBase &&
+    !lowered.includes('localhost') &&
+    !lowered.includes('127.0.0.1')
+  )
+}
 
 // Handle image uploads to Pinata IPFS
 export async function POST(request: NextRequest) {
@@ -35,25 +45,22 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // In serverless environments, Pinata is required (file system is read-only)
-    if (isServerless && !pinataService.isConfigured()) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Pinata IPFS is required for file uploads in production. Please configure PINATA_JWT environment variable.' 
-        },
-        { status: 500 }
-      )
-    }
+    const isServerless = isServerlessRuntime()
+    const backendBase =
+      process.env.NEXT_PUBLIC_BACKEND_URL ||
+      process.env.BACKEND_URL ||
+      'http://localhost:4000'
+    const canUseBackend = shouldUseRemoteBackend(backendBase)
+    const uploadErrors: string[] = []
 
-    // Try Pinata IPFS upload first (required in production, preferred in development)
+    // Try Pinata IPFS upload first (preferred in all environments).
     if (pinataService.isConfigured()) {
       try {
-        console.log('📤 Uploading to Pinata IPFS...')
+        console.log('Uploading to Pinata IPFS...')
         const pinataResult = await pinataService.uploadFile(file, file.name)
-        
+
         if (pinataResult.success && pinataResult.ipfsHash) {
-          console.log('✅ Uploaded to Pinata IPFS:', pinataResult.ipfsHash)
+          console.log('Uploaded to Pinata IPFS:', pinataResult.ipfsHash)
           return NextResponse.json({
             success: true,
             rootHash: pinataResult.ipfsHash,
@@ -61,62 +68,37 @@ export async function POST(request: NextRequest) {
             pinataUrl: pinataResult.pinataUrl,
             gatewayUrl: pinataService.getGatewayUrl(pinataResult.ipfsHash),
             reused: false,
-            source: 'pinata'
+            source: 'pinata',
           })
-        } else {
-          // In serverless, fail if Pinata fails
-          if (isServerless) {
-            return NextResponse.json(
-              { 
-                success: false, 
-                error: `Pinata upload failed: ${pinataResult.error || 'Unknown error'}. Pinata is required in production environments.` 
-              },
-              { status: 500 }
-            )
-          }
-          console.warn('⚠️ Pinata upload failed, trying backend fallback:', pinataResult.error)
         }
+
+        uploadErrors.push(`Pinata upload failed: ${pinataResult.error || 'Unknown error'}`)
+        console.warn('Pinata upload failed, trying backend fallback:', pinataResult.error)
       } catch (pinataError: any) {
-        // In serverless, fail if Pinata fails
-        if (isServerless) {
-          return NextResponse.json(
-            { 
-              success: false, 
-              error: `Pinata upload error: ${pinataError.message || 'Unknown error'}. Pinata is required in production environments.` 
-            },
-            { status: 500 }
-          )
-        }
-        console.warn('⚠️ Pinata upload error, trying backend fallback:', pinataError.message)
+        uploadErrors.push(`Pinata upload error: ${pinataError?.message || 'Unknown error'}`)
+        console.warn('Pinata upload error, trying backend fallback:', pinataError?.message || pinataError)
       }
-    } else if (isServerless) {
-      // This should not happen due to check above, but just in case
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Pinata IPFS is required for file uploads in production. Please configure PINATA_JWT environment variable.' 
-        },
-        { status: 500 }
+    } else {
+      uploadErrors.push(
+        'Pinata credentials not configured. Set PINATA_JWT or PINATA_API_KEY + PINATA_API_SECRET in Vercel env.'
       )
     }
 
-    // Try backend if available (only in non-serverless environments)
-    if (!isServerless) {
-      const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000'
-      
+    // Try backend when a remote backend URL is configured.
+    if (canUseBackend) {
       try {
         const backendFormData = new FormData()
         backendFormData.append('file', file)
-        
+
         const controller = new AbortController()
         const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
-        
+
         const backendResponse = await fetch(`${backendBase}/upload`, {
           method: 'POST',
           body: backendFormData,
-          signal: controller.signal
+          signal: controller.signal,
         })
-        
+
         clearTimeout(timeoutId)
 
         if (backendResponse.ok) {
@@ -126,21 +108,28 @@ export async function POST(request: NextRequest) {
               success: true,
               rootHash: backendResult.rootHash,
               reused: backendResult.reused || false,
-              source: 'backend'
+              source: 'backend',
             })
           }
         }
+
+        uploadErrors.push(`Backend upload failed with status ${backendResponse.status}`)
       } catch (backendError: any) {
+        uploadErrors.push(`Backend upload error: ${backendError?.message || backendError}`)
         console.log('Backend upload not available:', backendError?.message || backendError)
       }
+    } else {
+      uploadErrors.push(
+        'Backend upload skipped because NEXT_PUBLIC_BACKEND_URL/BACKEND_URL is not set to a remote server.'
+      )
     }
 
-    // If we reach here in serverless, it means Pinata failed and we can't use local storage
+    // If we reach here in serverless, no persistent upload provider succeeded.
     if (isServerless) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'File upload failed. Pinata IPFS is required in production environments.' 
+        {
+          success: false,
+          error: uploadErrors.join(' | '),
         },
         { status: 500 }
       )
@@ -149,22 +138,20 @@ export async function POST(request: NextRequest) {
     // Local storage fallback (only in development/non-serverless environments)
     // Note: This should rarely be used as Pinata is preferred
     return NextResponse.json(
-      { 
-        success: false, 
-        error: 'File upload failed. Please configure Pinata IPFS (PINATA_JWT) for reliable file storage.' 
+      {
+        success: false,
+        error: uploadErrors.join(' | ') || 'File upload failed. Please configure Pinata IPFS (PINATA_JWT).',
       },
       { status: 500 }
     )
-
   } catch (error: any) {
     console.error('Upload error:', error)
     return NextResponse.json(
-      { 
-        success: false, 
-        error: error.message || 'Upload failed' 
+      {
+        success: false,
+        error: error.message || 'Upload failed',
       },
       { status: 500 }
     )
   }
 }
-

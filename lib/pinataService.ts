@@ -10,6 +10,12 @@ export interface PinataUploadResult {
   error?: string
 }
 
+function cleanEnv(value?: string): string {
+  if (!value) return ''
+  const trimmed = value.trim()
+  return trimmed.replace(/^['"]|['"]$/g, '').trim()
+}
+
 export class PinataService {
   private apiKey: string
   private apiSecret: string
@@ -17,10 +23,24 @@ export class PinataService {
   private baseUrl = 'https://api.pinata.cloud'
 
   constructor() {
-    // Get credentials from environment variables
-    this.apiKey = process.env.NEXT_PUBLIC_PINATA_API_KEY || process.env.PINATA_API_KEY || ''
-    this.apiSecret = process.env.PINATA_API_SECRET || ''
-    this.jwt = process.env.PINATA_JWT || ''
+    // Support common env variants to reduce deployment misconfiguration issues.
+    this.apiKey = cleanEnv(
+      process.env.PINATA_API_KEY ||
+        process.env.NEXT_PUBLIC_PINATA_API_KEY ||
+        process.env.PINATA_KEY
+    )
+    this.apiSecret = cleanEnv(
+      process.env.PINATA_API_SECRET ||
+        process.env.PINATA_SECRET_API_KEY ||
+        process.env.NEXT_PUBLIC_PINATA_API_SECRET ||
+        process.env.NEXT_PUBLIC_PINATA_SECRET_API_KEY
+    )
+    this.jwt = cleanEnv(
+      process.env.PINATA_JWT ||
+        process.env.PINATA_JWT_TOKEN ||
+        process.env.NEXT_PUBLIC_PINATA_JWT ||
+        process.env.NEXT_PUBLIC_PINATA_JWT_TOKEN
+    )
   }
 
   /**
@@ -29,7 +49,9 @@ export class PinataService {
   async uploadFile(file: File | Blob, fileName?: string): Promise<PinataUploadResult> {
     try {
       if (!this.jwt && (!this.apiKey || !this.apiSecret)) {
-        throw new Error('Pinata credentials not configured. Please set PINATA_JWT or PINATA_API_KEY and PINATA_API_SECRET')
+        throw new Error(
+          'Pinata credentials not configured. Set PINATA_JWT (or PINATA_API_KEY + PINATA_API_SECRET).'
+        )
       }
 
       const formData = new FormData()
@@ -68,8 +90,13 @@ export class PinataService {
       })
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error?.details || errorData.error || `Pinata upload failed: ${response.statusText}`)
+        const errorData = await response.json().catch(() => null)
+        const errorMessage =
+          errorData?.error?.details ||
+          errorData?.error ||
+          errorData?.message ||
+          `Pinata upload failed: ${response.status} ${response.statusText}`
+        throw new Error(errorMessage)
       }
 
       const data = await response.json()
@@ -95,14 +122,14 @@ export class PinataService {
   /**
    * Upload JSON data to Pinata IPFS
    */
-  async uploadJSON(data: any, name?: string): Promise<PinataUploadResult> {
+  async uploadJSON(jsonData: any, name?: string): Promise<PinataUploadResult> {
     try {
       if (!this.jwt && (!this.apiKey || !this.apiSecret)) {
         throw new Error('Pinata credentials not configured')
       }
 
       const body = {
-        pinataContent: data,
+        pinataContent: jsonData,
         pinataMetadata: {
           name: name || 'metadata.json',
           keyvalues: {
@@ -133,17 +160,22 @@ export class PinataService {
       })
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error?.details || errorData.error || `Pinata upload failed: ${response.statusText}`)
+        const errorData = await response.json().catch(() => null)
+        const errorMessage =
+          errorData?.error?.details ||
+          errorData?.error ||
+          errorData?.message ||
+          `Pinata upload failed: ${response.status} ${response.statusText}`
+        throw new Error(errorMessage)
       }
 
-      const data = await response.json()
+      const pinataData = await response.json()
       
-      if (data.IpfsHash) {
+      if (pinataData.IpfsHash) {
         return {
           success: true,
-          ipfsHash: data.IpfsHash,
-          pinataUrl: `https://gateway.pinata.cloud/ipfs/${data.IpfsHash}`
+          ipfsHash: pinataData.IpfsHash,
+          pinataUrl: `https://gateway.pinata.cloud/ipfs/${pinataData.IpfsHash}`
         }
       } else {
         throw new Error('No IPFS hash returned from Pinata')

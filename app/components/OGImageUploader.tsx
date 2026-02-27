@@ -149,7 +149,8 @@ export default function OGImageUploader({ onImageUploaded, className = "" }: OGI
       });
 
       if (!response.ok) {
-        throw new Error(`Upload failed (${response.status})`);
+        const errorPayload = await response.json().catch(() => null);
+        throw new Error(errorPayload?.error || `Upload failed (${response.status})`);
       }
 
       const result = await response.json();
@@ -429,5 +430,4 @@ export default function OGImageUploader({ onImageUploaded, className = "" }: OGI
     </div>
   );
 }
-
 

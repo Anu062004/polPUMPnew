@@ -111,7 +111,8 @@ export default function ImprovedImageUploader({
       setProgress(70)
 
       if (!response.ok) {
-        throw new Error(`Upload failed (${response.status})`)
+        const errorPayload = await response.json().catch(() => null)
+        throw new Error(errorPayload?.error || `Upload failed (${response.status})`)
       }
 
       const result = await response.json()
