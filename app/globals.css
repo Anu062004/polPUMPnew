@@ -523,54 +523,279 @@
    ============================================= */
 
 @keyframes pp-float {
-  0%, 100% { transform: translateY(0px); }
-  50%       { transform: translateY(-18px); }
+
+  0%,
+  100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+
+  30% {
+    transform: translateY(-14px) rotate(0.4deg);
+  }
+
+  60% {
+    transform: translateY(-20px) rotate(-0.3deg);
+  }
 }
 
-@keyframes pp-flicker {
-  0%, 100% { opacity: 0.9; transform: scaleY(1)    scaleX(1);    }
-  25%       { opacity: 0.7; transform: scaleY(0.95) scaleX(1.05); }
-  50%       { opacity: 1;   transform: scaleY(1.1)  scaleX(0.95); }
-  75%       { opacity: 0.8; transform: scaleY(0.9)  scaleX(1.02); }
+/* ── Outer flame: wide turbulent cone ── */
+@keyframes pp-flame-outer-kf {
+  0% {
+    transform: scaleX(1) scaleY(1);
+    opacity: 0.9;
+  }
+
+  15% {
+    transform: scaleX(1.06) scaleY(0.96);
+    opacity: 1;
+  }
+
+  30% {
+    transform: scaleX(0.94) scaleY(1.08);
+    opacity: 0.85;
+  }
+
+  45% {
+    transform: scaleX(1.08) scaleY(0.93);
+    opacity: 1;
+  }
+
+  60% {
+    transform: scaleX(0.97) scaleY(1.05);
+    opacity: 0.9;
+  }
+
+  75% {
+    transform: scaleX(1.04) scaleY(0.97);
+    opacity: 1;
+  }
+
+  100% {
+    transform: scaleX(1) scaleY(1);
+    opacity: 0.9;
+  }
 }
 
-@keyframes pp-flicker-slow {
-  0%, 100% { opacity: 0.85; transform: scaleY(1)   scaleX(1);    }
-  50%       { opacity: 1;   transform: scaleY(1.08) scaleX(0.96); }
+/* ── Mid flame: slightly different rhythm ── */
+@keyframes pp-flame-mid-kf {
+  0% {
+    transform: scaleX(1) scaleY(1);
+    opacity: 0.95;
+  }
+
+  20% {
+    transform: scaleX(0.96) scaleY(1.1);
+    opacity: 1;
+  }
+
+  40% {
+    transform: scaleX(1.05) scaleY(0.95);
+    opacity: 0.88;
+  }
+
+  60% {
+    transform: scaleX(0.98) scaleY(1.07);
+    opacity: 1;
+  }
+
+  80% {
+    transform: scaleX(1.04) scaleY(0.96);
+    opacity: 0.92;
+  }
+
+  100% {
+    transform: scaleX(1) scaleY(1);
+    opacity: 0.95;
+  }
+}
+
+/* ── Core flame: rapid bright pulse ── */
+@keyframes pp-flame-core-kf {
+
+  0%,
+  100% {
+    transform: scaleY(1) scaleX(1);
+    opacity: 1;
+  }
+
+  25% {
+    transform: scaleY(1.12) scaleX(0.9);
+    opacity: 0.8;
+  }
+
+  50% {
+    transform: scaleY(0.9) scaleX(1.08);
+    opacity: 1;
+  }
+
+  75% {
+    transform: scaleY(1.08) scaleX(0.95);
+    opacity: 0.85;
+  }
+}
+
+/* ── Smoke puffs ── */
+@keyframes pp-smoke-l-kf {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.35;
+  }
+
+  50% {
+    transform: translate(-8px, -12px) scale(1.4);
+    opacity: 0.15;
+  }
+
+  100% {
+    transform: translate(-14px, -28px) scale(2);
+    opacity: 0;
+  }
+}
+
+@keyframes pp-smoke-r-kf {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.3;
+  }
+
+  50% {
+    transform: translate(8px, -10px) scale(1.3);
+    opacity: 0.12;
+  }
+
+  100% {
+    transform: translate(14px, -24px) scale(1.9);
+    opacity: 0;
+  }
+}
+
+@keyframes pp-smoke-c-kf {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.25;
+  }
+
+  50% {
+    transform: translate(2px, -8px) scale(1.5);
+    opacity: 0.1;
+  }
+
+  100% {
+    transform: translate(4px, -20px) scale(2.2);
+    opacity: 0;
+  }
 }
 
 @keyframes pp-slide-up {
-  from { opacity: 0; transform: translateY(24px); }
-  to   { opacity: 1; transform: translateY(0);    }
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes pp-twinkle {
-  0%, 100% { opacity: 0.2; transform: scale(0.8); }
-  50%       { opacity: 0.9; transform: scale(1.3); }
+
+  0%,
+  100% {
+    opacity: 0.2;
+    transform: scale(0.8);
+  }
+
+  50% {
+    opacity: 0.9;
+    transform: scale(1.3);
+  }
 }
 
 @keyframes pp-scale-spring {
-  0%   { transform: scale(0.88) translateY(12px); opacity: 0; }
-  60%  { transform: scale(1.03) translateY(-2px);  opacity: 1; }
-  100% { transform: scale(1)    translateY(0);     opacity: 1; }
+  0% {
+    transform: scale(0.88) translateY(12px);
+    opacity: 0;
+  }
+
+  60% {
+    transform: scale(1.03) translateY(-2px);
+    opacity: 1;
+  }
+
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
 }
 
 @keyframes pp-shine {
-  100% { transform: translateX(100%); }
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 /* Utility classes */
-.pp-float          { animation: pp-float         6s  cubic-bezier(.45,.05,.55,.95) infinite; }
-.pp-flicker        { animation: pp-flicker        0.18s ease-in-out infinite alternate;  transform-origin: center bottom; }
-.pp-flicker-slow   { animation: pp-flicker-slow   0.32s ease-in-out infinite alternate-reverse; transform-origin: center bottom; }
-.pp-slide-up       { opacity: 0; animation: pp-slide-up  0.8s  cubic-bezier(.16,1,.3,1) forwards; }
-.pp-twinkle        { animation: pp-twinkle        3s   ease-in-out  infinite; }
-.pp-modal-enter    { animation: pp-scale-spring   0.45s cubic-bezier(.175,.885,.32,1.275) forwards; }
+.pp-float {
+  animation: pp-float 7s cubic-bezier(.45, .05, .55, .95) infinite;
+}
 
-.pp-delay-100  { animation-delay: 100ms; }
-.pp-delay-200  { animation-delay: 200ms; }
-.pp-delay-300  { animation-delay: 300ms; }
-.pp-delay-400  { animation-delay: 400ms; }
+.pp-flame-outer {
+  animation: pp-flame-outer-kf 0.22s ease-in-out infinite alternate;
+  transform-origin: center bottom;
+}
+
+.pp-flame-mid {
+  animation: pp-flame-mid-kf 0.18s ease-in-out infinite alternate-reverse;
+  transform-origin: center bottom;
+}
+
+.pp-flame-core {
+  animation: pp-flame-core-kf 0.14s ease-in-out infinite alternate;
+  transform-origin: center bottom;
+}
+
+.pp-smoke-l {
+  animation: pp-smoke-l-kf 1.6s ease-out infinite;
+}
+
+.pp-smoke-r {
+  animation: pp-smoke-r-kf 1.8s ease-out infinite 0.3s;
+}
+
+.pp-smoke-c {
+  animation: pp-smoke-c-kf 2.0s ease-out infinite 0.8s;
+}
+
+.pp-slide-up {
+  opacity: 0;
+  animation: pp-slide-up 0.8s cubic-bezier(.16, 1, .3, 1) forwards;
+}
+
+.pp-twinkle {
+  animation: pp-twinkle 3s ease-in-out infinite;
+}
+
+.pp-modal-enter {
+  animation: pp-scale-spring 0.45s cubic-bezier(.175, .885, .32, 1.275) forwards;
+}
+
+
+.pp-delay-100 {
+  animation-delay: 100ms;
+}
+
+.pp-delay-200 {
+  animation-delay: 200ms;
+}
+
+.pp-delay-300 {
+  animation-delay: 300ms;
+}
+
+.pp-delay-400 {
+  animation-delay: 400ms;
+}
 
 @layer utilities {
 

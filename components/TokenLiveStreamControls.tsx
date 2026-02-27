@@ -7,7 +7,7 @@
 
 'use client'
 
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useAccount } from 'wagmi'
 import { useAuth } from '../app/providers/AuthContext'
 import { Copy, Check, Video, VideoOff, Loader2, Camera, Mic } from 'lucide-react'
@@ -118,7 +118,7 @@ export default function TokenLiveStreamControls({
   onStreamStop,
 }: TokenLiveStreamControlsProps) {
   const { address: userAddress, isConnected } = useAccount()
-  const { user, accessToken } = useAuth()
+  const { user, accessToken, refreshAuth } = useAuth()
 
   const [isLive, setIsLive] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -136,15 +136,43 @@ export default function TokenLiveStreamControls({
   const creatorWalletMatches = !tokenCreator || !userAddress || userAddress.toLowerCase() === tokenCreator.toLowerCase()
   const isCreator = isConnected && !!userAddress && creatorByRole && creatorWalletMatches
 
-  const authHeaders = useMemo(() => {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
+  const getAccessTokenFromStorage = () => {
+    if (typeof window === 'undefined') return null
+    return window.localStorage.getItem('polpump_access_token')
+  }
+
+  const postWithAuthRetry = async (url: string, payload: Record<string, any>) => {
+    const makeRequest = (token: string | null) =>
+      fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      })
+
+    let response = await makeRequest(accessToken)
+    let data = await response.json().catch(() => ({}))
+
+    const tokenError =
+      response.status === 401 &&
+      typeof data?.error === 'string' &&
+      data.error.toLowerCase().includes('token')
+
+    if (tokenError) {
+      try {
+        await refreshAuth()
+        const refreshedToken = getAccessTokenFromStorage()
+        response = await makeRequest(refreshedToken)
+        data = await response.json().catch(() => ({}))
+      } catch {
+        // Keep original 401 response payload path below.
+      }
     }
-    if (accessToken) {
-      headers.Authorization = `Bearer ${accessToken}`
-    }
-    return headers
-  }, [accessToken])
+
+    return { response, data }
+  }
 
   useEffect(() => {
     let timer: NodeJS.Timeout | undefined
@@ -273,12 +301,9 @@ export default function TokenLiveStreamControls({
     let serverStreamStarted = false
 
     try {
-      const startRes = await fetch('/api/stream/start', {
-        method: 'POST',
-        headers: authHeaders,
-        body: JSON.stringify({ tokenAddress }),
+      const { response: startRes, data: startData } = await postWithAuthRetry('/api/stream/start', {
+        tokenAddress,
       })
-      const startData = await startRes.json()
 
       if (!startRes.ok || !startData.success) {
         throw new Error(startData.error || 'Failed to start livestream')
@@ -376,11 +401,7 @@ export default function TokenLiveStreamControls({
       // immediately reset status to offline.
       if (serverStreamStarted) {
         try {
-          await fetch('/api/stream/stop', {
-            method: 'POST',
-            headers: authHeaders,
-            body: JSON.stringify({ tokenAddress }),
-          })
+          await postWithAuthRetry('/api/stream/stop', { tokenAddress })
         } catch {
           // Ignore reset failures.
         }
@@ -405,13 +426,9 @@ export default function TokenLiveStreamControls({
       await stopLocalBroadcast()
 
       if (accessToken) {
-        const res = await fetch('/api/stream/stop', {
-          method: 'POST',
-          headers: authHeaders,
-          body: JSON.stringify({ tokenAddress }),
+        const { response: res, data } = await postWithAuthRetry('/api/stream/stop', {
+          tokenAddress,
         })
-
-        const data = await res.json().catch(() => ({}))
         if (!res.ok || !data.success) {
           throw new Error(data.error || 'Failed to stop livestream')
         }

@@ -174,71 +174,214 @@ export default function HomePage() {
     setShowCreatorModal(true)
   }
 
-  /* ── Rocket SVG — uses global pp-flicker / pp-flicker-slow classes ── */
+  /* ── Rocket SVG — cinematic version with realistic flames & detail ── */
   const RocketSVG = () => (
     <svg
-      width="280" height="420" viewBox="0 0 200 300"
+      width="320" height="480" viewBox="0 0 220 340"
       fill="none" xmlns="http://www.w3.org/2000/svg"
-      className="w-44 h-auto md:w-60 lg:w-[280px]"
+      className="w-48 h-auto md:w-64 lg:w-[320px] drop-shadow-2xl"
     >
       <defs>
-        <linearGradient id="bodyGrad" x1="100" y1="20" x2="100" y2="200" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#ffffff" />
-          <stop offset="80%" stopColor="#cbd5e1" />
+        {/* Hull gradients — 3D side-lit */}
+        <linearGradient id="hullMain" x1="60" y1="30" x2="160" y2="240" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#e2e8f0" />
+          <stop offset="40%" stopColor="#cbd5e1" />
+          <stop offset="100%" stopColor="#64748b" />
+        </linearGradient>
+        <linearGradient id="hullShine" x1="70" y1="30" x2="105" y2="240" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.55" />
+          <stop offset="60%" stopColor="#ffffff" stopOpacity="0.12" />
+          <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+        </linearGradient>
+        <linearGradient id="hullShadow" x1="115" y1="30" x2="160" y2="240" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#0f172a" stopOpacity="0" />
+          <stop offset="100%" stopColor="#0f172a" stopOpacity="0.35" />
+        </linearGradient>
+
+        {/* Nose cone */}
+        <linearGradient id="noseGrad" x1="90" y1="10" x2="130" y2="80" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#f8fafc" />
           <stop offset="100%" stopColor="#94a3b8" />
         </linearGradient>
-        <linearGradient id="finGrad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#22d3ee" />
-          <stop offset="100%" stopColor="#6366f1" />
+
+        {/* Fins */}
+        <linearGradient id="finL" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#38bdf8" />
+          <stop offset="100%" stopColor="#4f46e5" />
         </linearGradient>
-        <linearGradient id="glassGrad" x1="100" y1="80" x2="100" y2="120" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#0f172a" />
+        <linearGradient id="finR" x1="1" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#818cf8" />
+          <stop offset="100%" stopColor="#0891b2" />
+        </linearGradient>
+
+        {/* Engine bell */}
+        <linearGradient id="bellGrad" x1="90" y1="220" x2="130" y2="260" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#475569" />
           <stop offset="100%" stopColor="#1e293b" />
         </linearGradient>
-        <linearGradient id="flameOuter" x1="100" y1="220" x2="100" y2="295" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#ef4444" />
-          <stop offset="45%" stopColor="#f97316" />
-          <stop offset="100%" stopColor="transparent" />
+
+        {/* Porthole */}
+        <radialGradient id="portholeGrad" cx="45%" cy="38%" r="55%">
+          <stop offset="0%" stopColor="#1d4ed8" stopOpacity="0.7" />
+          <stop offset="60%" stopColor="#0c1a3a" />
+          <stop offset="100%" stopColor="#030712" />
+        </radialGradient>
+
+        {/* Flame — outer (red/orange wide cone) */}
+        <linearGradient id="flameA" x1="110" y1="252" x2="110" y2="330" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#f97316" stopOpacity="1" />
+          <stop offset="30%" stopColor="#ef4444" stopOpacity="0.9" />
+          <stop offset="75%" stopColor="#dc2626" stopOpacity="0.4" />
+          <stop offset="100%" stopColor="#7f1d1d" stopOpacity="0" />
         </linearGradient>
-        <linearGradient id="flameInner" x1="100" y1="222" x2="100" y2="275" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#fef08a" />
-          <stop offset="50%" stopColor="#fcd34d" />
-          <stop offset="100%" stopColor="transparent" />
+        {/* Flame — mid (brighter) */}
+        <linearGradient id="flameB" x1="110" y1="254" x2="110" y2="310" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#fbbf24" stopOpacity="1" />
+          <stop offset="50%" stopColor="#f97316" stopOpacity="0.85" />
+          <stop offset="100%" stopColor="#ef4444" stopOpacity="0" />
         </linearGradient>
-        <filter id="glowFX" x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur stdDeviation="6" result="blur" />
-          <feComposite in="SourceGraphic" in2="blur" operator="over" />
+        {/* Flame — core (white-hot) */}
+        <linearGradient id="flameC" x1="110" y1="253" x2="110" y2="285" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="1" />
+          <stop offset="40%" stopColor="#fef9c3" stopOpacity="0.9" />
+          <stop offset="100%" stopColor="#fcd34d" stopOpacity="0" />
+        </linearGradient>
+
+        {/* Glow filter for flame */}
+        <filter id="flameGlow" x="-30%" y="-10%" width="160%" height="130%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
         </filter>
+
+        {/* Softer glow for engine opening */}
+        <filter id="engineGlow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+
+        {/* Heat shimmer distort */}
+        <filter id="shimmer" x="-5%" y="-5%" width="110%" height="130%">
+          <feTurbulence type="turbulence" baseFrequency="0.02 0.06" numOctaves="2" seed="3" result="noise">
+            <animate attributeName="baseFrequency" values="0.02 0.06;0.025 0.07;0.02 0.06" dur="0.4s" repeatCount="indefinite" />
+          </feTurbulence>
+          <feDisplacementMap in="SourceGraphic" in2="noise" scale="3" xChannelSelector="R" yChannelSelector="G" />
+        </filter>
+
+        {/* Smoke particle gradient */}
+        <radialGradient id="smokeGrad" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#94a3b8" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="#94a3b8" stopOpacity="0" />
+        </radialGradient>
       </defs>
 
-      {/* Outer flame — uses global pp-flicker keyframe via className */}
-      <g className="pp-flicker" style={{ transformOrigin: '100px 225px' }}>
-        <path d="M68 220 Q100 302 132 220 Q100 242 68 220 Z" fill="url(#flameOuter)" filter="url(#glowFX)" />
+      {/* ── SMOKE PUFFS (behind everything) ── */}
+      <g className="pp-smoke-l" style={{ transformOrigin: '95px 265px' }}>
+        <ellipse cx="88" cy="275" rx="16" ry="10" fill="url(#smokeGrad)" />
       </g>
-      {/* Inner flame — uses global pp-flicker-slow keyframe */}
-      <g className="pp-flicker-slow" style={{ transformOrigin: '100px 225px' }}>
-        <path d="M84 220 Q100 278 116 220 Q100 232 84 220 Z" fill="url(#flameInner)" />
+      <g className="pp-smoke-r" style={{ transformOrigin: '125px 270px' }}>
+        <ellipse cx="132" cy="280" rx="14" ry="9" fill="url(#smokeGrad)" />
+      </g>
+      <g className="pp-smoke-c" style={{ transformOrigin: '110px 285px' }}>
+        <ellipse cx="110" cy="295" rx="20" ry="12" fill="url(#smokeGrad)" />
       </g>
 
-      {/* Exhaust nozzle */}
-      <path d="M76 200 L124 200 L114 220 L86 220 Z" fill="#334155" />
-      <path d="M86 220 L114 220 L108 230 L92 230 Z" fill="#1e293b" />
+      {/* ── OUTER FLAME (wide red cone) ── */}
+      <g className="pp-flame-outer" style={{ transformOrigin: '110px 255px' }}>
+        <path
+          d="M82 252 Q72 300 110 330 Q148 300 138 252 Q125 272 110 268 Q95 272 82 252 Z"
+          fill="url(#flameA)"
+          filter="url(#flameGlow)"
+        />
+      </g>
 
-      {/* Fins */}
-      <path d="M62 138 L18 180 L28 212 L64 190 Z" fill="url(#finGrad)" />
-      <path d="M138 138 L182 180 L172 212 L136 190 Z" fill="url(#finGrad)" />
+      {/* ── MID FLAME ── */}
+      <g className="pp-flame-mid" style={{ transformOrigin: '110px 255px' }}>
+        <path
+          d="M90 253 Q84 295 110 316 Q136 295 130 253 Q122 268 110 265 Q98 268 90 253 Z"
+          fill="url(#flameB)"
+        />
+      </g>
 
-      {/* Body */}
-      <path d="M100 18 C100 18 58 80 58 150 L58 200 C58 212 142 212 142 200 L142 150 C142 80 100 18 100 18 Z" fill="url(#bodyGrad)" />
-      {/* Body shine */}
-      <path d="M100 18 C100 18 60 80 60 150 L60 200 C60 206 100 212 100 206 L100 18 Z" fill="#ffffff" opacity="0.18" />
+      {/* ── CORE FLAME (white-hot, heat shimmer applied) ── */}
+      <g className="pp-flame-core" style={{ transformOrigin: '110px 254px' }} filter="url(#shimmer)">
+        <path
+          d="M98 253 Q96 276 110 292 Q124 276 122 253 Q116 262 110 260 Q104 262 98 253 Z"
+          fill="url(#flameC)"
+        />
+      </g>
 
-      {/* Porthole ring */}
-      <circle cx="100" cy="102" r="24" fill="#64748b" />
-      <circle cx="100" cy="102" r="20" fill="url(#glassGrad)" />
-      {/* Porthole shine */}
-      <path d="M86 92 Q100 78 114 92 Q100 102 86 92 Z" fill="#38bdf8" opacity="0.4" />
-      <circle cx="93" cy="94" r="3" fill="#ffffff" opacity="0.75" />
+      {/* ── LEFT FIN ── */}
+      <path d="M74 155 L26 205 L38 238 L76 215 Z" fill="url(#finL)" />
+      {/* Fin inner bevel */}
+      <path d="M74 155 L40 198 L42 208 L76 187 Z" fill="#ffffff" opacity="0.12" />
+
+      {/* ── RIGHT FIN ── */}
+      <path d="M146 155 L194 205 L182 238 L144 215 Z" fill="url(#finR)" />
+      {/* Fin inner bevel */}
+      <path d="M146 155 L180 198 L178 208 L144 187 Z" fill="#000000" opacity="0.12" />
+
+      {/* ── ENGINE BELL ── */}
+      <path d="M82 218 L138 218 L130 258 L90 258 Z" fill="url(#bellGrad)" />
+      {/* Bell inner ring highlight */}
+      <ellipse cx="110" cy="257" rx="20" ry="5" fill="#0f172a" />
+      <ellipse cx="110" cy="257" rx="14" ry="3.5" fill="#f97316" opacity="0.6" filter="url(#engineGlow)" />
+      {/* Bell seam lines */}
+      <line x1="95" y1="220" x2="92" y2="256" stroke="#ffffff" strokeWidth="0.5" opacity="0.15" />
+      <line x1="110" y1="219" x2="110" y2="258" stroke="#ffffff" strokeWidth="0.5" opacity="0.15" />
+      <line x1="125" y1="220" x2="128" y2="256" stroke="#ffffff" strokeWidth="0.5" opacity="0.15" />
+
+      {/* ── HULL BODY ── */}
+      <path
+        d="M110 12 C110 12 64 82 64 158 L64 220 C64 234 156 234 156 220 L156 158 C156 82 110 12 110 12 Z"
+        fill="url(#hullMain)"
+      />
+      {/* Hull left shine */}
+      <path
+        d="M110 12 C110 12 66 82 66 158 L66 220 C66 228 110 234 110 228 L110 12 Z"
+        fill="url(#hullShine)"
+      />
+      {/* Hull right shadow */}
+      <path
+        d="M110 12 C110 12 154 82 154 158 L154 220 C154 228 110 234 110 228 L110 12 Z"
+        fill="url(#hullShadow)"
+      />
+
+      {/* Hull panel lines */}
+      <path d="M82 165 L82 205 Q110 210 138 205 L138 165 Q110 170 82 165 Z" stroke="#94a3b8" strokeWidth="0.6" fill="none" opacity="0.3" />
+      <line x1="110" y1="130" x2="110" y2="215" stroke="#94a3b8" strokeWidth="0.5" opacity="0.2" strokeDasharray="4 6" />
+
+      {/* Rivets */}
+      {[
+        [84, 170], [84, 185], [84, 200],
+        [136, 170], [136, 185], [136, 200],
+      ].map(([cx, cy], i) => (
+        <circle key={i} cx={cx} cy={cy} r="1.8" fill="#64748b" stroke="#cbd5e1" strokeWidth="0.4" opacity="0.7" />
+      ))}
+
+      {/* ── PORTHOLE ── */}
+      {/* Outer chrome ring */}
+      <circle cx="110" cy="110" r="27" fill="#475569" />
+      <circle cx="110" cy="110" r="25" fill="#1e293b" />
+      {/* Glass */}
+      <circle cx="110" cy="110" r="22" fill="url(#portholeGrad)" />
+      {/* Star inside porthole */}
+      <circle cx="106" cy="104" r="2.5" fill="#93c5fd" opacity="0.6" />
+      <circle cx="116" cy="112" r="1.5" fill="#7dd3fc" opacity="0.5" />
+      {/* Glass shine arc */}
+      <path d="M95 100 Q110 84 125 100 Q110 108 95 100 Z" fill="#bae6fd" opacity="0.35" />
+      <circle cx="100" cy="100" r="3.5" fill="#ffffff" opacity="0.65" />
+      {/* Porthole rim highlight */}
+      <circle cx="110" cy="110" r="25" stroke="#94a3b8" strokeWidth="1" fill="none" opacity="0.4" />
+      <circle cx="110" cy="110" r="27" stroke="#ffffff" strokeWidth="0.5" fill="none" opacity="0.1" />
+
+      {/* ── NOSE CONE TIP ── */}
+      <path d="M110 12 C104 30 96 50 94 70 Q110 62 126 70 C124 50 116 30 110 12 Z" fill="url(#noseGrad)" opacity="0.5" />
     </svg>
   )
 
