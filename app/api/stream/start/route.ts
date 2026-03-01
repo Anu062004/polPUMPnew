@@ -70,11 +70,12 @@ export const POST = withCreatorAuth(async (request: NextRequest, user) => {
     }
 
     if (!isIvsConfigured()) {
+      const deployEnv = process.env.VERCEL_ENV || process.env.NODE_ENV || 'unknown'
       return NextResponse.json(
         {
           success: false,
           error:
-            'AWS IVS is not configured. Set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION.',
+            `AWS IVS is not configured for this deployment (${deployEnv}). Set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION in Vercel for this environment and redeploy.`,
         },
         { status: 500 }
       )

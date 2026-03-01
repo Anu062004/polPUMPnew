@@ -37,6 +37,16 @@ export interface IvsLiveStream {
 
 const IVS_SERVICE = 'ivs'
 
+function readEnv(...keys: string[]): string {
+  for (const key of keys) {
+    const value = String(process.env[key] || '').trim()
+    if (value && !value.startsWith('__SET_')) {
+      return value
+    }
+  }
+  return ''
+}
+
 function resolveChannelType(raw?: string | null): IvsChannelType {
   const normalized = String(raw || '').toUpperCase()
   if (
@@ -51,10 +61,14 @@ function resolveChannelType(raw?: string | null): IvsChannelType {
 }
 
 function getAwsCredentials(): AwsCredentials {
-  const accessKeyId = process.env.AWS_ACCESS_KEY_ID || ''
-  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY || ''
-  const sessionToken = process.env.AWS_SESSION_TOKEN || undefined
-  const region = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || ''
+  const accessKeyId = readEnv('AWS_ACCESS_KEY_ID', 'AWS_ACCESS_KEY', 'IVS_AWS_ACCESS_KEY_ID')
+  const secretAccessKey = readEnv(
+    'AWS_SECRET_ACCESS_KEY',
+    'AWS_SECRET_KEY',
+    'IVS_AWS_SECRET_ACCESS_KEY'
+  )
+  const sessionToken = readEnv('AWS_SESSION_TOKEN', 'IVS_AWS_SESSION_TOKEN') || undefined
+  const region = readEnv('AWS_REGION', 'AWS_DEFAULT_REGION', 'IVS_AWS_REGION')
 
   if (!accessKeyId || !secretAccessKey || !region) {
     throw new Error(
@@ -66,11 +80,12 @@ function getAwsCredentials(): AwsCredentials {
 }
 
 export function isIvsConfigured(): boolean {
-  return !!(
-    process.env.AWS_ACCESS_KEY_ID &&
-    process.env.AWS_SECRET_ACCESS_KEY &&
-    (process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION)
-  )
+  try {
+    const creds = getAwsCredentials()
+    return !!(creds.accessKeyId && creds.secretAccessKey && creds.region)
+  } catch {
+    return false
+  }
 }
 
 export function getConfiguredIvsChannelType(): IvsChannelType {
@@ -333,4 +348,3 @@ export async function getIvsLiveStream(channelArn: string): Promise<IvsLiveStrea
     throw error
   }
 }
-
