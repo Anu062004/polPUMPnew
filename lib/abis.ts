@@ -69,9 +69,20 @@ export const BONDING_CURVE_POOL_ABI = [
 ]
 
 export const SUPER_CHAT_ABI = [
+  'error ZeroAddress()',
+  'error InvalidFeeBps(uint16 feeBps)',
+  'error AmountBelowMinimum(uint256 minAmount, uint256 provided)',
+  'error StreamNotConfigured(bytes32 streamId)',
+  'error StreamInactive(bytes32 streamId)',
+  'error TokenNotAllowed(address token)',
+  'error DuplicateClientMessageId(bytes32 clientMessageId)',
+  'error NativeTransferFailed(address to, uint256 amount)',
+  'error DirectNativeTransferDisabled()',
   'function registerOwnStream(address streamToken, address payoutAddress, bool active) external',
   'function setStream(address creator, address streamToken, address payoutAddress, bool active) external',
   'function getStream(address creator, address streamToken) external view returns ((address creator,address payoutAddress,bool active,uint64 updatedAt))',
+  'function minNativeAmount() external view returns (uint256)',
+  'function paused() external view returns (bool)',
   'function setAllowedPaymentToken(address token, bool allowed) external',
   'function setMinTokenAmount(address token, uint256 amount) external',
   'function sendSuperChatNative(address creator, address streamToken, string messageCid, string stickerPack, string stickerId, bytes32 clientMessageId) external payable returns (bytes32 streamId, uint256 creatorAmount, uint256 platformAmount)',
@@ -91,7 +102,6 @@ export default {
   BONDING_CURVE_POOL_ABI,
   SUPER_CHAT_ABI
 }
-
 
 
 

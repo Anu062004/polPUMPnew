@@ -127,6 +127,55 @@ function getReadableError(error: any, fallback: string): string {
   return fallback
 }
 
+const superChatErrorInterface = new ethers.Interface(SUPER_CHAT_ABI)
+
+function extractRevertData(error: any): string | null {
+  const candidates = [
+    error?.data,
+    error?.error?.data,
+    error?.info?.error?.data,
+    error?.info?.payload?.params?.[0]?.data,
+  ]
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && ethers.isHexString(candidate)) {
+      return candidate
+    }
+  }
+  return null
+}
+
+function decodeSuperChatError(error: any): string | null {
+  const revertData = extractRevertData(error)
+  if (!revertData) return null
+
+  try {
+    const decoded = superChatErrorInterface.parseError(revertData)
+    if (!decoded) return null
+
+    if (decoded.name === 'AmountBelowMinimum') {
+      const minAmountWei = BigInt(decoded.args?.[0]?.toString?.() || '0')
+      return `Amount is below minimum. Send at least ${ethers.formatEther(minAmountWei)} MATIC.`
+    }
+    if (decoded.name === 'StreamNotConfigured' || decoded.name === 'StreamInactive') {
+      return 'Super Chat is not enabled for this stream yet. Ask creator to click "Enable Super Chat".'
+    }
+    if (decoded.name === 'DuplicateClientMessageId') {
+      return 'Duplicate Super Chat detected. Please try again.'
+    }
+    if (decoded.name === 'DirectNativeTransferDisabled') {
+      return 'Invalid Super Chat contract call. Please verify contract address configuration.'
+    }
+    if (decoded.name === 'ZeroAddress') {
+      return 'Invalid creator or token address for Super Chat.'
+    }
+
+    return `Super Chat transaction failed (${decoded.name}).`
+  } catch {
+    return null
+  }
+}
+
 export default function TokenDetailPage() {
   const params = useParams()
   const address = params.address as string
@@ -444,6 +493,40 @@ export default function TokenDetailPage() {
       }
 
       const contract = new ethers.Contract(contractAddress, SUPER_CHAT_ABI, signer)
+      const paused = await contract.paused().catch(() => false)
+      if (paused) {
+        throw new Error('Super Chat is temporarily paused by the platform')
+      }
+
+      const minNativeAmountRaw = await contract.minNativeAmount().catch(() => 0n)
+      const minNativeAmountWei =
+        typeof minNativeAmountRaw === 'bigint'
+          ? minNativeAmountRaw
+          : BigInt(minNativeAmountRaw?.toString?.() || '0')
+      if (valueWei < minNativeAmountWei) {
+        throw new Error(`Minimum Super Chat amount is ${ethers.formatEther(minNativeAmountWei)} MATIC`)
+      }
+
+      const streamConfig = await contract.getStream(token.creator, token.token_address).catch(() => null)
+      const streamCreator = normalizeWallet(streamConfig?.creator)
+      const streamActive = !!streamConfig?.active
+      const streamMissing = !streamCreator || streamCreator === normalizeWallet(ethers.ZeroAddress)
+      if (streamMissing || !streamActive) {
+        const canAutoEnable =
+          isCreator && normalizeWallet(signerAddress) === normalizeWallet(token.creator)
+        if (canAutoEnable) {
+          setChatInfo('Enabling Super Chat for your stream...')
+          const enableTx = await contract.registerOwnStream(token.token_address, signerAddress, true)
+          const enableReceipt = await enableTx.wait()
+          if (!enableReceipt || enableReceipt.status !== 1) {
+            throw new Error('Failed to enable Super Chat stream')
+          }
+          setChatInfo('Super Chat enabled. Sending payment...')
+        } else {
+          throw new Error('Super Chat is not enabled for this stream yet. Ask creator to click "Enable Super Chat".')
+        }
+      }
+
       const messageCidPayload = JSON.stringify({
         roomId: creatorRoomId,
         message: trimmedMessage,
@@ -453,6 +536,17 @@ export default function TokenDetailPage() {
       })
       const messageCid = `local:${ethers.keccak256(ethers.toUtf8Bytes(messageCidPayload))}`
       const clientMessageId = ethers.hexlify(ethers.randomBytes(32))
+
+      // Dry-run before wallet signing to surface deterministic contract errors early.
+      await contract.sendSuperChatNative.staticCall(
+        token.creator,
+        token.token_address,
+        messageCid,
+        selectedSticker?.pack || '',
+        selectedSticker?.id || '',
+        clientMessageId,
+        { value: valueWei }
+      )
 
       const tx = await contract.sendSuperChatNative(
         token.creator,
@@ -482,7 +576,9 @@ export default function TokenDetailPage() {
       setChatInput('')
       setSuperChatStickerId('')
     } catch (error: any) {
-      setChatError(getReadableError(error, 'Failed to send Super Chat'))
+      setChatError(
+        decodeSuperChatError(error) || getReadableError(error, 'Failed to send Super Chat')
+      )
     } finally {
       setSuperChatSending(false)
     }
@@ -496,6 +592,7 @@ export default function TokenDetailPage() {
     superChatStickerId,
     superChatAmount,
     normalizedCurrentWallet,
+    isCreator,
     postChatMessage,
   ])
 
@@ -520,8 +617,12 @@ export default function TokenDetailPage() {
     try {
       const provider = new ethers.BrowserProvider((window as any).ethereum)
       const signer = await provider.getSigner()
+      const signerAddress = await signer.getAddress()
+      if (normalizeWallet(signerAddress) !== normalizeWallet(token.creator)) {
+        throw new Error('Only the token creator wallet can configure Super Chat')
+      }
       const contract = new ethers.Contract(contractAddress, SUPER_CHAT_ABI, signer)
-      const tx = await contract.registerOwnStream(token.token_address, token.creator, active)
+      const tx = await contract.registerOwnStream(token.token_address, signerAddress, active)
       const receipt = await tx.wait()
       if (!receipt || receipt.status !== 1) {
         throw new Error('Super Chat stream update failed')
