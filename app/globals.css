@@ -526,15 +526,15 @@
 
   0%,
   100% {
-    transform: translateY(0px) rotate(0deg);
+    transform: translateY(0px) rotate(45deg);
   }
 
   30% {
-    transform: translateY(-14px) rotate(0.4deg);
+    transform: translateY(-14px) rotate(46deg);
   }
 
   60% {
-    transform: translateY(-20px) rotate(-0.3deg);
+    transform: translateY(-20px) rotate(44.7deg);
   }
 }
 
@@ -737,7 +737,8 @@
 
 /* Utility classes */
 .pp-float {
-  animation: pp-float 7s cubic-bezier(.45, .05, .55, .95) infinite;
+  animation: pp-float 6s cubic-bezier(.45, .05, .55, .95) infinite;
+  /* Starting transform applied via wrapper; keyframes handle rotate(45deg) */
 }
 
 .pp-flame-outer {

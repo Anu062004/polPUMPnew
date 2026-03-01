@@ -646,29 +646,29 @@ export default function HomePage() {
           </div>
 
           {/* Right: animated rocket */}
-          <div className="w-full lg:w-[45%] flex justify-center items-center order-1 lg:order-2 relative h-[320px] md:h-[420px] lg:h-[580px] pp-slide-up pp-delay-200">
-            {/* Glow behind rocket */}
+          <div className="w-full lg:w-[45%] flex justify-center items-center order-1 lg:order-2 relative h-[320px] md:h-[420px] lg:h-[580px] pp-slide-up pp-delay-200 mt-8 lg:mt-0">
+            {/* Ambient blue glow behind rocket */}
             <div
-              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 md:w-72 md:h-72 rounded-full pointer-events-none"
-              style={{ background: 'rgba(59,130,246,.22)', filter: 'blur(72px)' }}
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 md:w-80 md:h-80 rounded-full pointer-events-none mix-blend-screen transition-all duration-700"
+              style={{ background: 'rgba(59,130,246,.20)', filter: 'blur(80px)' }}
             />
 
-            {/* Rocket — pp-float is the global float animation */}
-            <div className="pp-float relative cursor-pointer select-none">
+            {/* Rocket — pp-float keeps 45deg tilt + bob */}
+            <div className="pp-float relative cursor-pointer select-none group drop-shadow-[0_0_30px_rgba(59,130,246,0.2)]">
               <RocketSVG />
-              {/* Shadow under rocket */}
+              {/* Ground shadow ellipse */}
               <div
-                className="absolute -bottom-10 left-1/2 -translate-x-1/2 w-28 h-5 rounded-[100%]"
-                style={{ background: 'rgba(0,0,0,.45)', filter: 'blur(10px)' }}
+                className="absolute -bottom-12 left-1/2 -translate-x-1/2 w-32 h-6 rounded-[100%] transition-transform duration-700 group-hover:scale-110"
+                style={{ background: 'rgba(0,0,0,.40)', filter: 'blur(10px)' }}
               />
             </div>
 
             {/* Floating info chips */}
-            <div className="absolute top-[22%] right-[8%] lg:right-[18%] px-2.5 py-1.5 rounded-xl flex items-center gap-2 hidden sm:flex" style={GLASS_STYLE}>
+            <div className="absolute top-[22%] right-[8%] lg:right-[18%] px-2.5 py-1.5 rounded-xl hidden sm:flex items-center gap-2 pp-float pp-delay-100" style={GLASS_STYLE}>
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 9 L4 5 L7 7 L11 2" stroke="#22d3ee" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
               <span className="text-xs font-bold text-white">+240%</span>
             </div>
-            <div className="absolute bottom-[22%] left-[6%] lg:left-[14%] px-2.5 py-1.5 rounded-xl flex items-center gap-2 hidden sm:flex" style={GLASS_STYLE}>
+            <div className="absolute bottom-[22%] left-[6%] lg:left-[14%] px-2.5 py-1.5 rounded-xl hidden sm:flex items-center gap-2 pp-float pp-delay-300" style={GLASS_STYLE}>
               <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
               <span className="text-xs font-medium text-slate-300">LP Locked</span>
             </div>
