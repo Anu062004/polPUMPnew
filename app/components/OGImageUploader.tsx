@@ -3,7 +3,6 @@
 import { useState, useRef, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
 import { UploadCloud, ImageIcon, Copy, Check, LinkIcon, Trash2 } from "lucide-react";
-import { useAuth } from "../providers/AuthContext";
 
 interface OGImageUploaderProps {
   onImageUploaded?: (cid: string, file: File) => void;
@@ -11,7 +10,6 @@ interface OGImageUploaderProps {
 }
 
 export default function OGImageUploader({ onImageUploaded, className = "" }: OGImageUploaderProps) {
-  const { accessToken } = useAuth();
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -114,10 +112,6 @@ export default function OGImageUploader({ onImageUploaded, className = "" }: OGI
 
   const onUpload = async () => {
     if (!file) return;
-    if (!accessToken) {
-      setError('Authentication required. Please sign in as CREATOR, then try upload again.');
-      return;
-    }
     setUploading(true);
     setError(null);
     setSuccess(null);
@@ -151,9 +145,6 @@ export default function OGImageUploader({ onImageUploaded, className = "" }: OGI
       // Upload via Next.js API route (which will try backend first, then fallback to local storage)
       const response = await fetch('/api/upload', {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
         body: form
       });
 

@@ -3,7 +3,6 @@
 import { useState, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Upload, X, CheckCircle, AlertCircle, Image as ImageIcon, Loader2 } from 'lucide-react'
-import { useAuth } from '../providers/AuthContext'
 
 interface ImprovedImageUploaderProps {
   onImageUploaded?: (cid: string, file: File) => void
@@ -16,7 +15,6 @@ export default function ImprovedImageUploader({
   maxSizeMB = 10,
   acceptedFormats = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'],
 }: ImprovedImageUploaderProps) {
-  const { accessToken } = useAuth()
   const [file, setFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -87,10 +85,6 @@ export default function ImprovedImageUploader({
 
   const handleUpload = async () => {
     if (!file) return
-    if (!accessToken) {
-      setError('Authentication required. Please sign in as CREATOR, then try upload again.')
-      return
-    }
 
     setUploading(true)
     setError(null)
@@ -111,9 +105,6 @@ export default function ImprovedImageUploader({
 
       const response = await fetch('/api/upload', {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
         body: formData,
       })
 

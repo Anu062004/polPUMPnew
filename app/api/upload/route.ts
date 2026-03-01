@@ -1,17 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pinataService } from '../../../lib/pinataService'
-import { withAuth } from '../../../lib/roleMiddleware'
 
 const RATE_LIMIT_WINDOW_MS = 60_000
 const RATE_LIMIT_MAX = 20
 const rateBuckets = new Map<string, { count: number; reset: number }>()
 
-function enforceRateLimit(request: NextRequest, wallet: string): NextResponse | null {
+function enforceRateLimit(request: NextRequest): NextResponse | null {
   const ip =
     request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
     request.ip ||
     'unknown'
-  const key = `upload:${wallet.toLowerCase()}:${ip}`
+  const key = `upload:${ip}`
   const now = Date.now()
   const bucket = rateBuckets.get(key) || { count: 0, reset: now + RATE_LIMIT_WINDOW_MS }
   if (bucket.reset < now) {
@@ -43,9 +42,9 @@ function shouldUseRemoteBackend(backendBase: string) {
 }
 
 // Handle image uploads to Pinata IPFS
-export const POST = withAuth(async (request: NextRequest, user) => {
+export const POST = async (request: NextRequest) => {
   try {
-    const rateLimited = enforceRateLimit(request, user.wallet)
+    const rateLimited = enforceRateLimit(request)
     if (rateLimited) {
       return rateLimited
     }
@@ -187,4 +186,4 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       { status: 500 }
     )
   }
-})
+}
