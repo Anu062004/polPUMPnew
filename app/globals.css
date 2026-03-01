@@ -529,12 +529,16 @@
     transform: translateY(0px) rotate(45deg);
   }
 
-  30% {
-    transform: translateY(-14px) rotate(46deg);
+  25% {
+    transform: translateY(-18px) rotate(46.2deg);
   }
 
-  60% {
-    transform: translateY(-20px) rotate(44.7deg);
+  50% {
+    transform: translateY(-26px) rotate(44.5deg);
+  }
+
+  75% {
+    transform: translateY(-12px) rotate(45.8deg);
   }
 }
 
@@ -737,35 +741,40 @@
 
 /* Utility classes */
 .pp-float {
-  animation: pp-float 6s cubic-bezier(.45, .05, .55, .95) infinite;
-  /* Starting transform applied via wrapper; keyframes handle rotate(45deg) */
+  animation: pp-float 5s cubic-bezier(.45, .05, .55, .95) infinite;
 }
 
 .pp-flame-outer {
   animation: pp-flame-outer-kf 0.22s ease-in-out infinite alternate;
   transform-origin: center bottom;
+  transform-box: fill-box;
 }
 
 .pp-flame-mid {
   animation: pp-flame-mid-kf 0.18s ease-in-out infinite alternate-reverse;
   transform-origin: center bottom;
+  transform-box: fill-box;
 }
 
 .pp-flame-core {
   animation: pp-flame-core-kf 0.14s ease-in-out infinite alternate;
   transform-origin: center bottom;
+  transform-box: fill-box;
 }
 
 .pp-smoke-l {
   animation: pp-smoke-l-kf 1.6s ease-out infinite;
+  transform-box: fill-box;
 }
 
 .pp-smoke-r {
   animation: pp-smoke-r-kf 1.8s ease-out infinite 0.3s;
+  transform-box: fill-box;
 }
 
 .pp-smoke-c {
   animation: pp-smoke-c-kf 2.0s ease-out infinite 0.8s;
+  transform-box: fill-box;
 }
 
 .pp-slide-up {
@@ -796,6 +805,180 @@
 
 .pp-delay-400 {
   animation-delay: 400ms;
+}
+
+/* Hero rocket animation system */
+@keyframes rkt-float {
+  0%,
+  100% {
+    transform: translateY(0px) rotate(45deg);
+  }
+
+  25% {
+    transform: translateY(-20px) rotate(46.5deg);
+  }
+
+  50% {
+    transform: translateY(-30px) rotate(44.5deg);
+  }
+
+  75% {
+    transform: translateY(-15px) rotate(45.8deg);
+  }
+}
+
+@keyframes rkt-flame-outer {
+  0% {
+    transform: scaleX(1) scaleY(1);
+    opacity: 0.9;
+  }
+
+  33% {
+    transform: scaleX(1.09) scaleY(0.92);
+    opacity: 1;
+  }
+
+  66% {
+    transform: scaleX(0.93) scaleY(1.1);
+    opacity: 0.85;
+  }
+
+  100% {
+    transform: scaleX(1.05) scaleY(0.96);
+    opacity: 1;
+  }
+}
+
+@keyframes rkt-flame-mid {
+  0% {
+    transform: scaleX(1) scaleY(1);
+    opacity: 0.95;
+  }
+
+  33% {
+    transform: scaleX(0.95) scaleY(1.12);
+    opacity: 1;
+  }
+
+  66% {
+    transform: scaleX(1.07) scaleY(0.94);
+    opacity: 0.88;
+  }
+
+  100% {
+    transform: scaleX(0.98) scaleY(1.08);
+    opacity: 1;
+  }
+}
+
+@keyframes rkt-flame-core {
+  0%,
+  100% {
+    transform: scaleY(1) scaleX(1);
+    opacity: 1;
+  }
+
+  25% {
+    transform: scaleY(1.15) scaleX(0.88);
+    opacity: 0.8;
+  }
+
+  50% {
+    transform: scaleY(0.88) scaleX(1.1);
+    opacity: 1;
+  }
+
+  75% {
+    transform: scaleY(1.1) scaleX(0.94);
+    opacity: 0.85;
+  }
+}
+
+@keyframes rkt-smoke-l {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.35;
+  }
+
+  50% {
+    transform: translate(-8px, -12px) scale(1.4);
+    opacity: 0.15;
+  }
+
+  100% {
+    transform: translate(-14px, -28px) scale(2);
+    opacity: 0;
+  }
+}
+
+@keyframes rkt-smoke-r {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.3;
+  }
+
+  50% {
+    transform: translate(8px, -10px) scale(1.3);
+    opacity: 0.12;
+  }
+
+  100% {
+    transform: translate(14px, -24px) scale(1.9);
+    opacity: 0;
+  }
+}
+
+@keyframes rkt-smoke-c {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.25;
+  }
+
+  50% {
+    transform: translate(2px, -8px) scale(1.5);
+    opacity: 0.1;
+  }
+
+  100% {
+    transform: translate(4px, -20px) scale(2.2);
+    opacity: 0;
+  }
+}
+
+.rkt-wrap {
+  display: inline-block;
+  animation: rkt-float 5s cubic-bezier(.45, .05, .55, .95) infinite;
+  will-change: transform;
+}
+
+.rkt-flame-outer {
+  animation: rkt-flame-outer 0.22s ease-in-out infinite alternate;
+  transform-origin: 110px 255px;
+  transform-box: fill-box;
+}
+
+.rkt-flame-mid {
+  animation: rkt-flame-mid 0.18s ease-in-out infinite alternate-reverse;
+  transform-origin: 110px 255px;
+  transform-box: fill-box;
+}
+
+.rkt-flame-core {
+  animation: rkt-flame-core 0.14s ease-in-out infinite alternate;
+  transform-origin: 110px 254px;
+  transform-box: fill-box;
+}
+
+.rkt-smoke-l {
+  animation: rkt-smoke-l 1.6s ease-out infinite;
+}
+
+.rkt-smoke-r {
+  animation: rkt-smoke-r 1.8s ease-out infinite 0.3s;
+}
+
+.rkt-smoke-c {
+  animation: rkt-smoke-c 2s ease-out infinite 0.8s;
 }
 
 @layer utilities {
@@ -1001,6 +1184,35 @@
       animation-duration: 0.01ms !important;
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
+    }
+
+    /* Keep hero rocket motion stable; without this it snaps to a static upright pose. */
+    .rkt-wrap {
+      animation: rkt-float 5s cubic-bezier(.45, .05, .55, .95) infinite !important;
+    }
+
+    .rkt-flame-outer {
+      animation: rkt-flame-outer 0.22s ease-in-out infinite alternate !important;
+    }
+
+    .rkt-flame-mid {
+      animation: rkt-flame-mid 0.18s ease-in-out infinite alternate-reverse !important;
+    }
+
+    .rkt-flame-core {
+      animation: rkt-flame-core 0.14s ease-in-out infinite alternate !important;
+    }
+
+    .rkt-smoke-l {
+      animation: rkt-smoke-l 1.6s ease-out infinite !important;
+    }
+
+    .rkt-smoke-r {
+      animation: rkt-smoke-r 1.8s ease-out infinite 0.3s !important;
+    }
+
+    .rkt-smoke-c {
+      animation: rkt-smoke-c 2s ease-out infinite 0.8s !important;
     }
   }
 
