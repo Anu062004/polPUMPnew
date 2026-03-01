@@ -170,9 +170,11 @@ export default function TokenLiveStreamControls({
   const [isSharingScreen, setIsSharingScreen] = useState(false)
   const [isSwitchingVideoSource, setIsSwitchingVideoSource] = useState(false)
   const [videoSource, setVideoSource] = useState<'camera' | 'screen'>('camera')
+  const [localPreviewStream, setLocalPreviewStream] = useState<MediaStream | null>(null)
 
   const previewVideoRef = useRef<HTMLVideoElement | null>(null)
   const previewStreamRef = useRef<MediaStream | null>(null)
+  const isMountedRef = useRef(true)
   const broadcastClientRef = useRef<any>(null)
   const mediaStreamRef = useRef<MediaStream | null>(null)
   const screenStreamRef = useRef<MediaStream | null>(null)
@@ -268,6 +270,9 @@ export default function TokenLiveStreamControls({
       previewStreamRef.current.getTracks().forEach((track) => track.stop())
       previewStreamRef.current = null
     }
+    if (isMountedRef.current) {
+      setLocalPreviewStream(null)
+    }
 
     if (previewVideoRef.current) {
       previewVideoRef.current.srcObject = null
@@ -277,17 +282,40 @@ export default function TokenLiveStreamControls({
   }
 
   const attachLocalPreviewTrack = async (track: MediaStreamTrack, source: 'camera' | 'screen') => {
-    if (!previewVideoRef.current) return
     clearLocalPreview(source)
 
     const previewStream = new MediaStream([track.clone()])
     previewStreamRef.current = previewStream
-    previewVideoRef.current.srcObject = previewStream
-    previewVideoRef.current.muted = true
-    previewVideoRef.current.playsInline = true
-    await previewVideoRef.current.play().catch(() => undefined)
+    if (isMountedRef.current) {
+      setLocalPreviewStream(previewStream)
+    }
+
+    if (previewVideoRef.current) {
+      previewVideoRef.current.srcObject = previewStream
+      previewVideoRef.current.muted = true
+      previewVideoRef.current.playsInline = true
+      await previewVideoRef.current.play().catch(() => undefined)
+    }
+
     onLocalPreviewChange?.(previewStream, source)
   }
+
+  useEffect(() => {
+    const previewVideo = previewVideoRef.current
+    if (!previewVideo) return
+
+    if (!localPreviewStream) {
+      previewVideo.srcObject = null
+      return
+    }
+
+    if (previewVideo.srcObject !== localPreviewStream) {
+      previewVideo.srcObject = localPreviewStream
+    }
+    previewVideo.muted = true
+    previewVideo.playsInline = true
+    previewVideo.play().catch(() => undefined)
+  }, [localPreviewStream, isLive])
 
   const updateBroadcastVideoInput = async (track: MediaStreamTrack, source: 'camera' | 'screen') => {
     const client = broadcastClientRef.current
@@ -431,7 +459,9 @@ export default function TokenLiveStreamControls({
 
   // Cleanup local media/broadcast on unmount.
   useEffect(() => {
+    isMountedRef.current = true
     return () => {
+      isMountedRef.current = false
       stopLocalBroadcast().catch(() => undefined)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
