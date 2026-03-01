@@ -39,7 +39,6 @@ export async function GET(request: NextRequest) {
       isLive: livestream.status === 'live',
       tokenAddress: livestream.tokenAddress,
       playbackUrl,
-      streamKey: livestream.streamKey,
     })
   } catch (error: any) {
     console.error('Error getting livestream status:', error)
@@ -49,4 +48,3 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-

@@ -7,7 +7,6 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { useAccount, useSignMessage } from 'wagmi'
-import { generateSignMessage } from '../../lib/authUtils'
 
 export type Role = 'TRADER' | 'CREATOR'
 
@@ -89,31 +88,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           throw new Error('Wallet connector is not ready. Please reconnect your wallet and try again.')
         }
 
-        // Generate message to sign
-        const nonce = Date.now().toString()
-        const timestamp = Date.now()
-        const message = generateSignMessage(address, 'authenticate', nonce, timestamp)
+        let chainId: number | null = null
+        try {
+          chainId = await connector.getChainId()
+        } catch (chainError: any) {
+          console.warn('Failed to read wallet chain id, continuing without it:', chainError?.message || chainError)
+        }
+
+        const challengeResponse = await fetch('/api/auth/challenge', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            wallet: address,
+            chainId,
+            domain: typeof window !== 'undefined' ? window.location.host : null,
+          }),
+        })
+        const challengeData = await challengeResponse.json()
+        if (!challengeResponse.ok || !challengeData.success) {
+          throw new Error(challengeData.error || 'Failed to create sign-in challenge')
+        }
+
+        const message = String(challengeData.message || '')
+        const challengeId = String(challengeData.challengeId || '')
+        if (!message || !challengeId) {
+          throw new Error('Invalid authentication challenge response')
+        }
 
         // Request signature
         let signature: string
         try {
           signature = await signMessageAsync({ message })
         } catch (error: any) {
-          const shouldUseFallback = String(error?.message || '').includes('getChainId is not a function')
           const injectedProvider = (
             globalThis as typeof globalThis & {
               ethereum?: { request?: (args: { method: string; params?: unknown[] }) => Promise<unknown> }
             }
           ).ethereum
 
-          if (!shouldUseFallback || !injectedProvider?.request) {
+          if (!injectedProvider?.request) {
             throw error
           }
 
-          const fallbackSignature = await injectedProvider.request({
-            method: 'personal_sign',
-            params: [message, address],
-          })
+          let fallbackSignature: unknown
+          try {
+            fallbackSignature = await injectedProvider.request({
+              method: 'personal_sign',
+              params: [message, address],
+            })
+          } catch {
+            throw error
+          }
 
           if (typeof fallbackSignature !== 'string') {
             throw new Error('Wallet did not return a valid signature')
@@ -131,8 +158,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           body: JSON.stringify({
             wallet: address,
             signature,
+            challengeId,
             message,
-            nonce,
             desiredRole: preferredRole || null,
           }),
         })
@@ -221,6 +248,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Update access token
       localStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken)
       setAccessToken(data.accessToken)
+      if (data.refreshToken) {
+        localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken)
+      }
 
       // If role changed, update user
       if (data.roleChanged && user) {

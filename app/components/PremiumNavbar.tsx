@@ -72,6 +72,16 @@ const NAV_PANELS: Record<string, PanelDef> = {
       { icon: <Gift className="w-4 h-4" />, label: 'Trading Rewards', desc: 'Earn as you trade', href: '/trader' },
     ],
   },
+  Gaming: {
+    type: 'single',
+    width: 320,
+    items: [
+      { icon: <Trophy className="w-4 h-4" />, label: 'Gaming Hub', desc: 'All games and events in one place', href: '/gaming' },
+      { icon: <Gift className="w-4 h-4" />, label: 'Coinflip', desc: 'Heads or tails instant wagers', href: '/gaming' },
+      { icon: <Layers className="w-4 h-4" />, label: 'Meme Royale', desc: 'Battle tokens and climb rankings', href: '/gaming' },
+      { icon: <Shield className="w-4 h-4" />, label: 'Mines', desc: 'Risk-based game with cashout strategy', href: '/gaming' },
+    ],
+  },
   Creator: {
     type: 'creator',
     width: 680,
@@ -363,12 +373,89 @@ export default function PremiumNavbar() {
   const [mounted, setMounted] = useState(false)
   const [isRoleSubmitting, setIsRoleSubmitting] = useState<'TRADER' | 'CREATOR' | null>(null)
   const [openMobilePanel, setOpenMobilePanel] = useState<string | null>(null)
+  const [isNavVisible, setIsNavVisible] = useState(true)
+  const [gamingPoints, setGamingPoints] = useState(0)
+  const lastScrollYRef = useRef(0)
+
+  const walletForPoints = (user?.wallet || address || '').toLowerCase()
 
   useEffect(() => { setMounted(true) }, [])
 
   useEffect(() => {
     if (address) setMemory({ walletAddress: address.toLowerCase() })
   }, [address, setMemory])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    lastScrollYRef.current = window.scrollY
+    let ticking = false
+
+    const onScroll = () => {
+      const currentY = window.scrollY
+
+      if (ticking) return
+      ticking = true
+
+      window.requestAnimationFrame(() => {
+        const previousY = lastScrollYRef.current
+        const delta = currentY - previousY
+        const atTop = currentY <= 20
+
+        if (isMenuOpen || atTop) {
+          setIsNavVisible(true)
+        } else if (delta > 8) {
+          setIsNavVisible(false)
+        } else if (delta < -8) {
+          setIsNavVisible(true)
+        }
+
+        lastScrollYRef.current = currentY
+        ticking = false
+      })
+    }
+
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [isMenuOpen])
+
+  useEffect(() => {
+    let canceled = false
+
+    const loadGamingPoints = async () => {
+      if (!walletForPoints || !mounted) {
+        if (!canceled) setGamingPoints(0)
+        return
+      }
+
+      try {
+        const response = await fetch('/api/gaming/coinflip/leaderboard', { cache: 'no-store' })
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok || !data?.success || !Array.isArray(data?.leaderboard)) {
+          throw new Error(data?.error || 'Failed to load gaming points')
+        }
+
+        const row = data.leaderboard.find(
+          (entry: any) => String(entry?.userAddress || '').toLowerCase() === walletForPoints
+        )
+
+        const nextPoints = Number(row?.points ?? row?.score ?? row?.wins ?? 0)
+        if (!canceled) {
+          setGamingPoints(Number.isFinite(nextPoints) ? Math.max(0, Math.floor(nextPoints)) : 0)
+        }
+      } catch {
+        if (!canceled) setGamingPoints(0)
+      }
+    }
+
+    void loadGamingPoints()
+    const timer = setInterval(loadGamingPoints, 30000)
+
+    return () => {
+      canceled = true
+      clearInterval(timer)
+    }
+  }, [walletForPoints, mounted])
 
   const handleRoleRegistration = async (role: 'TRADER' | 'CREATOR') => {
     try {
@@ -390,12 +477,15 @@ export default function PremiumNavbar() {
     { label: 'Home', href: '/' },
     { label: 'Explore', href: '/explore' },
     { label: 'Trader', href: '/trader' },
+    { label: 'Gaming', href: '/gaming' },
     { label: 'Creator', href: '/creator' },
     { label: 'Profile', href: '/profile' },
   ]
 
   return (
-    <div className="fixed top-0 inset-x-0 z-[60] px-4 pt-5 pb-2 pointer-events-none">
+    <div
+      className={`fixed top-0 inset-x-0 z-[60] px-4 pt-5 pb-2 pointer-events-none transition-transform duration-300 ease-out ${isNavVisible ? 'translate-y-0' : '-translate-y-[130%]'}`}
+    >
       <nav className="pointer-events-auto max-w-7xl mx-auto rounded-[20px] bg-slate-900/70 backdrop-blur-xl border border-white/5 shadow-[0_8px_32px_rgba(0,0,0,0.2)] transition-all duration-300">
         <div className="px-4 md:px-5 h-[68px] flex items-center justify-between gap-4">
 
@@ -426,6 +516,13 @@ export default function PremiumNavbar() {
 
           {/* Right Action Buttons */}
           <div className="hidden md:flex items-center gap-3 shrink-0">
+            {!!walletForPoints && (
+              <div className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-emerald-500/12 border border-emerald-400/35 text-emerald-200 text-sm font-semibold">
+                <Trophy className="w-4 h-4 text-emerald-300" />
+                <span>{gamingPoints} PTS</span>
+              </div>
+            )}
+
             {/* Polygon Network Badge */}
             <div className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-purple-500/15 border border-purple-500/40 text-purple-200 text-sm font-medium">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -516,6 +613,12 @@ export default function PremiumNavbar() {
                 />
               ))}
               <div className="pt-2">
+                {!!walletForPoints && (
+                  <div className="mb-2 w-full px-5 py-3 rounded-xl bg-emerald-500/12 border border-emerald-400/35 text-emerald-200 text-sm font-semibold flex items-center justify-center gap-2">
+                    <Trophy className="w-4 h-4 text-emerald-300" />
+                    <span>Gaming Points: {gamingPoints}</span>
+                  </div>
+                )}
                 {mounted && (
                   <ConnectButton.Custom>
                     {({ account, chain, openAccountModal, openChainModal, openConnectModal, authenticationStatus, mounted: rbMounted }) => {

@@ -22,9 +22,6 @@ export async function POST(request: NextRequest) {
       const db = await getDb()
       if (db.type === 'pg') {
         await db.pool.query('DELETE FROM user_sessions WHERE wallet = $1', [user.wallet])
-      } else if (db.type === 'vercel') {
-        const { sql } = db
-        await sql`DELETE FROM user_sessions WHERE wallet = ${user.wallet}`
       }
     } catch (dbError: any) {
       console.warn('Failed to remove session from database:', dbError.message)

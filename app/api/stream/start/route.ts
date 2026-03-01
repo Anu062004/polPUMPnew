@@ -5,6 +5,7 @@ import { getLivestream, getTokenCreator, upsertLivestream } from '../../../../li
 import {
   createIvsChannel,
   getConfiguredIvsChannelType,
+  getIvsStreamKeyValue,
   isIvsConfigured,
 } from '../../../../lib/ivsService'
 
@@ -13,6 +14,47 @@ export const dynamic = 'force-dynamic'
 function normalizeRtmpIngestUrl(ingestEndpoint: string): string {
   const trimmed = ingestEndpoint.replace(/^https?:\/\//i, '').replace(/\/+$/, '')
   return `rtmps://${trimmed}:443/app`
+}
+
+function normalizeIngestEndpoint(input: string | null | undefined): string | null {
+  const trimmed = String(input || '').trim()
+  if (!trimmed) return null
+
+  const withoutScheme = trimmed.replace(/^[a-z]+:\/\//i, '')
+  const [hostPort = ''] = withoutScheme.split('/')
+  const host = hostPort.split(':')[0]?.trim()
+  return host || null
+}
+
+function shouldReprovisionChannel(error: any): boolean {
+  const code = String(error?.code || '')
+  const message = String(error?.message || '').toLowerCase()
+  return (
+    code.includes('ResourceNotFound') ||
+    code.includes('ValidationException') ||
+    message.includes('resource not found') ||
+    message.includes('does not exist') ||
+    message.includes('invalid arn')
+  )
+}
+
+function normalizeStartError(error: any): string {
+  if (!error) return 'Failed to start livestream'
+  if (typeof error === 'string') return error
+  if (typeof error?.message === 'string' && error.message.trim()) return error.message.trim()
+  if (typeof error?.error === 'string' && error.error.trim()) return error.error.trim()
+  if (typeof error?.code === 'string' && error.code.trim()) {
+    return `Livestream start failed (${error.code.trim()})`
+  }
+  try {
+    const serialized = JSON.stringify(error)
+    if (serialized && serialized !== '{}') {
+      return `Livestream start failed: ${serialized.slice(0, 260)}`
+    }
+  } catch {
+    // Ignore serialization issues.
+  }
+  return 'Failed to start livestream'
 }
 
 export const POST = withCreatorAuth(async (request: NextRequest, user) => {
@@ -55,14 +97,39 @@ export const POST = withCreatorAuth(async (request: NextRequest, user) => {
     let channelArn = existing?.channelArn || null
     let streamKeyArn = existing?.streamKeyArn || null
     let streamKey = existing?.streamKey || null
-    let ingestEndpoint = existing?.ingestEndpoint || null
+    let ingestEndpoint = normalizeIngestEndpoint(existing?.ingestEndpoint) || null
     let playbackUrl = existing?.playbackUrl || null
     let channelType = (existing?.channelType || configuredChannelType).toUpperCase()
 
     const hasProvisionedIvsChannel =
       !!channelArn && !!streamKeyArn && !!streamKey && !!ingestEndpoint && !!playbackUrl
 
-    if (!hasProvisionedIvsChannel || !streamKey?.startsWith('sk_')) {
+    let shouldProvisionFresh = !hasProvisionedIvsChannel || !streamKey?.startsWith('sk_')
+
+    // Stored IVS resources can become stale (manual deletion/rotation). Refresh key value when possible.
+    if (!shouldProvisionFresh && streamKeyArn) {
+      try {
+        const latestStreamKey = await getIvsStreamKeyValue(streamKeyArn)
+        if (latestStreamKey && latestStreamKey.startsWith('sk_')) {
+          streamKey = latestStreamKey
+        } else {
+          shouldProvisionFresh = true
+        }
+      } catch (streamKeyError: any) {
+        if (shouldReprovisionChannel(streamKeyError)) {
+          shouldProvisionFresh = true
+        } else {
+          console.warn(
+            'Could not refresh IVS stream key; using stored key:',
+            streamKeyError?.message || streamKeyError
+          )
+        }
+      }
+    } else if (!shouldProvisionFresh && !streamKeyArn) {
+      shouldProvisionFresh = true
+    }
+
+    if (shouldProvisionFresh) {
       const provisioned = await createIvsChannel({
         tokenAddress: normalizedTokenAddress,
         creatorAddress,
@@ -71,7 +138,7 @@ export const POST = withCreatorAuth(async (request: NextRequest, user) => {
       channelArn = provisioned.channelArn
       streamKeyArn = provisioned.streamKeyArn
       streamKey = provisioned.streamKey
-      ingestEndpoint = provisioned.ingestEndpoint
+      ingestEndpoint = normalizeIngestEndpoint(provisioned.ingestEndpoint)
       playbackUrl = provisioned.playbackUrl
       channelType = provisioned.channelType
     }
@@ -112,8 +179,9 @@ export const POST = withCreatorAuth(async (request: NextRequest, user) => {
     })
   } catch (error: any) {
     console.error('Error starting livestream:', error)
+    const message = normalizeStartError(error)
     return NextResponse.json(
-      { success: false, error: error.message || 'Failed to start livestream' },
+      { success: false, error: message },
       { status: 500 }
     )
   }

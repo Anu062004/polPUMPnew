@@ -14,6 +14,7 @@
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:api\" \"npm run dev:indexer\" \"npm run dev:stream\"",
     "test:contracts": "hardhat test",
     "compile:contracts": "hardhat compile",
+    "deploy:superchat": "hardhat run scripts/deploySuperChat.js --network polygon-amoy",
     "deploy:polygon": "hardhat run scripts/deployPolygonMainnet.js --network polygon",
     "verify:polygon": "hardhat run scripts/verifyContracts.js --network polygon",
     "deploy:testnet": "hardhat run scripts/deployAppFactoryPolygonAmoy.js --network polygon-amoy"

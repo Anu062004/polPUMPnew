@@ -9,8 +9,57 @@ const { Pool } = require('pg');
 require('dotenv').config();
 
 const app = express();
-app.use(cors());
+app.disable('x-powered-by');
+
+function parseCorsOrigins() {
+  const raw = process.env.CORS_ORIGIN || process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
+  return raw
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
+const allowedOrigins = parseCorsOrigins();
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('CORS origin not allowed'));
+  },
+  credentials: true,
+}));
 app.use(express.json());
+
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'same-origin');
+  next();
+});
+
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 200;
+const rateBuckets = new Map();
+app.use((req, res, next) => {
+  const ip = (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown')
+    .toString()
+    .split(',')[0]
+    .trim();
+  const key = `${ip}`;
+  const now = Date.now();
+  const bucket = rateBuckets.get(key) || { count: 0, reset: now + RATE_LIMIT_WINDOW_MS };
+  if (bucket.reset < now) {
+    bucket.count = 0;
+    bucket.reset = now + RATE_LIMIT_WINDOW_MS;
+  }
+  bucket.count += 1;
+  rateBuckets.set(key, bucket);
+  if (bucket.count > RATE_LIMIT_MAX) {
+    return res.status(429).json({ error: 'Rate limit exceeded' });
+  }
+  return next();
+});
 
 // Database connection
 const pool = new Pool({

@@ -35,7 +35,6 @@ export async function GET(request: NextRequest) {
         isLive: false,
         tokenAddress: normalizedAddress,
         playbackUrl: null,
-        streamKey: null,
       })
     }
 
@@ -90,7 +89,6 @@ export async function GET(request: NextRequest) {
       isLive,
       tokenAddress: livestream.tokenAddress,
       playbackUrl,
-      streamKey: livestream.streamKey,
       creatorAddress: livestream.creatorAddress,
       provider: livestream.provider,
     })
@@ -102,5 +100,4 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-
 

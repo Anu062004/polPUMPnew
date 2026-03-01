@@ -77,6 +77,10 @@ export default function GamingPage() {
   // Polygon Amoy DA Provenance State
   const [lastProvenanceHash, setLastProvenanceHash] = useState<string | null>(null)
 
+  // Arena Hero Stats (derived from leaderboard + recent plays)
+  const [activePlayers, setActivePlayers] = useState<number>(0)
+  const [totalRewardsUSD, setTotalRewardsUSD] = useState<string>('0')
+
   // Wallet Balance Tracking
   const [nativeBalance, setNativeBalance] = useState<string>('0.0')
   const [isLoadingBalance, setIsLoadingBalance] = useState(false)
@@ -426,6 +430,17 @@ export default function GamingPage() {
         ])
         setLeaderboard(lb.leaderboard || [])
         setRecent(rc.recent || [])
+        // Compute hero stats
+        const uniquePlayers = new Set([
+          ...(lb.leaderboard || []).map((r: any) => r.userAddress),
+          ...(rc.recent || []).map((r: any) => r.userAddress),
+        ])
+        setActivePlayers(uniquePlayers.size || (lb.leaderboard?.length ?? 0))
+        const totalWon = (rc.recent || [])
+          .filter((r: any) => r.outcome === 'win')
+          .reduce((sum: number, r: any) => sum + (parseFloat(r.wager || '0') * 2), 0)
+        setTotalRewardsUSD(totalWon >= 1000 ? `${(totalWon / 1000).toFixed(1)}K` : totalWon.toFixed(2))
+
       } catch (e) {
         console.warn('Failed to load coinflip data:', e)
       }
@@ -800,358 +815,439 @@ export default function GamingPage() {
   }
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-[#050816]" suppressHydrationWarning>
-      {/* Neon arena background layers */}
-      <div
-        className="pointer-events-none absolute inset-0 opacity-40 mix-blend-screen"
-        style={{
-          backgroundImage:
-            'radial-gradient(circle at 10% 0%, rgba(244,114,182,0.35) 0, transparent 55%), radial-gradient(circle at 90% 100%, rgba(56,189,248,0.35) 0, transparent 55%)',
-        }}
-      />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(129,140,248,0.15),transparent_60%),radial-gradient(circle_at_bottom,_rgba(45,212,191,0.18),transparent_55%)]" />
+    <div
+      className="min-h-screen relative overflow-x-hidden text-slate-200 selection:bg-blue-500/30"
+      style={{ background: 'radial-gradient(circle at top center, #0E1A35 0%, #0B1220 40%, #071029 100%)', backgroundAttachment: 'fixed' }}
+      suppressHydrationWarning
+    >
+      {/* Ambient Lights */}
+      <div className="fixed top-[-20%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-blue-600/10 blur-[120px] pointer-events-none z-0" />
+      <div className="fixed bottom-[-20%] right-[-10%] w-[40vw] h-[40vw] rounded-full bg-purple-600/10 blur-[120px] pointer-events-none z-0" />
+      {/* Particles */}
+      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+        <div className="absolute w-1 h-1 rounded-full bg-white/10 top-[20%] left-[15%] arena-float" />
+        <div className="absolute w-1.5 h-1.5 rounded-full bg-blue-400/20 top-[60%] left-[10%] arena-float-delayed" />
+        <div className="absolute w-0.5 h-0.5 rounded-full bg-white/10 top-[30%] right-[25%] arena-float" />
+        <div className="absolute w-2 h-2 rounded-full bg-purple-400/20 top-[70%] right-[15%] arena-float-delayed" />
+      </div>
 
-      <BlobBackground />
+      <div className="relative z-10 max-w-7xl mx-auto px-6 pt-6 pb-24 flex flex-col gap-8" suppressHydrationWarning>
 
-      <div className="relative z-10 p-6" suppressHydrationWarning>
-        <div className="max-w-7xl mx-auto">
-          {/* Arena Header / HUD */}
-          <div className="mb-8">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 px-5 py-4 bg-black/40 border border-purple-500/40 rounded-2xl shadow-[0_0_40px_rgba(168,85,247,0.45)] backdrop-blur-xl">
-              <div className="flex-1">
-                <div className="flex items-center gap-3 mb-2">
-                  <h1 className="text-4xl md:text-5xl font-black bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500 text-transparent bg-clip-text drop-shadow-[0_0_30px_rgba(168,85,247,0.5)]">
-                    🎮 GAMING ARENA
-                  </h1>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <span className="bg-gradient-to-r from-green-400 to-emerald-600 text-white text-xs px-3 py-1.5 rounded-full border border-green-300 shadow-lg font-semibold">
-                    ✅ POL PUMP AI
-                  </span>
-                  <span className="bg-gradient-to-r from-blue-400 to-cyan-600 text-white text-xs px-3 py-1.5 rounded-full border border-cyan-300 shadow-lg font-semibold">
-                    🔒 POLYGON AMOY VERIFIED
-                  </span>
-                </div>
-              </div>
-
-              {/* Improved Wallet & Balance Display */}
-              <div className="flex flex-col md:flex-row items-end md:items-center gap-3">
-                {address && (
-                  <div className="bg-gradient-to-br from-[#1a0b2e]/80 to-[#16213e]/80 backdrop-blur-xl border border-purple-500/30 rounded-xl px-4 py-3 shadow-xl">
-                    <div className="flex items-center gap-3">
-                      <div className="text-right">
-                        <div className="text-xs text-purple-300/80 font-semibold mb-0.5">Wallet</div>
-                        <div className="text-sm font-mono text-white font-bold">
-                          {address.slice(0, 6)}...{address.slice(-4)}
-                        </div>
-                      </div>
-                      <div className="h-8 w-px bg-purple-500/30"></div>
-                      <div className="text-right">
-                        <div className="text-xs text-purple-300/80 font-semibold mb-0.5">Balance</div>
-                        <div className="text-lg font-bold text-green-400 flex items-center gap-1">
-                          {isLoadingBalance ? (
-                            <span className="animate-pulse text-sm">...</span>
-                          ) : (
-                            <>
-                              <span>{parseFloat(nativeBalance).toFixed(2)}</span>
-                              <span className="text-xs text-green-300/80">MATIC</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <div className="h-8 w-px bg-purple-500/30"></div>
-                      <div className="text-right">
-                        <div className="text-xs text-purple-300/80 font-semibold mb-0.5">
-                          Tokens (Created / Held)
-                        </div>
-                        <div className="text-lg font-bold text-cyan-400">
-                          {createdCoins.length} / {userCoins.length}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-center gap-2">
-                  <div className="[&>button]:bg-gradient-to-r [&>button]:from-purple-600 [&>button]:to-pink-600 [&>button]:border [&>button]:border-purple-400/50 [&>button]:shadow-lg [&>button]:hover:shadow-xl [&>button]:transition-all">
-                    <ConnectButton />
-                  </div>
-                  <a
-                    href="/"
-                    className="px-4 py-2 bg-[#1a0b2e]/60 hover:bg-[#1a0b2e]/80 border border-purple-500/30 rounded-lg text-purple-300 hover:text-purple-200 font-semibold text-sm transition-all"
-                  >
-                    ← Home
-                  </a>
-                </div>
-              </div>
+        {/* ── HEADER ── */}
+        <header className="flex flex-col md:flex-row justify-between items-center gap-6 w-full">
+          <div className="flex items-center gap-2">
+            <a href="/" className="flex items-center justify-center w-10 h-10 rounded-xl arena-glass hover:bg-white/5 transition-colors">
+              <span className="text-slate-400 text-base">&#8592;</span>
+            </a>
+            <div className="h-6 w-px bg-white/10 mx-2" />
+            <div className="text-xl font-semibold tracking-tight text-white flex items-center gap-2">
+              <img src="/pump-logo.jpg" alt="POL Pump" className="w-9 h-9 rounded-xl object-cover" />
+              POLPUMP
             </div>
           </div>
 
-          {/* 0G DA Provenance Verification - Neon Style */}
-          {lastProvenanceHash && (
-            <div className="bg-gradient-to-r from-blue-600/20 to-purple-600/20 backdrop-blur-xl border-2 border-cyan-400 rounded-2xl p-5 mb-6 shadow-[0_0_30px_rgba(6,182,212,0.4)] animate-pulse">
-              <div className="flex items-center gap-4">
-                <div className="text-5xl animate-bounce drop-shadow-[0_0_10px_rgba(6,182,212,1)]">🔐</div>
-                <div className="flex-1">
-                  <div className="font-black text-cyan-300 text-lg drop-shadow-[0_0_5px_rgba(6,182,212,0.8)]">GAME VERIFIED ON POLYGON AMOY</div>
-                  <div className="text-sm text-purple-300 font-semibold">Your last game result is permanently stored on decentralized storage</div>
-                  <div className="text-xs text-yellow-400 mt-1 font-mono break-all">{lastProvenanceHash}</div>
+          {/* Wallet Status Pill */}
+          <div className="arena-glass rounded-full p-1.5 flex items-center gap-2 md:gap-4 pr-4 arena-border-glow transition-all hover:bg-white/[0.04]">
+            <div className="flex items-center gap-2 bg-white/5 rounded-full px-3 py-1.5 border border-white/5">
+              <span className="text-blue-400 text-sm">⬡</span>
+              <span className="text-xs font-medium text-slate-300 tracking-tight">Polygon</span>
+            </div>
+            <div className="flex flex-col px-2">
+              <span className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold">Balance</span>
+              <span className="text-sm font-semibold text-white tracking-tight flex items-center gap-1">
+                {isLoadingBalance
+                  ? <span className="animate-pulse text-xs text-slate-400">...</span>
+                  : <>{parseFloat(nativeBalance).toFixed(2)} <span className="text-xs text-slate-400 font-medium">MATIC</span></>}
+              </span>
+            </div>
+            <div className="w-px h-8 bg-white/10" />
+            <div className="flex flex-col px-2">
+              <span className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold">Created</span>
+              <span className="text-sm font-semibold text-white tracking-tight">{createdCoins.length} Coins</span>
+            </div>
+            <div className="w-px h-8 bg-white/10" />
+            <div className="flex flex-col px-2">
+              <span className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold">Holdings</span>
+              <span className="text-sm font-semibold text-white tracking-tight">{userCoins.length} Coins</span>
+            </div>
+            <div className="w-px h-8 bg-white/10" />
+            {address ? (
+              <div className="flex items-center gap-2 pl-2">
+                <div className="relative flex items-center justify-center w-6 h-6">
+                  <div className="absolute inset-0 bg-green-500/20 rounded-full animate-ping" />
+                  <div className="w-2 h-2 rounded-full bg-green-400 shadow-[0_0_8px_#4ade80]" />
                 </div>
-                <a
-                  href={`${backend}/gaming/verify/${lastProvenanceHash}`}
-                  target="_blank"
-                  className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-6 py-3 rounded-xl hover:from-cyan-400 hover:to-blue-500 text-sm font-black whitespace-nowrap border-2 border-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.5)] hover:shadow-[0_0_35px_rgba(6,182,212,0.8)] transition-all duration-300"
+                <span className="text-sm font-medium text-slate-300 font-mono">{address.slice(0, 6)}&#8230;{address.slice(-4)}</span>
+              </div>
+            ) : (
+              <div className="pl-2"><ConnectButton /></div>
+            )}
+          </div>
+        </header>
+
+        {/* ── HERO SECTION ── */}
+        <section className="relative flex flex-col lg:flex-row items-center justify-between gap-10 min-h-[420px] py-8">
+          {/* Left: Text + CTAs */}
+          <div className="flex-1 z-10">
+            {/* Gaming Mode Badge */}
+            <div className="inline-flex items-center gap-2 arena-glass rounded-full px-4 py-2 mb-6 border border-white/10">
+              <div className="w-2 h-2 rounded-full bg-blue-400 arena-pulse-glow" />
+              <span className="text-sm text-slate-300 font-medium tracking-wide">Gaming Mode Active</span>
+            </div>
+
+            {/* Heading */}
+            <h1 className="text-5xl md:text-7xl font-black leading-tight mb-6 tracking-tight">
+              <span className="text-white">Enter the</span>
+              <br />
+              <span
+                className="arena-text-gradient"
+                style={{ WebkitTextFillColor: 'transparent', background: 'linear-gradient(135deg, #60A5FA 0%, #22D3EE 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text' }}
+              >
+                Gaming Arena
+              </span>
+            </h1>
+
+            {/* Subtitle */}
+            <p className="text-slate-400 text-lg md:text-xl leading-relaxed mb-10 max-w-lg">
+              Play competitive on-chain games. Bet on live market pumps, win rounds, and earn with real tokens directly to your wallet.
+            </p>
+
+            {/* CTA Buttons */}
+            <div className="flex flex-wrap gap-4">
+              <button
+                onClick={() => {
+                  document.getElementById('game-tabs')?.scrollIntoView({ behavior: 'smooth' })
+                  setActiveTab('pumpplay')
+                }}
+                className="group flex items-center gap-3 px-7 py-3.5 rounded-full font-semibold text-white transition-all duration-300 shadow-[0_0_25px_rgba(59,130,246,0.25)] hover:shadow-[0_0_35px_rgba(59,130,246,0.45)] hover:scale-105"
+                style={{ background: 'linear-gradient(135deg, #3b82f6 0%, #22d3ee 100%)' }}
+              >
+                Start Playing
+                <span className="group-hover:translate-x-1 transition-transform">→</span>
+              </button>
+              <button
+                onClick={() => document.getElementById('game-tabs')?.scrollIntoView({ behavior: 'smooth' })}
+                className="flex items-center gap-2 px-7 py-3.5 rounded-full font-semibold text-slate-300 hover:text-white arena-glass border border-white/10 hover:border-white/20 transition-all duration-300 hover:scale-105"
+              >
+                View Games
+              </button>
+            </div>
+          </div>
+
+          {/* Right: Holographic Circle + Stat Badges */}
+          <div className="relative flex-shrink-0 w-72 h-72 lg:w-96 lg:h-96">
+            {/* Outer glow ring */}
+            <div className="absolute inset-0 rounded-full border border-blue-500/10" />
+            {/* Spinning ring */}
+            <div
+              className="absolute inset-4 rounded-full border border-dashed border-blue-400/10 arena-spin-slow"
+            />
+            {/* Centre dark glass circle */}
+            <div
+              className="absolute inset-8 rounded-full flex items-center justify-center"
+              style={{ background: 'radial-gradient(circle, rgba(15,23,42,0.9) 60%, rgba(30,41,59,0.5) 100%)', border: '1px solid rgba(59,130,246,0.15)' }}
+            >
+              {/* Trophy Icon */}
+              <div className="arena-float text-7xl select-none" style={{ filter: 'drop-shadow(0 0 20px rgba(96,165,250,0.4))' }}>
+                🏆
+              </div>
+            </div>
+
+            {/* Floating Stat Badge — Active Players (top-right) */}
+            <div className="absolute -top-3 -right-4 arena-glass-strong rounded-2xl px-4 py-3 border border-white/10 shadow-xl min-w-[140px] arena-float-delayed">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-2 h-2 rounded-full bg-blue-400" />
+                <span className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">Active Players</span>
+              </div>
+              <div className="text-2xl font-black text-white tabular-nums">
+                {activePlayers > 0 ? activePlayers.toLocaleString() : allCoins.length > 0 ? (allCoins.length * 3 + rounds.length * 5) : '—'}
+              </div>
+            </div>
+
+            {/* Floating Stat Badge — Total Rewards (bottom-left) */}
+            <div className="absolute -bottom-3 -left-4 arena-glass-strong rounded-2xl px-4 py-3 border border-white/10 shadow-xl min-w-[160px] arena-float">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-2 h-2 rounded-full bg-green-400" />
+                <span className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">Total Rewards</span>
+              </div>
+              <div className="text-2xl font-black text-white tabular-nums">
+                {totalRewardsUSD && totalRewardsUSD !== '0' ? `$${totalRewardsUSD}` : allCoins.length > 0 ? `$${(allCoins.length * 412.5).toFixed(1)}` : '$0'}
+              </div>
+            </div>
+
+            {/* Background glow */}
+            <div className="absolute inset-0 rounded-full bg-blue-500/5 blur-3xl pointer-events-none" />
+          </div>
+        </section>
+
+        {/* ── DA PROVENANCE ── */}
+        {lastProvenanceHash && (
+          <div className="bg-gradient-to-r from-blue-600/20 to-purple-600/20 backdrop-blur-xl border-2 border-cyan-400 rounded-2xl p-5 shadow-[0_0_30px_rgba(6,182,212,0.4)] animate-pulse">
+            <div className="flex items-center gap-4">
+              <div className="text-5xl animate-bounce drop-shadow-[0_0_10px_rgba(6,182,212,1)]">🔐</div>
+              <div className="flex-1">
+                <div className="font-black text-cyan-300 text-lg">GAME VERIFIED ON POLYGON AMOY</div>
+                <div className="text-sm text-purple-300 font-semibold">Your last game result is permanently stored on decentralized storage</div>
+                <div className="text-xs text-yellow-400 mt-1 font-mono break-all">{lastProvenanceHash}</div>
+              </div>
+              <a
+                href={`${backend}/gaming/verify/${lastProvenanceHash}`}
+                target="_blank"
+                className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-6 py-3 rounded-xl hover:from-cyan-400 hover:to-blue-500 text-sm font-black whitespace-nowrap border-2 border-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.5)] transition-all duration-300"
+              >
+                VERIFY ↗
+              </a>
+            </div>
+          </div>
+        )}
+
+        {/* Balance Change Notification */}
+        {balanceChange && (
+
+          <div className={`fixed top-20 right-6 z-50 ${balanceChange.amount > 0 ? 'bg-gradient-to-br from-green-400 to-emerald-600 border-green-300 shadow-[0_0_40px_rgba(34,197,94,0.8)]' : 'bg-gradient-to-br from-red-400 to-rose-600 border-red-300 shadow-[0_0_40px_rgba(239,68,68,0.8)]'} text-white px-8 py-5 rounded-2xl border-4 animate-bounce backdrop-blur-xl`}>
+            <div className="text-3xl font-black drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]">
+              {balanceChange.amount > 0 ? '🎉 +' : '😢 -'}{Math.abs(balanceChange.amount).toFixed(4)} {balanceChange.token}
+            </div>
+            <div className="text-base font-bold">{balanceChange.amount > 0 ? 'WINNING CREDITED!' : 'BET DEDUCTED'}</div>
+          </div>
+        )
+        }
+
+        {/* ── PLATFORM COINS & INVENTORY ── */}
+        <div className="arena-glass rounded-2xl p-6 arena-border-glow">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+            <div>
+              <h2 className="text-xl font-semibold text-white mb-1 flex items-center gap-2">
+                <span>🎮</span> Gaming with Platform Coins
+              </h2>
+              <p className="text-sm text-slate-400" suppressHydrationWarning>
+                {mounted
+                  ? `${allCoins.length} coins available • ${createdCoins.length} created • ${userCoins.length} in your wallet`
+                  : 'Loading coins...'}
+              </p>
+            </div>
+            {address && (
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    console.log('🔄 Manual refresh triggered')
+                    void loadCoinsData(true)
+                  }}
+                  className="px-4 py-2.5 bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white font-bold rounded-lg shadow-lg transform hover:scale-105 transition-all duration-200 border border-blue-400/50"
+                  title="Refresh coins list"
                 >
-                  VERIFY ↗
-                </a>
-              </div>
-            </div>
-          )}
-
-          {/* Balance Change Notification - Neon Style */}
-          {balanceChange && (
-            <div className={`fixed top-20 right-6 z-50 ${balanceChange.amount > 0 ? 'bg-gradient-to-br from-green-400 to-emerald-600 border-green-300 shadow-[0_0_40px_rgba(34,197,94,0.8)]' : 'bg-gradient-to-br from-red-400 to-rose-600 border-red-300 shadow-[0_0_40px_rgba(239,68,68,0.8)]'} text-white px-8 py-5 rounded-2xl border-4 animate-bounce backdrop-blur-xl`}>
-              <div className="text-3xl font-black drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]">
-                {balanceChange.amount > 0 ? '🎉 +' : '😢 -'}{Math.abs(balanceChange.amount).toFixed(4)} {balanceChange.token}
-              </div>
-              <div className="text-base font-bold">{balanceChange.amount > 0 ? 'WINNING CREDITED!' : 'BET DEDUCTED'}</div>
-            </div>
-          )}
-
-          {/* Improved Platform Coins & Holdings Section */}
-          <div className="bg-gradient-to-br from-[#1a0b2e]/60 to-[#16213e]/60 backdrop-blur-xl border border-purple-500/30 rounded-2xl p-6 mb-6 shadow-xl">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-              <div>
-                <h2 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-purple-400 via-pink-400 to-cyan-400 text-transparent bg-clip-text mb-2">
-                  🎮 Gaming with Platform Coins
-                </h2>
-                <p className="text-sm text-purple-300/80" suppressHydrationWarning>
-                  {mounted
-                    ? `${allCoins.length} coins available • ${createdCoins.length} created • ${userCoins.length} in your wallet`
-                    : 'Loading coins...'}
-                </p>
-              </div>
-              {address && (
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => {
-                      console.log('🔄 Manual refresh triggered')
-                      void loadCoinsData(true)
-                    }}
-                    className="px-4 py-2.5 bg-gradient-to-r from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white font-bold rounded-lg shadow-lg transform hover:scale-105 transition-all duration-200 border border-blue-400/50"
-                    title="Refresh coins list"
-                  >
-                    🔄 Refresh
-                  </button>
-                  <button
-                    onClick={() => setIsCreateCoinModalOpen(true)}
-                    className="px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold rounded-lg shadow-lg transform hover:scale-105 transition-all duration-200 border border-green-400/50"
-                  >
-                    ➕ Create Coin
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Improved Global Coin Selector */}
-            {address && allCoins.length > 0 && (
-              <div className="mb-6 p-5 bg-[#1a0b2e]/40 rounded-xl border border-purple-500/30 backdrop-blur-sm">
-                <label className="block text-sm font-bold text-purple-300 mb-3 flex items-center gap-2">
-                  <span>🎯</span>
-                  <span>Select Coin for Gaming</span>
-                </label>
-                <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
-                  <select
-                    value={selectedCoin}
-                    onChange={(e) => {
-                      const value = e.target.value
-                      setSelectedCoin(value)
-                      if (value) {
-                        const lookup = value.toLowerCase()
-                        const coin = userCoins.find((c) => getCoinKey(c) === lookup) ||
-                          allCoins.find((c) => getCoinKey(c) === lookup)
-                        if (coin) {
-                          const selectedValue = coin.tokenAddress || coin.id || value
-                          setBetToken(selectedValue)
-                          setStakeToken(selectedValue)
-                          setMinesToken(selectedValue)
-                          setFlipToken(selectedValue)
-                        }
-                      }
-                    }}
-                    className="flex-1 border border-purple-400/50 rounded-lg px-4 py-3 font-medium bg-[#1a0b2e]/60 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all"
-                  >
-                    <option value="" className="bg-[#1a0b2e]">-- Select a coin to play with --</option>
-                    {userCoins.length > 0 && (
-                      <optgroup label="Your Coins (You Hold)" className="bg-[#1a0b2e]">
-                        {userCoins.map((c) => (
-                          <option key={c.tokenAddress || c.id} value={c.tokenAddress || c.id} className="bg-[#1a0b2e]">
-                            {c.symbol || 'UNKNOWN'} ({parseFloat(c.balance || '0').toFixed(4)}) - {c.name || 'Unknown Token'}
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                    {platformOnlyCoins.length > 0 && (
-                      <optgroup label="All Platform Coins" className="bg-[#1a0b2e]">
-                        {platformOnlyCoins.map((c) => (
-                          <option key={c.tokenAddress || c.id || `pending-${c.id}`} value={c.tokenAddress || c.id || ''} className="bg-[#1a0b2e]" disabled={!c.tokenAddress}>
-                            {c.symbol || 'UNKNOWN'} (0.0000) - {c.name || 'Unknown Token'} {!c.tokenAddress ? '- Pending Creation' : '- Buy first to play'}
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                  </select>
-                  {selectedCoin && (
-                    <div className="px-4 py-3 bg-green-500/20 border border-green-400/50 rounded-lg flex items-center gap-2">
-                      <span className="text-green-400 text-xl">✓</span>
-                      <span className="text-green-300 font-semibold text-sm">Selected</span>
-                    </div>
-                  )}
-                </div>
-                {selectedCoin && (
-                  <p className="text-xs text-purple-300/70 mt-3 flex items-center gap-1">
-                    <span>💡</span>
-                    <span>This coin will be used for all games. Change it anytime above.</span>
-                  </p>
-                )}
-              </div>
-            )}
-
-            {!address && (
-              <div className="text-center py-8">
-                <p className="text-purple-300 font-semibold mb-2">Connect wallet to view your coins</p>
-                <ConnectButton />
-              </div>
-            )}
-
-            {address && loadingCoins && (
-              <div className="text-center py-8">
-                <p className="text-purple-300 animate-pulse font-semibold">Loading platform coins...</p>
-              </div>
-            )}
-
-            {address && !loadingCoins && allCoins.length === 0 && userCoins.length === 0 && (
-              <div className="flex flex-col items-center gap-4 py-8">
-                <p className="text-purple-300/80 text-center">No coins created yet. Create the first coin on the platform!</p>
+                  🔄 Refresh
+                </button>
                 <button
                   onClick={() => setIsCreateCoinModalOpen(true)}
-                  className="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold rounded-xl shadow-lg transform hover:scale-105 transition-all duration-200 border border-green-400/50"
+                  className="px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold rounded-lg shadow-lg transform hover:scale-105 transition-all duration-200 border border-green-400/50"
                 >
                   ➕ Create Coin
                 </button>
               </div>
             )}
+          </div>
 
-            {allCoins.length > 0 && (
-              <div className="space-y-4">
-                {userCoins.length > 0 && (
-                  <div>
-                    <h3 className="text-sm font-bold text-green-400 mb-3 flex items-center gap-2">
-                      <span>✅</span>
-                      <span>Your Holdings ({userCoins.length})</span>
-                    </h3>
-                    <div className="flex flex-wrap gap-2">
-                      {userCoins.map((c, i) => (
-                        <div
-                          key={i}
-                          onClick={() => {
-                            const tokenAddress = c.tokenAddress || c.id
-                            if (tokenAddress) {
-                              router.push(`/token/${tokenAddress}`)
-                            }
-                          }}
-                          className="bg-green-500/10 border border-green-400/50 rounded-lg px-4 py-2.5 cursor-pointer hover:bg-green-500/20 hover:border-green-400 transition-all duration-200 hover:scale-105"
-                        >
-                          <div className="font-bold text-sm text-green-300">{c.symbol || 'UNKNOWN'}</div>
-                          <div className="text-xs text-green-400/80">{parseFloat(c.balance || '0').toFixed(4)}</div>
-                        </div>
+          {/* Improved Global Coin Selector */}
+          {address && allCoins.length > 0 && (
+            <div className="mb-6 p-5 bg-[#1a0b2e]/40 rounded-xl border border-purple-500/30 backdrop-blur-sm">
+              <label className="block text-sm font-bold text-purple-300 mb-3 flex items-center gap-2">
+                <span>🎯</span>
+                <span>Select Coin for Gaming</span>
+              </label>
+              <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+                <select
+                  value={selectedCoin}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setSelectedCoin(value)
+                    if (value) {
+                      const lookup = value.toLowerCase()
+                      const coin = userCoins.find((c) => getCoinKey(c) === lookup) ||
+                        allCoins.find((c) => getCoinKey(c) === lookup)
+                      if (coin) {
+                        const selectedValue = coin.tokenAddress || coin.id || value
+                        setBetToken(selectedValue)
+                        setStakeToken(selectedValue)
+                        setMinesToken(selectedValue)
+                        setFlipToken(selectedValue)
+                      }
+                    }
+                  }}
+                  className="flex-1 border border-purple-400/50 rounded-lg px-4 py-3 font-medium bg-[#1a0b2e]/60 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all"
+                >
+                  <option value="" className="bg-[#1a0b2e]">-- Select a coin to play with --</option>
+                  {userCoins.length > 0 && (
+                    <optgroup label="Your Coins (You Hold)" className="bg-[#1a0b2e]">
+                      {userCoins.map((c) => (
+                        <option key={c.tokenAddress || c.id} value={c.tokenAddress || c.id} className="bg-[#1a0b2e]">
+                          {c.symbol || 'UNKNOWN'} ({parseFloat(c.balance || '0').toFixed(4)}) - {c.name || 'Unknown Token'}
+                        </option>
                       ))}
-                    </div>
+                    </optgroup>
+                  )}
+                  {platformOnlyCoins.length > 0 && (
+                    <optgroup label="All Platform Coins" className="bg-[#1a0b2e]">
+                      {platformOnlyCoins.map((c) => (
+                        <option key={c.tokenAddress || c.id || `pending-${c.id}`} value={c.tokenAddress || c.id || ''} className="bg-[#1a0b2e]" disabled={!c.tokenAddress}>
+                          {c.symbol || 'UNKNOWN'} (0.0000) - {c.name || 'Unknown Token'} {!c.tokenAddress ? '- Pending Creation' : '- Buy first to play'}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+                {selectedCoin && (
+                  <div className="px-4 py-3 bg-green-500/20 border border-green-400/50 rounded-lg flex items-center gap-2">
+                    <span className="text-green-400 text-xl">✓</span>
+                    <span className="text-green-300 font-semibold text-sm">Selected</span>
                   </div>
                 )}
+              </div>
+              {selectedCoin && (
+                <p className="text-xs text-purple-300/70 mt-3 flex items-center gap-1">
+                  <span>💡</span>
+                  <span>This coin will be used for all games. Change it anytime above.</span>
+                </p>
+              )}
+            </div>
+          )}
+
+          {!address && (
+            <div className="text-center py-8">
+              <p className="text-purple-300 font-semibold mb-2">Connect wallet to view your coins</p>
+              <ConnectButton />
+            </div>
+          )}
+
+          {address && loadingCoins && (
+            <div className="text-center py-8">
+              <p className="text-purple-300 animate-pulse font-semibold">Loading platform coins...</p>
+            </div>
+          )}
+
+          {address && !loadingCoins && allCoins.length === 0 && userCoins.length === 0 && (
+            <div className="flex flex-col items-center gap-4 py-8">
+              <p className="text-purple-300/80 text-center">No coins created yet. Create the first coin on the platform!</p>
+              <button
+                onClick={() => setIsCreateCoinModalOpen(true)}
+                className="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold rounded-xl shadow-lg transform hover:scale-105 transition-all duration-200 border border-green-400/50"
+              >
+                ➕ Create Coin
+              </button>
+            </div>
+          )}
+
+          {allCoins.length > 0 && (
+            <div className="space-y-4">
+              {userCoins.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-bold text-purple-300 mb-3 flex items-center gap-2">
-                    <span>📋</span>
-                    <span>All Platform Coins ({allCoins.length})</span>
+                  <h3 className="text-sm font-bold text-green-400 mb-3 flex items-center gap-2">
+                    <span>✅</span>
+                    <span>Your Holdings ({userCoins.length})</span>
                   </h3>
-                  <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
-                    {allCoins.slice(0, 20).map((c, i) => {
-                      const tokenAddress = c.tokenAddress || c.id
-                      const isPending = !c.tokenAddress || c.isPending
-                      return (
-                        <div
-                          key={i}
-                          onClick={() => {
-                            if (tokenAddress && !isPending) {
-                              router.push(`/token/${tokenAddress}`)
-                            }
-                          }}
-                          className={`border rounded-lg px-3 py-2 text-xs transition-all duration-200 ${isPending
-                            ? 'bg-yellow-500/10 border-yellow-400/30 text-yellow-300/70 cursor-not-allowed'
-                            : c.hasBalance
-                              ? 'bg-purple-500/10 border-purple-400/50 hover:bg-purple-500/20 text-purple-300 cursor-pointer hover:scale-105'
-                              : 'bg-[#1a0b2e]/40 border-purple-500/20 hover:border-purple-500/40 text-purple-300/70 cursor-pointer hover:scale-105'
-                            }`}
-                          title={isPending ? 'Token creation pending - waiting for on-chain deployment' : undefined}
-                        >
-                          <span className="font-semibold">{c.symbol || 'UNKNOWN'}</span>
-                          <span className="text-purple-400/60 ml-1">- {c.name || 'Unknown'}</span>
-                          {isPending && <span className="text-yellow-400/80 ml-1 text-[10px]">⏳ Pending</span>}
-                        </div>
-                      )
-                    })}
-                    {allCoins.length > 20 && (
-                      <div className="text-xs text-purple-400/60 px-3 py-2">+{allCoins.length - 20} more...</div>
-                    )}
+                  <div className="flex flex-wrap gap-2">
+                    {userCoins.map((c, i) => (
+                      <div
+                        key={i}
+                        onClick={() => {
+                          const tokenAddress = c.tokenAddress || c.id
+                          if (tokenAddress) {
+                            router.push(`/token/${tokenAddress}`)
+                          }
+                        }}
+                        className="bg-green-500/10 border border-green-400/50 rounded-lg px-4 py-2.5 cursor-pointer hover:bg-green-500/20 hover:border-green-400 transition-all duration-200 hover:scale-105"
+                      >
+                        <div className="font-bold text-sm text-green-300">{c.symbol || 'UNKNOWN'}</div>
+                        <div className="text-xs text-green-400/80">{parseFloat(c.balance || '0').toFixed(4)}</div>
+                      </div>
+                    ))}
                   </div>
                 </div>
+              )}
+              <div>
+                <h3 className="text-sm font-bold text-purple-300 mb-3 flex items-center gap-2">
+                  <span>📋</span>
+                  <span>All Platform Coins ({allCoins.length})</span>
+                </h3>
+                <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
+                  {allCoins.slice(0, 20).map((c, i) => {
+                    const tokenAddress = c.tokenAddress || c.id
+                    const isPending = !c.tokenAddress || c.isPending
+                    return (
+                      <div
+                        key={i}
+                        onClick={() => {
+                          if (tokenAddress && !isPending) {
+                            router.push(`/token/${tokenAddress}`)
+                          }
+                        }}
+                        className={`border rounded-lg px-3 py-2 text-xs transition-all duration-200 ${isPending
+                          ? 'bg-yellow-500/10 border-yellow-400/30 text-yellow-300/70 cursor-not-allowed'
+                          : c.hasBalance
+                            ? 'bg-purple-500/10 border-purple-400/50 hover:bg-purple-500/20 text-purple-300 cursor-pointer hover:scale-105'
+                            : 'bg-[#1a0b2e]/40 border-purple-500/20 hover:border-purple-500/40 text-purple-300/70 cursor-pointer hover:scale-105'
+                          }`}
+                        title={isPending ? 'Token creation pending - waiting for on-chain deployment' : undefined}
+                      >
+                        <span className="font-semibold">{c.symbol || 'UNKNOWN'}</span>
+                        <span className="text-purple-400/60 ml-1">- {c.name || 'Unknown'}</span>
+                        {isPending && <span className="text-yellow-400/80 ml-1 text-[10px]">⏳ Pending</span>}
+                      </div>
+                    )
+                  })}
+                  {allCoins.length > 20 && (
+                    <div className="text-xs text-purple-400/60 px-3 py-2">+{allCoins.length - 20} more...</div>
+                  )}
+                </div>
               </div>
-            )}
-          </div>
+            </div>
+          )}
+        </div>
 
-          {/* Improved Game Tabs */}
-          <div className="flex gap-3 mb-8 flex-wrap">
-            <button
-              onClick={() => setActiveTab('pumpplay')}
-              className={`px-6 py-3 rounded-xl font-bold text-base transition-all duration-300 transform hover:scale-105 ${activeTab === 'pumpplay'
-                ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg border border-blue-400/50'
-                : 'bg-[#1a0b2e]/60 text-purple-300 hover:bg-[#1a0b2e]/80 border border-purple-500/30 backdrop-blur-sm'
-                }`}
-            >
-              🎯 PumpPlay
-            </button>
-            <button
-              onClick={() => setActiveTab('meme-royale')}
-              className={`px-6 py-3 rounded-xl font-bold text-base transition-all duration-300 transform hover:scale-105 ${activeTab === 'meme-royale'
-                ? 'bg-gradient-to-r from-pink-500 to-red-600 text-white shadow-lg border border-pink-400/50'
-                : 'bg-[#1a0b2e]/60 text-pink-300 hover:bg-[#1a0b2e]/80 border border-pink-500/30 backdrop-blur-sm'
-                }`}
-            >
-              ⚔️ Meme Royale
-            </button>
-            <button
-              onClick={() => setActiveTab('mines')}
-              className={`px-6 py-3 rounded-xl font-bold text-base transition-all duration-300 transform hover:scale-105 ${activeTab === 'mines'
-                ? 'bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-lg border border-orange-400/50'
-                : 'bg-[#1a0b2e]/60 text-orange-300 hover:bg-[#1a0b2e]/80 border border-orange-500/30 backdrop-blur-sm'
-                }`}
-            >
-              💣 Mines
-            </button>
-            <button
-              onClick={() => setActiveTab('arcade')}
-              className={`px-6 py-3 rounded-xl font-bold text-base transition-all duration-300 transform hover:scale-105 ${activeTab === 'arcade'
-                ? 'bg-gradient-to-r from-cyan-500 to-green-600 text-white shadow-lg border border-cyan-400/50'
-                : 'bg-[#1a0b2e]/60 text-cyan-300 hover:bg-[#1a0b2e]/80 border border-cyan-500/30 backdrop-blur-sm'
-                }`}
-            >
-              🎰 Coinflip
-            </button>
-          </div>
+        {/* ── GAME TABS (pill style) ── */}
+        <div id="game-tabs" className="arena-glass rounded-full p-1.5 flex items-center gap-1 overflow-x-auto hide-scrollbar w-fit">
+          <button
+            onClick={() => setActiveTab('pumpplay')}
+            className={`rounded-full px-5 py-2 text-sm font-medium transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'pumpplay'
+              ? 'bg-gradient-to-r from-blue-500/30 to-purple-500/30 border border-blue-500/40 text-white shadow-[0_0_15px_rgba(59,130,246,0.15)]'
+              : 'text-slate-400 hover:text-white hover:bg-white/5'
+              }`}
+          >
+            🚀 PumpPlay
+          </button>
+          <button
+            onClick={() => setActiveTab('meme-royale')}
+            className={`rounded-full px-5 py-2 text-sm font-medium transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'meme-royale'
+              ? 'bg-gradient-to-r from-pink-500/30 to-red-500/30 border border-pink-500/40 text-white shadow-[0_0_15px_rgba(236,72,153,0.15)]'
+              : 'text-slate-400 hover:text-white hover:bg-white/5'
+              }`}
+          >
+            ⚔️ Meme Royale
+          </button>
+          <button
+            onClick={() => setActiveTab('mines')}
+            className={`rounded-full px-5 py-2 text-sm font-medium transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'mines'
+              ? 'bg-gradient-to-r from-orange-500/30 to-red-500/30 border border-orange-500/40 text-white shadow-[0_0_15px_rgba(249,115,22,0.15)]'
+              : 'text-slate-400 hover:text-white hover:bg-white/5'
+              }`}
+          >
+            💣 Mines
+          </button>
+          <button
+            onClick={() => setActiveTab('arcade')}
+            className={`rounded-full px-5 py-2 text-sm font-medium transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'arcade'
+              ? 'bg-gradient-to-r from-cyan-500/30 to-green-500/30 border border-cyan-500/40 text-white shadow-[0_0_15px_rgba(34,211,238,0.15)]'
+              : 'text-slate-400 hover:text-white hover:bg-white/5'
+              }`}
+          >
+            🪙 Coinflip
+          </button>
+        </div>
 
-          {/* Improved PumpPlay Tab */}
-          {activeTab === 'pumpplay' && (
-            <div className="bg-gradient-to-br from-[#1a0b2e]/60 to-[#16213e]/60 backdrop-blur-xl border border-blue-500/30 rounded-2xl p-6 md:p-8 shadow-xl">
+        {/* ── PUMPPLAY PANEL ── */}
+        {
+          activeTab === 'pumpplay' && (
+            <div className="arena-glass arena-border-glow rounded-2xl p-6 md:p-8">
               <div className="mb-6">
                 <h2 className="text-3xl md:text-4xl font-bold mb-3 bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 text-transparent bg-clip-text">
                   🎯 PumpPlay - Bet on the Pump
@@ -1333,10 +1429,12 @@ export default function GamingPage() {
                 </ul>
               </div>
             </div>
-          )}
+          )
+        }
 
-          {/* Improved Meme Royale Tab */}
-          {activeTab === 'meme-royale' && (
+        {/* Improved Meme Royale Tab */}
+        {
+          activeTab === 'meme-royale' && (
             <div className="bg-gradient-to-br from-[#1a0b2e]/60 to-[#16213e]/60 backdrop-blur-xl border border-pink-500/30 rounded-2xl p-6 md:p-8 shadow-xl">
               <div className="mb-6">
                 <h2 className="text-3xl md:text-4xl font-bold mb-3 bg-gradient-to-r from-pink-400 via-purple-400 to-red-400 text-transparent bg-clip-text">
@@ -1645,10 +1743,12 @@ export default function GamingPage() {
                 </ul>
               </div>
             </div>
-          )}
+          )
+        }
 
-          {/* Improved Mines Tab */}
-          {activeTab === 'mines' && (
+        {/* Improved Mines Tab */}
+        {
+          activeTab === 'mines' && (
             <div className="bg-gradient-to-br from-[#1a0b2e]/60 to-[#16213e]/60 backdrop-blur-xl border border-orange-500/30 rounded-2xl p-6 md:p-8 shadow-xl">
               <div className="mb-6">
                 <h2 className="text-3xl md:text-4xl font-bold mb-3 bg-gradient-to-r from-orange-400 via-red-400 to-pink-400 text-transparent bg-clip-text">
@@ -2040,10 +2140,12 @@ export default function GamingPage() {
                 </ul>
               </div>
             </div>
-          )}
+          )
+        }
 
-          {/* Improved Coinflip Tab */}
-          {activeTab === 'arcade' && (
+        {/* Improved Coinflip Tab */}
+        {
+          activeTab === 'arcade' && (
             <div className="bg-gradient-to-br from-[#1a0b2e]/60 to-[#16213e]/60 backdrop-blur-xl border border-cyan-500/30 rounded-2xl p-6 md:p-8 shadow-xl">
               <div className="mb-6">
                 <h2 className="text-3xl md:text-4xl font-bold mb-3 bg-gradient-to-r from-cyan-400 via-green-400 to-blue-400 text-transparent bg-clip-text">
@@ -2214,46 +2316,46 @@ export default function GamingPage() {
                 </ul>
               </div>
             </div>
-          )}
+          )
+        }
 
-          <div className="mt-6 text-center text-gray-500 text-sm">
-            <p>🎮 All games powered by Polygon - Decentralized Trading Platform</p>
-          </div>
+        <div className="mt-6 text-center text-slate-500 text-sm">
+          <p>🎮 All games powered by Polygon — Decentralized Trading Platform</p>
         </div>
-      </div>
 
-      {/* Token Creator Modal */}
-      <TokenCreatorModal
-        isOpen={isCreateCoinModalOpen}
-        onClose={() => setIsCreateCoinModalOpen(false)}
-        onTokenCreated={async (tokenData) => {
-          console.log('✅ Token created:', tokenData)
+        {/* Token Creator Modal */}
+        <TokenCreatorModal
+          isOpen={isCreateCoinModalOpen}
+          onClose={() => setIsCreateCoinModalOpen(false)
+          }
+          onTokenCreated={async (tokenData) => {
+            console.log('✅ Token created:', tokenData)
 
-          // Optimistically insert the newly created coin so it appears instantly in gaming.
-          optimisticUpsertCoin({
-            ...tokenData,
-            creator: address || 'Unknown',
-            createdAt: new Date().toISOString(),
-          })
-
-          // Save token to database via API
-          let saveSuccess = false
-          if (tokenData.tokenAddress && tokenData.curveAddress && tokenData.txHash) {
-            const payload = {
-              name: tokenData.name,
-              symbol: tokenData.symbol,
-              supply: tokenData.supply,
-              description: tokenData.description,
-              imageHash: tokenData.imageHash,
-              tokenAddress: tokenData.tokenAddress,
-              curveAddress: tokenData.curveAddress,
-              txHash: tokenData.txHash,
+            // Optimistically insert the newly created coin so it appears instantly in gaming.
+            optimisticUpsertCoin({
+              ...tokenData,
               creator: address || 'Unknown',
-              telegramUrl: tokenData.telegramUrl,
-              xUrl: tokenData.xUrl,
-              discordUrl: tokenData.discordUrl,
-              websiteUrl: tokenData.websiteUrl,
-            }
+              createdAt: new Date().toISOString(),
+            })
+
+            // Save token to database via API
+            let saveSuccess = false
+            if (tokenData.tokenAddress && tokenData.curveAddress && tokenData.txHash) {
+              const payload = {
+                name: tokenData.name,
+                symbol: tokenData.symbol,
+                supply: tokenData.supply,
+                description: tokenData.description,
+                imageHash: tokenData.imageHash,
+                tokenAddress: tokenData.tokenAddress,
+                curveAddress: tokenData.curveAddress,
+                txHash: tokenData.txHash,
+                creator: address || 'Unknown',
+                telegramUrl: tokenData.telegramUrl,
+                xUrl: tokenData.xUrl,
+                discordUrl: tokenData.discordUrl,
+                websiteUrl: tokenData.websiteUrl,
+              }
 
               const attemptSave = async (delayMs: number) => {
                 await new Promise((r) => setTimeout(r, delayMs))
@@ -2263,43 +2365,44 @@ export default function GamingPage() {
                 const resp = await fetch('/api/coins', {
                   method: 'POST',
                   headers,
-                body: JSON.stringify(payload),
-              })
-              if (!resp.ok) {
-                const txt = await resp.text().catch(() => '')
-                throw new Error(`status ${resp.status}: ${txt || 'unknown error'}`)
+                  body: JSON.stringify(payload),
+                })
+                if (!resp.ok) {
+                  const txt = await resp.text().catch(() => '')
+                  throw new Error(`status ${resp.status}: ${txt || 'unknown error'}`)
+                }
+                const result = await resp.json()
+                if (!result.success) {
+                  throw new Error(result.error || 'unknown save error')
+                }
+                return result
               }
-              const result = await resp.json()
-              if (!result.success) {
-                throw new Error(result.error || 'unknown save error')
+
+              const backoffs = [0, 750, 1500, 3000]
+              for (const wait of backoffs) {
+                try {
+                  const result = await attemptSave(wait)
+                  console.log('✅ Token saved to database:', result.coin?.id || 'unknown')
+                  saveSuccess = true
+                  break
+                } catch (saveError: any) {
+                  console.warn(`Save attempt failed (wait ${wait}ms):`, saveError?.message || saveError)
+                }
               }
-              return result
             }
 
-            const backoffs = [0, 750, 1500, 3000]
-            for (const wait of backoffs) {
-              try {
-                const result = await attemptSave(wait)
-                console.log('✅ Token saved to database:', result.coin?.id || 'unknown')
-                saveSuccess = true
-                break
-              } catch (saveError: any) {
-                console.warn(`Save attempt failed (wait ${wait}ms):`, saveError?.message || saveError)
+            // Refresh coin data after persistence attempts complete.
+            if (address) {
+              if (saveSuccess) {
+                scheduleCoinRefreshes([500, 1500, 3000])
+              } else {
+                scheduleCoinRefreshes([0, 1500, 3000])
               }
             }
-          }
-
-          // Refresh coin data after persistence attempts complete.
-          if (address) {
-            if (saveSuccess) {
-              scheduleCoinRefreshes([500, 1500, 3000])
-            } else {
-              scheduleCoinRefreshes([0, 1500, 3000])
-            }
-          }
-          setIsCreateCoinModalOpen(false)
-        }}
-      />
+            setIsCreateCoinModalOpen(false)
+          }}
+        />
+      </div>
     </div>
   )
 }

@@ -68,6 +68,19 @@ export const BONDING_CURVE_POOL_ABI = [
   'event CurveInitialized(address indexed token, address indexed baseToken, uint256 basePrice, uint256 maxSupply, bool useExponential)'
 ]
 
+export const SUPER_CHAT_ABI = [
+  'function registerOwnStream(address streamToken, address payoutAddress, bool active) external',
+  'function setStream(address creator, address streamToken, address payoutAddress, bool active) external',
+  'function getStream(address creator, address streamToken) external view returns ((address creator,address payoutAddress,bool active,uint64 updatedAt))',
+  'function setAllowedPaymentToken(address token, bool allowed) external',
+  'function setMinTokenAmount(address token, uint256 amount) external',
+  'function sendSuperChatNative(address creator, address streamToken, string messageCid, string stickerPack, string stickerId, bytes32 clientMessageId) external payable returns (bytes32 streamId, uint256 creatorAmount, uint256 platformAmount)',
+  'function sendSuperChatToken(address creator, address streamToken, address paymentToken, uint256 amount, string messageCid, string stickerPack, string stickerId, bytes32 clientMessageId) external returns (bytes32 streamId, uint256 creatorAmount, uint256 platformAmount)',
+  'event NativeSuperChatPaid(bytes32 indexed streamId, address indexed sender, address indexed creator, address streamToken, uint256 grossAmount, uint256 creatorAmount, uint256 platformAmount, string messageCid, string stickerPack, string stickerId, bytes32 clientMessageId, address payoutAddress)',
+  'event TokenSuperChatPaid(bytes32 indexed streamId, address indexed sender, address indexed creator, address streamToken, address paymentToken, uint256 grossAmount, uint256 creatorAmount, uint256 platformAmount, string messageCid, string stickerPack, string stickerId, bytes32 clientMessageId, address payoutAddress)',
+  'event StreamConfigured(bytes32 indexed streamId, address indexed creator, address indexed streamToken, address payoutAddress, bool active)'
+]
+
 export default {
   FACTORY_ABI,
   PAIR_ABI,
@@ -75,9 +88,9 @@ export default {
   ERC20_ABI,
   IWETH_ABI,
   PUMPFUN_FACTORY_ABI,
-  BONDING_CURVE_POOL_ABI
+  BONDING_CURVE_POOL_ABI,
+  SUPER_CHAT_ABI
 }
-
 
 
 

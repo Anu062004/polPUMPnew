@@ -11,6 +11,80 @@ function clampLimit(raw: string | null, fallback = 24, max = 100): number {
   return Math.min(value, max)
 }
 
+function toMillis(input: any): number {
+  if (typeof input === 'number') return input
+  const parsed = Date.parse(String(input || ''))
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+async function getCreatorsFromCoinsFallback(
+  request: NextRequest,
+  search: string,
+  limit: number,
+  followedCreator: string | null
+) {
+  try {
+    const fallbackUrl = new URL('/api/coins?page=1&limit=1000&sort=created_at&order=DESC', request.url)
+    const response = await fetch(fallbackUrl.toString(), { cache: 'no-store' })
+    if (!response.ok) return []
+    const payload = await response.json().catch(() => ({}))
+    const coins = Array.isArray(payload?.coins) ? payload.coins : []
+
+    const creatorsByWallet = new Map<
+      string,
+      { wallet: string; createdAt: number; followerCount: number; tokenCount: number; latestTokenAddress: string | null; latestAt: number }
+    >()
+
+    for (const coin of coins) {
+      const walletRaw = String(coin?.creator || '').trim()
+      if (!walletRaw) continue
+      const wallet = walletRaw.toLowerCase()
+      if (search && !wallet.includes(search)) continue
+
+      const createdAt = toMillis(coin?.created_at ?? coin?.createdAt)
+      const tokenAddressRaw = String(coin?.tokenAddress || coin?.token_address || '').trim()
+      const tokenAddress = tokenAddressRaw ? tokenAddressRaw.toLowerCase() : null
+
+      const existing = creatorsByWallet.get(wallet)
+      if (!existing) {
+        creatorsByWallet.set(wallet, {
+          wallet,
+          createdAt,
+          followerCount: 0,
+          tokenCount: 1,
+          latestTokenAddress: tokenAddress,
+          latestAt: createdAt,
+        })
+        continue
+      }
+
+      existing.tokenCount += 1
+      if (createdAt > existing.latestAt) {
+        existing.latestAt = createdAt
+        existing.latestTokenAddress = tokenAddress
+      }
+      if (createdAt > existing.createdAt) {
+        existing.createdAt = createdAt
+      }
+      creatorsByWallet.set(wallet, existing)
+    }
+
+    return Array.from(creatorsByWallet.values())
+      .sort((a, b) => {
+        if (b.followerCount !== a.followerCount) return b.followerCount - a.followerCount
+        if (b.tokenCount !== a.tokenCount) return b.tokenCount - a.tokenCount
+        return b.createdAt - a.createdAt
+      })
+      .slice(0, limit)
+      .map(({ latestAt, ...creator }) => ({
+        ...creator,
+        isFollowed: !!followedCreator && followedCreator === creator.wallet,
+      }))
+  } catch {
+    return []
+  }
+}
+
 export const GET = withAuth(async (request: NextRequest, user) => {
   try {
     await initializeSchema()
@@ -19,14 +93,31 @@ export const GET = withAuth(async (request: NextRequest, user) => {
     const limit = clampLimit(request.nextUrl.searchParams.get('limit'))
     const likePattern = `%${search}%`
 
-    const db = await getDb()
-    const followed = await getFollowedCreator(user.wallet)
-    const followedCreator = followed?.creatorWallet || null
+    let followedCreator: string | null = null
+    try {
+      const followed = await getFollowedCreator(user.wallet)
+      followedCreator = followed?.creatorWallet || null
+    } catch {
+      followedCreator = null
+    }
 
-    if (db.type !== 'pg' || !db.pool) {
+    let db: Awaited<ReturnType<typeof getDb>> | null = null
+    try {
+      db = await getDb()
+    } catch {
+      db = null
+    }
+
+    if (!db || db.type !== 'pg' || !db.pool) {
+      const creators = await getCreatorsFromCoinsFallback(
+        request,
+        search,
+        limit,
+        followedCreator
+      )
       return NextResponse.json({
         success: true,
-        creators: [],
+        creators,
         followedCreator,
       })
     }

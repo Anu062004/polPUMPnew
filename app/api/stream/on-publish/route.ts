@@ -9,9 +9,13 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getLivestream, upsertLivestream } from '../../../../lib/livestreamDatabase'
+import { requireStreamWebhookAuth } from '../../../../lib/streamWebhookAuth'
 
 export async function POST(request: NextRequest) {
   try {
+    const authError = requireStreamWebhookAuth(request)
+    if (authError) return authError
+
     const body = await request.json()
     const { streamKey, tokenAddress, streamPath } = body
 

@@ -8,37 +8,136 @@ import { Pool, QueryResult } from 'pg'
 // Use standard pg Pool for all connections
 let pool: Pool | null = null
 
+type PostgresEnvSource =
+  | 'POSTGRES_PRISMA_URL'
+  | 'POSTGRES_URL'
+  | 'POSTGRES_URL_NON_POOLING'
+  | 'DATABASE_URL'
+
+type PostgresEnvCandidate = {
+  source: PostgresEnvSource
+  value: string
+}
+
+function getPostgresEnvCandidates(): PostgresEnvCandidate[] {
+  const candidates: Array<PostgresEnvCandidate | null> = [
+    process.env.POSTGRES_PRISMA_URL
+      ? { source: 'POSTGRES_PRISMA_URL', value: process.env.POSTGRES_PRISMA_URL }
+      : null,
+    process.env.POSTGRES_URL
+      ? { source: 'POSTGRES_URL', value: process.env.POSTGRES_URL }
+      : null,
+    process.env.POSTGRES_URL_NON_POOLING
+      ? { source: 'POSTGRES_URL_NON_POOLING', value: process.env.POSTGRES_URL_NON_POOLING }
+      : null,
+    process.env.DATABASE_URL
+      ? { source: 'DATABASE_URL', value: process.env.DATABASE_URL }
+      : null,
+  ]
+
+  return candidates.filter((candidate): candidate is PostgresEnvCandidate => !!candidate)
+}
+
+function validatePostgresConnectionString(raw: string): { valid: boolean; reason?: string } {
+  const value = String(raw || '').trim()
+  if (!value) {
+    return { valid: false, reason: 'empty value' }
+  }
+
+  const lowered = value.toLowerCase()
+  if (
+    lowered === 'base' ||
+    lowered === '__set_in_secret_manager__' ||
+    lowered === 'changeme' ||
+    lowered.includes('set_in_secret_manager') ||
+    lowered.includes('replace_me') ||
+    lowered.includes('<your_')
+  ) {
+    return { valid: false, reason: 'placeholder value' }
+  }
+
+  if (!(lowered.startsWith('postgres://') || lowered.startsWith('postgresql://'))) {
+    return { valid: false, reason: 'must start with postgres:// or postgresql://' }
+  }
+
+  try {
+    const parsed = new URL(value)
+    const host = String(parsed.hostname || '').toLowerCase()
+    if (!host) {
+      return { valid: false, reason: 'missing host' }
+    }
+    if (host === 'base' || host === '__set_in_secret_manager__') {
+      return { valid: false, reason: 'invalid host placeholder' }
+    }
+  } catch {
+    return { valid: false, reason: 'invalid URL' }
+  }
+
+  return { valid: true }
+}
+
+function resolvePostgresConnectionString():
+  | { source: PostgresEnvSource; connectionString: string }
+  | null {
+  const candidates = getPostgresEnvCandidates()
+  if (candidates.length === 0) {
+    return null
+  }
+
+  for (const candidate of candidates) {
+    const validation = validatePostgresConnectionString(candidate.value)
+    if (validation.valid) {
+      return {
+        source: candidate.source,
+        connectionString: candidate.value.trim(),
+      }
+    }
+
+    console.warn(
+      `Skipping invalid ${candidate.source}: ${validation.reason || 'invalid connection string'}`
+    )
+  }
+
+  return null
+}
+
 /**
  * Get database connection
  * Uses standard pg Pool with Neon/Vercel Postgres connection string
  */
 export async function getDb() {
-  // Debug logging - log ALL environment variables related to Postgres
   const prismaUrl = process.env.POSTGRES_PRISMA_URL
   const postgresUrl = process.env.POSTGRES_URL
+  const postgresNonPoolingUrl = process.env.POSTGRES_URL_NON_POOLING
   const databaseUrl = process.env.DATABASE_URL
 
-  console.log('🔍 getDb() called with env vars:', {
+  console.log('getDb() called with env vars:', {
     POSTGRES_PRISMA_URL: prismaUrl ? `SET (length: ${prismaUrl.length})` : 'NOT SET',
     POSTGRES_URL: postgresUrl ? `SET (length: ${postgresUrl.length})` : 'NOT SET',
+    POSTGRES_URL_NON_POOLING: postgresNonPoolingUrl ? `SET (length: ${postgresNonPoolingUrl.length})` : 'NOT SET',
     DATABASE_URL: databaseUrl ? `SET (length: ${databaseUrl.length})` : 'NOT SET',
     NODE_ENV: process.env.NODE_ENV,
     VERCEL: process.env.VERCEL
   })
 
-  // Priority: POSTGRES_PRISMA_URL (pooled) > POSTGRES_URL > DATABASE_URL
-  const connectionString = prismaUrl || postgresUrl || databaseUrl
+  const resolved = resolvePostgresConnectionString()
+  const connectionString = resolved?.connectionString
 
   if (!connectionString) {
-    console.error('❌ FATAL: No PostgreSQL connection string found!')
-    console.error('Postgres-related env vars:', Object.keys(process.env).filter(k => k.includes('POSTGRES') || k.includes('DATABASE')))
-    throw new Error('No PostgreSQL connection available. Set POSTGRES_PRISMA_URL in Vercel.')
+    console.error('FATAL: No valid PostgreSQL connection string found')
+    console.error(
+      'Postgres-related env vars:',
+      Object.keys(process.env).filter((k) => k.includes('POSTGRES') || k.includes('DATABASE'))
+    )
+    throw new Error(
+      'No valid PostgreSQL connection available. Set POSTGRES_PRISMA_URL/POSTGRES_URL/DATABASE_URL to a real postgres URL.'
+    )
   }
 
-  console.log('📡 Using connection string starting with:', connectionString.substring(0, 40) + '...')
+  console.log(`Using connection string from ${resolved.source}, starting with:`, connectionString.substring(0, 40) + '...')
 
   if (!pool) {
-    console.log('🔧 Creating new pg Pool...')
+    console.log('Creating new pg Pool...')
     try {
       pool = new Pool({
         connectionString,
@@ -51,17 +150,17 @@ export async function getDb() {
       })
 
       pool.on('error', (err) => {
-        console.error('❌ Pool error:', err)
+        console.error('Pool error:', err)
       })
 
       // Test the connection immediately
-      console.log('🧪 Testing connection...')
+      console.log('Testing connection...')
       const client = await pool.connect()
       const testResult = await client.query('SELECT NOW() as now')
       client.release()
-      console.log('✅ Database connected successfully at:', testResult.rows[0].now)
+      console.log('Database connected successfully at:', testResult.rows[0].now)
     } catch (poolError: any) {
-      console.error('❌ Failed to connect:', poolError.message)
+      console.error('Failed to connect:', poolError.message)
       pool = null // Reset pool on error
       throw poolError
     }
@@ -98,12 +197,7 @@ export async function sql(strings: TemplateStringsArray, ...values: any[]): Prom
  */
 export async function initializeSchema() {
   try {
-    // Check if PostgreSQL is configured
-    // Prioritize pooled connection string for Vercel
-    const hasPostgres = !!(process.env.POSTGRES_PRISMA_URL ||
-      process.env.POSTGRES_URL ||
-      process.env.POSTGRES_URL_NON_POOLING ||
-      process.env.DATABASE_URL)
+    const hasPostgres = !!resolvePostgresConnectionString()
 
     if (!hasPostgres) {
       console.warn('⚠️ No PostgreSQL connection string found. Using fallback.')
@@ -547,9 +641,24 @@ export async function initializeSchema() {
           role VARCHAR(20) NOT NULL CHECK (role IN ('TRADER','CREATOR')),
           room_id VARCHAR(255) NOT NULL,
           message TEXT NOT NULL,
+          message_type VARCHAR(20) NOT NULL DEFAULT 'TEXT' CHECK (message_type IN ('TEXT','STICKER','SUPER_CHAT')),
+          sticker_id VARCHAR(120),
+          sticker_pack VARCHAR(120),
+          superchat_amount VARCHAR(80),
+          superchat_token VARCHAR(255),
+          superchat_tx_hash VARCHAR(255),
           token_symbol VARCHAR(100),
           created_at BIGINT DEFAULT EXTRACT(EPOCH FROM NOW()) * 1000
         )
+      `)
+
+      await db.pool.query(`
+        ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS message_type VARCHAR(20) NOT NULL DEFAULT 'TEXT';
+        ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS sticker_id VARCHAR(120);
+        ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS sticker_pack VARCHAR(120);
+        ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS superchat_amount VARCHAR(80);
+        ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS superchat_token VARCHAR(255);
+        ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS superchat_tx_hash VARCHAR(255);
       `)
 
       await db.pool.query(`
@@ -557,6 +666,8 @@ export async function initializeSchema() {
         ON chat_messages(room_id, created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_chat_messages_sender
         ON chat_messages(sender_wallet);
+        CREATE INDEX IF NOT EXISTS idx_chat_messages_superchat_tx
+        ON chat_messages(superchat_tx_hash);
       `)
 
       console.log('✅ PostgreSQL schema initialized successfully')
@@ -621,7 +732,7 @@ export async function getSql() {
  * Check if PostgreSQL is configured
  */
 export function isUsingVercelPostgres() {
-  return !!(process.env.POSTGRES_PRISMA_URL || process.env.POSTGRES_URL || process.env.DATABASE_URL)
+  return !!resolvePostgresConnectionString()
 }
 
 /**
@@ -633,4 +744,5 @@ export async function close() {
     pool = null
   }
 }
+
 

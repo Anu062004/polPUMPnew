@@ -10,11 +10,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ethers } from 'ethers'
 import { getLivestream } from '../../../../lib/livestreamDatabase'
+import { requireStreamWebhookAuth } from '../../../../lib/streamWebhookAuth'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
+    const authError = requireStreamWebhookAuth(request)
+    if (authError) return authError
+
     const { searchParams } = new URL(request.url)
     const streamKey = searchParams.get('streamKey')
     const tokenAddress = searchParams.get('tokenAddress')
@@ -80,7 +84,6 @@ export async function GET(request: NextRequest) {
       success: true,
       valid: true,
       tokenAddress: livestream.tokenAddress,
-      streamKey: livestream.streamKey,
     })
   } catch (error: any) {
     console.error('Error validating stream key:', error)
@@ -90,6 +93,5 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-
 
 

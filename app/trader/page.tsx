@@ -48,9 +48,31 @@ interface ChatMessage {
   role: 'TRADER' | 'CREATOR'
   room_id: string
   message: string
+  message_type?: 'TEXT' | 'STICKER' | 'SUPER_CHAT'
+  sticker_id?: string | null
+  sticker_pack?: string | null
+  superchat_amount?: string | null
+  superchat_token?: string | null
+  superchat_tx_hash?: string | null
   token_symbol: string | null
   created_at: number
 }
+
+const CHAT_STICKERS = [
+  { id: 'rocket', emoji: '🚀', label: 'Rocket' },
+  { id: 'bull', emoji: '🐂', label: 'Bull' },
+  { id: 'diamond', emoji: '💎', label: 'Diamond' },
+  { id: 'fire', emoji: '🔥', label: 'Fire' },
+  { id: 'moon', emoji: '🌕', label: 'Moon' },
+]
+
+const STICKER_BY_ID = CHAT_STICKERS.reduce<Record<string, (typeof CHAT_STICKERS)[number]>>(
+  (acc, sticker) => {
+    acc[sticker.id] = sticker
+    return acc
+  },
+  {}
+)
 
 interface HoldingSnapshot {
   id: string
@@ -127,6 +149,7 @@ export default function TraderDashboard() {
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const [chatSending, setChatSending] = useState(false)
+  const [stickerSending, setStickerSending] = useState(false)
   const [chatError, setChatError] = useState<string | null>(null)
   const [holdings, setHoldings] = useState<HoldingSnapshot[]>([])
   const [holdingsLoading, setHoldingsLoading] = useState(false)
@@ -407,6 +430,46 @@ export default function TraderDashboard() {
     }
   }, [accessToken, followedCreator, chatInput, authHeaders])
 
+  const handleSendSticker = useCallback(async (stickerId: string) => {
+    if (!accessToken || !followedCreator) return
+    if (!STICKER_BY_ID[stickerId]) return
+
+    setStickerSending(true)
+    setChatError(null)
+
+    try {
+      const roomId = `creator:${followedCreator}`
+      const response = await fetch('/api/chat/messages', {
+        method: 'POST',
+        headers: {
+          ...authHeaders,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          roomId,
+          message: '',
+          messageType: 'STICKER',
+          stickerId,
+          stickerPack: 'default',
+        }),
+      })
+
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to send sticker')
+      }
+
+      setChatMessages((prev) => {
+        const next = [...prev, data.message]
+        return next.slice(-50)
+      })
+    } catch (error: any) {
+      setChatError(error.message || 'Failed to send sticker')
+    } finally {
+      setStickerSending(false)
+    }
+  }, [accessToken, followedCreator, authHeaders])
+
   useEffect(() => {
     setMounted(true)
   }, [])
@@ -625,16 +688,54 @@ export default function TraderDashboard() {
                       const ownWallet = user.wallet.toLowerCase()
                       const senderWallet = (msg.sender_wallet || '').toLowerCase()
                       const isMine = senderWallet === ownWallet
+                      const messageType = msg.message_type || 'TEXT'
+                      const sticker = msg.sticker_id ? STICKER_BY_ID[msg.sticker_id] : null
 
                       return (
-                        <div key={msg.id || `${msg.created_at}-${index}`} className="text-sm">
+                        <div
+                          key={msg.id || `${msg.created_at}-${index}`}
+                          className={`text-sm rounded px-2 py-1 ${
+                            messageType === 'SUPER_CHAT'
+                              ? 'bg-yellow-500/10 border border-yellow-500/30'
+                              : ''
+                          }`}
+                        >
                           <div className="flex items-center justify-between gap-2">
                             <span className={isMine ? 'text-[#12D9C8]' : 'text-white'}>
                               {isMine ? 'You' : shortWallet(msg.sender_wallet)}
                             </span>
-                            <span className="text-[11px] text-gray-500">{formatMessageTime(msg.created_at)}</span>
+                            <div className="flex items-center gap-2">
+                              {messageType === 'SUPER_CHAT' && (
+                                <span className="text-[10px] px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-300 border border-yellow-500/40">
+                                  SUPER CHAT
+                                </span>
+                              )}
+                              <span className="text-[11px] text-gray-500">{formatMessageTime(msg.created_at)}</span>
+                            </div>
                           </div>
-                          <p className="text-gray-300 break-words">{msg.message}</p>
+                          {messageType === 'STICKER' ? (
+                            <div className="mt-1 flex items-center gap-2">
+                              <span className="text-2xl">{sticker?.emoji || '🎉'}</span>
+                              <span className="text-gray-300">{sticker?.label || msg.sticker_id}</span>
+                            </div>
+                          ) : (
+                            <>
+                              {sticker && (
+                                <div className="mt-1 flex items-center gap-2">
+                                  <span className="text-xl">{sticker.emoji}</span>
+                                  <span className="text-gray-400 text-xs uppercase tracking-wide">
+                                    {sticker.label}
+                                  </span>
+                                </div>
+                              )}
+                              {msg.message && <p className="text-gray-300 break-words mt-1">{msg.message}</p>}
+                            </>
+                          )}
+                          {messageType === 'SUPER_CHAT' && (
+                            <div className="mt-1 text-[11px] text-yellow-300">
+                              {msg.superchat_amount || '-'} {msg.superchat_token || 'NATIVE'}
+                            </div>
+                          )}
                         </div>
                       )
                     })
@@ -660,11 +761,27 @@ export default function TraderDashboard() {
                   <button
                     type="button"
                     onClick={handleSendChat}
-                    disabled={chatSending || !chatInput.trim()}
+                    disabled={chatSending || stickerSending || !chatInput.trim()}
                     className="px-3 py-2 rounded bg-[#12D9C8] text-black text-sm font-semibold disabled:opacity-60"
                   >
                     <Send className="w-4 h-4" />
                   </button>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] text-gray-500">Stickers:</span>
+                  {CHAT_STICKERS.map((sticker) => (
+                    <button
+                      key={sticker.id}
+                      type="button"
+                      onClick={() => handleSendSticker(sticker.id)}
+                      disabled={chatSending || stickerSending}
+                      title={sticker.label}
+                      className="rounded border border-white/15 bg-black/20 px-2 py-1 text-lg leading-none hover:bg-white/10 disabled:opacity-60"
+                    >
+                      {sticker.emoji}
+                    </button>
+                  ))}
                 </div>
               </div>
             )}

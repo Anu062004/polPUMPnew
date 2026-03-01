@@ -11,6 +11,53 @@ export interface SignatureVerification {
   error?: string
 }
 
+const consumedNonceWindow = new Map<string, number>()
+
+function parseLineValue(message: string, label: string): string | null {
+  const regex = new RegExp(`${label}:\\s*([^\\n]+)`, 'i')
+  const match = message.match(regex)
+  return match?.[1]?.trim() || null
+}
+
+function markNonceAsConsumed(
+  message: string,
+  normalizedAddress: string,
+  maxAgeMs: number
+): SignatureVerification | null {
+  const nonce = parseLineValue(message, 'Nonce')
+  if (!nonce) {
+    return {
+      isValid: false,
+      error: 'Message missing nonce',
+    }
+  }
+
+  const actionLine = String(message.split('\n')[0] || '').trim().toLowerCase()
+  const key = `${normalizedAddress}:${actionLine}:${nonce}`
+  const now = Date.now()
+  const existingConsumedAt = consumedNonceWindow.get(key)
+
+  if (existingConsumedAt && now - existingConsumedAt <= maxAgeMs) {
+    return {
+      isValid: false,
+      error: 'Signature nonce has already been used',
+    }
+  }
+
+  consumedNonceWindow.set(key, now)
+
+  // Lightweight cleanup.
+  if (consumedNonceWindow.size > 2000) {
+    for (const [entryKey, consumedAt] of consumedNonceWindow.entries()) {
+      if (now - consumedAt > maxAgeMs) {
+        consumedNonceWindow.delete(entryKey)
+      }
+    }
+  }
+
+  return null
+}
+
 /**
  * Verify a wallet signature
  * @param message The original message that was signed
@@ -125,6 +172,11 @@ export function verifySignatureWithTimestamp(
       isValid: false,
       error: 'Message timestamp is in the future'
     }
+  }
+
+  const nonceCheck = markNonceAsConsumed(message, expectedAddress.toLowerCase(), maxAgeMs)
+  if (nonceCheck) {
+    return nonceCheck
   }
 
   return result

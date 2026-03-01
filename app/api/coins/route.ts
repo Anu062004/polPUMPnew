@@ -10,16 +10,21 @@ import { extractTokenFromHeader, verifyToken } from '../../../lib/jwtUtils'
 
 // Helper function to get database path (handles serverless environments)
 function getDbPath() {
-  const isServerless =
-    process.env.VERCEL === '1' ||
-    process.env.AWS_LAMBDA_FUNCTION_NAME ||
-    process.env.NEXT_RUNTIME === 'nodejs'
-
-  // Keep path selection simple; actual usage is gated by allowSqliteFallback
-  if (isServerless) {
-    return '/tmp/data/coins.db'
+  const explicitPath = String(process.env.COINS_SQLITE_PATH || '').trim()
+  if (explicitPath) {
+    return path.isAbsolute(explicitPath)
+      ? explicitPath
+      : path.join(process.cwd(), explicitPath)
   }
-  return path.join(process.cwd(), 'data', 'coins.db')
+
+  // In local development, always keep SQLite under project data/.
+  // Reserve /tmp for true serverless runtimes only.
+  const isServerless =
+    process.env.VERCEL === '1' || !!process.env.AWS_LAMBDA_FUNCTION_NAME
+
+  return isServerless
+    ? '/tmp/data/coins.db'
+    : path.join(process.cwd(), 'data', 'coins.db')
 }
 
 // Database file path + chain metadata
@@ -123,7 +128,7 @@ async function authorizeCoinWrite(
     }
   }
 
-  const payload = await verifyToken(token)
+  const payload = await verifyToken(token, 'access')
   if (!payload?.wallet || payload.role !== 'CREATOR') {
     return {
       error: NextResponse.json(
@@ -321,7 +326,7 @@ export async function GET(request: NextRequest) {
 
     try {
       // Try PostgreSQL first (used in production / when configured)
-      const { initializeSchema, getSql } = await import('../../../lib/postgresManager')
+      const { initializeSchema, getSql, getDb: getPostgresDb } = await import('../../../lib/postgresManager')
 
       await initializeSchema()
 
@@ -335,122 +340,108 @@ export async function GET(request: NextRequest) {
       // So we use pg Pool directly for dynamic queries (safe because we validated sortField)
       const searchPattern = search ? `%${search}%` : null
 
-      // Get connection string
-      const connectionString =
-        process.env.POSTGRES_PRISMA_URL ||
-        process.env.POSTGRES_URL ||
-        process.env.POSTGRES_URL_NON_POOLING ||
-        process.env.DATABASE_URL
-
-      if (!connectionString) {
-        throw new Error('Postgres connection string not found')
+      const db = await getPostgresDb()
+      if (db.type !== 'pg' || !db.pool) {
+        throw new Error('Postgres pool unavailable')
       }
 
-      const { Pool } = await import('pg')
-      const pool = new Pool({ connectionString })
+      let result
+      let countResult
 
-      try {
-        let result
-        let countResult
+      if (search && searchPattern) {
+        // Search query with dynamic ORDER BY
+        const queryText = `
+          SELECT * FROM coins 
+          WHERE LOWER(name) LIKE LOWER($1) 
+             OR LOWER(symbol) LIKE LOWER($1)
+          ORDER BY ${dbSortField} ${sortOrder}
+          LIMIT $2 OFFSET $3
+        `
+        const countText = `
+          SELECT COUNT(*) as total FROM coins 
+          WHERE LOWER(name) LIKE LOWER($1) 
+             OR LOWER(symbol) LIKE LOWER($1)
+        `
 
-        if (search && searchPattern) {
-          // Search query with dynamic ORDER BY
-          const queryText = `
-            SELECT * FROM coins 
-            WHERE LOWER(name) LIKE LOWER($1) 
-               OR LOWER(symbol) LIKE LOWER($1)
-            ORDER BY ${dbSortField} ${sortOrder}
-            LIMIT $2 OFFSET $3
-          `
-          const countText = `
-            SELECT COUNT(*) as total FROM coins 
-            WHERE LOWER(name) LIKE LOWER($1) 
-               OR LOWER(symbol) LIKE LOWER($1)
-          `
+        result = await db.pool.query(queryText, [searchPattern, limit, offset])
+        countResult = await db.pool.query(countText, [searchPattern])
+      } else {
+        // No search - get all coins with pagination
+        const queryText = `
+          SELECT * FROM coins 
+          ORDER BY ${dbSortField} ${sortOrder}
+          LIMIT $1 OFFSET $2
+        `
+        const countText = `SELECT COUNT(*) as total FROM coins`
 
-          result = await pool.query(queryText, [searchPattern, limit, offset])
-          countResult = await pool.query(countText, [searchPattern])
-        } else {
-          // No search - get all coins with pagination
-          const queryText = `
-            SELECT * FROM coins 
-            ORDER BY ${dbSortField} ${sortOrder}
-            LIMIT $1 OFFSET $2
-          `
-          const countText = `SELECT COUNT(*) as total FROM coins`
+        result = await db.pool.query(queryText, [limit, offset])
+        countResult = await db.pool.query(countText)
+      }
 
-          result = await pool.query(queryText, [limit, offset])
-          countResult = await pool.query(countText)
+      total = parseInt(countResult.rows[0]?.total || '0', 10)
+      totalPages = Math.ceil(total / limit)
+
+      const allCoins = result.rows
+
+      const coinMap = new Map<string, any>()
+      for (const coin of allCoins) {
+        const mappedCoin = {
+          ...coin,
+          tokenAddress: coin.token_address,
+          curveAddress: coin.curve_address,
+          txHash: coin.tx_hash,
+          createdAt: coin.created_at,
+          imageHash: coin.image_hash,
+          telegramUrl: coin.telegram_url,
+          xUrl: coin.x_url,
+          discordUrl: coin.discord_url,
+          websiteUrl: coin.website_url,
+          marketCap: coin.market_cap,
+          volume24h: coin.volume_24h,
+          volume_24h: coin.volume_24h?.toString() || '0', // For frontend compatibility
+          totalTransactions: coin.total_transactions,
+          trades_count: coin.total_transactions || 0, // Map to frontend expected field
+          unique_traders: coin.holders || 0, // Use holders as unique_traders for now
         }
 
-        total = parseInt(countResult.rows[0]?.total || '0', 10)
-        totalPages = Math.ceil(total / limit)
+        // Create a unique key for deduplication
+        // Use id as primary key, fallback to other identifiers
+        const normalizedId =
+          mappedCoin.id !== undefined && mappedCoin.id !== null
+            ? String(mappedCoin.id).toLowerCase()
+            : null
+        const normalizedTokenAddress =
+          typeof mappedCoin.tokenAddress === 'string'
+            ? mappedCoin.tokenAddress.toLowerCase()
+            : null
+        const normalizedTxHash =
+          typeof mappedCoin.txHash === 'string' ? mappedCoin.txHash.toLowerCase() : null
+        const normalizedSymbol =
+          typeof mappedCoin.symbol === 'string' ? mappedCoin.symbol.toLowerCase() : ''
+        const normalizedName =
+          typeof mappedCoin.name === 'string' ? mappedCoin.name.toLowerCase() : ''
 
-        const allCoins = result.rows
+        const key =
+          normalizedId ||
+          (normalizedTokenAddress ? `token_${normalizedTokenAddress}` : null) ||
+          (normalizedTxHash ? `tx_${normalizedTxHash}` : null) ||
+          `${normalizedSymbol}-${normalizedName}-${mappedCoin.createdAt}` ||
+          `coin_${coinMap.size}` // Fallback to prevent filtering out coins
 
-        const coinMap = new Map<string, any>()
-        for (const coin of allCoins) {
-          const mappedCoin = {
-            ...coin,
-            tokenAddress: coin.token_address,
-            curveAddress: coin.curve_address,
-            txHash: coin.tx_hash,
-            createdAt: coin.created_at,
-            imageHash: coin.image_hash,
-            telegramUrl: coin.telegram_url,
-            xUrl: coin.x_url,
-            discordUrl: coin.discord_url,
-            websiteUrl: coin.website_url,
-            marketCap: coin.market_cap,
-            volume24h: coin.volume_24h,
-            volume_24h: coin.volume_24h?.toString() || '0', // For frontend compatibility
-            totalTransactions: coin.total_transactions,
-            trades_count: coin.total_transactions || 0, // Map to frontend expected field
-            unique_traders: coin.holders || 0, // Use holders as unique_traders for now
-          }
-
-          // Create a unique key for deduplication
-          // Use id as primary key, fallback to other identifiers
-          const normalizedId =
-            mappedCoin.id !== undefined && mappedCoin.id !== null
-              ? String(mappedCoin.id).toLowerCase()
-              : null
-          const normalizedTokenAddress =
-            typeof mappedCoin.tokenAddress === 'string'
-              ? mappedCoin.tokenAddress.toLowerCase()
-              : null
-          const normalizedTxHash =
-            typeof mappedCoin.txHash === 'string' ? mappedCoin.txHash.toLowerCase() : null
-          const normalizedSymbol =
-            typeof mappedCoin.symbol === 'string' ? mappedCoin.symbol.toLowerCase() : ''
-          const normalizedName =
-            typeof mappedCoin.name === 'string' ? mappedCoin.name.toLowerCase() : ''
-
-          const key =
-            normalizedId ||
-            (normalizedTokenAddress ? `token_${normalizedTokenAddress}` : null) ||
-            (normalizedTxHash ? `tx_${normalizedTxHash}` : null) ||
-            `${normalizedSymbol}-${normalizedName}-${mappedCoin.createdAt}` ||
-            `coin_${coinMap.size}` // Fallback to prevent filtering out coins
-
-          // Only skip if we have a valid key and it already exists
-          if (key && !coinMap.has(key)) {
-            coinMap.set(key, mappedCoin)
-          } else if (!key || key.startsWith('coin_')) {
-            // If no valid key, still add the coin with a unique key
-            coinMap.set(`coin_${Date.now()}_${coinMap.size}`, mappedCoin)
-          }
+        // Only skip if we have a valid key and it already exists
+        if (key && !coinMap.has(key)) {
+          coinMap.set(key, mappedCoin)
+        } else if (!key || key.startsWith('coin_')) {
+          // If no valid key, still add the coin with a unique key
+          coinMap.set(`coin_${Date.now()}_${coinMap.size}`, mappedCoin)
         }
+      }
 
-        coins = Array.from(coinMap.values())
+      coins = Array.from(coinMap.values())
 
-        // Backfill addresses if we have sql client
-        if (sql) {
-          await backfillCoinAddresses(sql, coins)
-        }
-      } finally {
-        // Close pool
-        await pool.end()
+      // Backfill addresses if we have sql client
+      if (sql) {
+        await backfillCoinAddresses(sql, coins)
       }
 
       // Return coins (already deduplicated in the mapping step above)
@@ -1169,8 +1160,7 @@ export async function POST(request: NextRequest) {
 }
 
 // Danger zone: delete coins (for resets). Security:
-// - If ADMIN_SECRET is set, require it as ?secret=...
-// - If not set, allow only when not in production
+// - Requires ADMIN_SECRET via x-admin-secret header
 // - Supports ?keep=PEPA to keep only coins with symbol PEPA
 export async function DELETE(request: NextRequest) {
   try {
@@ -1180,7 +1170,7 @@ export async function DELETE(request: NextRequest) {
     if (rl) return rl
 
     const url = new URL(request.url)
-    const provided = url.searchParams.get('secret') || ''
+    const providedHeaderSecret = request.headers.get('x-admin-secret') || ''
     const keepSymbol = url.searchParams.get('keep') || ''
     const adminSecret = process.env.ADMIN_SECRET || ''
 
@@ -1190,7 +1180,7 @@ export async function DELETE(request: NextRequest) {
         { status: 500 }
       )
     }
-    if (provided !== adminSecret) {
+    if (providedHeaderSecret !== adminSecret) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 

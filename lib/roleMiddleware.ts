@@ -32,7 +32,7 @@ export async function authenticateRequest(
     }
   }
 
-  const payload = await verifyToken(token)
+  const payload = await verifyToken(token, 'access')
   if (!payload || !payload.wallet || !payload.role) {
     return {
       error: NextResponse.json(

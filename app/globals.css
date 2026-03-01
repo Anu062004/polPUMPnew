@@ -1031,4 +1031,152 @@
   .animate-shimmer {
     animation: shimmer 2s infinite;
   }
+
+  /* ── Gaming Arena glassmorphism design system ── */
+  .arena-glass {
+    background: rgba(255, 255, 255, 0.02);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+  }
+
+  .arena-glass-strong {
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .arena-glow-blue {
+    box-shadow: 0 0 24px -4px rgba(59, 130, 246, 0.3);
+  }
+
+  .arena-glow-purple {
+    box-shadow: 0 0 24px -4px rgba(168, 85, 247, 0.3);
+  }
+
+  .arena-text-gradient {
+    background: linear-gradient(135deg, #60A5FA 0%, #22D3EE 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .arena-text-gradient-purple {
+    background: linear-gradient(135deg, #C084FC 0%, #818CF8 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .arena-bg-gradient {
+    background: linear-gradient(135deg, #3b82f6 0%, #22d3ee 100%);
+  }
+
+  .arena-border-glow {
+    position: relative;
+  }
+
+  .arena-border-glow::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  @keyframes arena-pulse-glow {
+
+    0%,
+    100% {
+      opacity: 0.5;
+      box-shadow: 0 0 15px rgba(59, 130, 246, 0.2);
+    }
+
+    50% {
+      opacity: 0.8;
+      box-shadow: 0 0 25px rgba(59, 130, 246, 0.5);
+    }
+  }
+
+  .arena-pulse-glow {
+    animation: arena-pulse-glow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes arena-float {
+
+    0%,
+    100% {
+      transform: translateY(0) rotate(0deg);
+    }
+
+    50% {
+      transform: translateY(-12px) rotate(1deg);
+    }
+  }
+
+  .arena-float {
+    animation: arena-float 6s ease-in-out infinite;
+  }
+
+  @keyframes arena-float-delayed {
+
+    0%,
+    100% {
+      transform: translateY(0) rotate(0deg);
+    }
+
+    50% {
+      transform: translateY(10px) rotate(-1deg);
+    }
+  }
+
+  .arena-float-delayed {
+    animation: arena-float-delayed 7s ease-in-out infinite;
+  }
+
+  @keyframes arena-spin-slow {
+    from {
+      transform: rotate(0deg);
+    }
+
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .arena-spin-slow {
+    animation: arena-spin-slow 8s linear infinite;
+  }
+
+  .arena-shimmer-bg {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .arena-shimmer-bg::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+    animation: shimmer 2s infinite;
+  }
+
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
 }

@@ -35,6 +35,9 @@ export const CONTRACT_CONFIG = {
   // PumpFun Factory (pump.fun-style bonding curve)
   // Deployed: 2026-01-24 to Polygon Mainnet
   PUMPFUN_FACTORY_ADDRESS: process.env.NEXT_PUBLIC_PUMPFUN_FACTORY_ADDRESS || '0xa214AE0b2C9A3062208c82faCA879e766558dc15',
+
+  // Super Chat contract (creator livestream paid messages)
+  SUPER_CHAT_ADDRESS: process.env.NEXT_PUBLIC_SUPERCHAT_ADDRESS || '',
   
   // Default bonding curve parameters
   DEFAULT_BASE_PRICE: process.env.NEXT_PUBLIC_DEFAULT_BASE_PRICE || '0.0001', // 0.0001 MATIC per token
@@ -109,4 +112,3 @@ export async function verifyFactoryContract(provider: any): Promise<boolean> {
     return false
   }
 }
-

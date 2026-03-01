@@ -15,7 +15,12 @@ import { getDb } from '../../../lib/postgresManager'
 export const GET = withAuth(async (request: NextRequest, user) => {
   try {
     const creatorWalletQuery = request.nextUrl.searchParams.get('creatorWallet')
-    const followed = await getFollowedCreator(user.wallet)
+    let followed: Awaited<ReturnType<typeof getFollowedCreator>> = null
+    try {
+      followed = await getFollowedCreator(user.wallet)
+    } catch {
+      followed = null
+    }
 
     if (!creatorWalletQuery) {
       return NextResponse.json({
@@ -34,25 +39,34 @@ export const GET = withAuth(async (request: NextRequest, user) => {
     }
 
     const creatorWallet = creatorWalletQuery.toLowerCase()
-    const followerCount = await getCreatorFollowerCount(creatorWallet)
+    let followerCount = 0
+    try {
+      followerCount = await getCreatorFollowerCount(creatorWallet)
+    } catch {
+      followerCount = 0
+    }
 
     let tokens: Array<{ tokenAddress: string; coinId: string | null; createdAt: number }> = []
-    const db = await getDb()
-    if (db.type === 'pg' && db.pool) {
-      const tokenRows = await db.pool.query(
-        `SELECT token_address, coin_id, created_at
-         FROM creator_tokens
-         WHERE creator_wallet = $1
-         ORDER BY created_at DESC
-         LIMIT 200`,
-        [creatorWallet]
-      )
+    try {
+      const db = await getDb()
+      if (db.type === 'pg' && db.pool) {
+        const tokenRows = await db.pool.query(
+          `SELECT token_address, coin_id, created_at
+           FROM creator_tokens
+           WHERE creator_wallet = $1
+           ORDER BY created_at DESC
+           LIMIT 200`,
+          [creatorWallet]
+        )
 
-      tokens = tokenRows.rows.map((row: any) => ({
-        tokenAddress: row.token_address,
-        coinId: row.coin_id || null,
-        createdAt: Number(row.created_at || 0),
-      }))
+        tokens = tokenRows.rows.map((row: any) => ({
+          tokenAddress: row.token_address,
+          coinId: row.coin_id || null,
+          createdAt: Number(row.created_at || 0),
+        }))
+      }
+    } catch {
+      tokens = []
     }
 
     return NextResponse.json({

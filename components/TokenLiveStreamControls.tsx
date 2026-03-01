@@ -27,6 +27,7 @@ interface TokenLiveStreamControlsProps {
   tokenCreator: string | null
   onStreamStart?: (info: TokenStreamInfo) => void
   onStreamStop?: () => void
+  onLocalPreviewChange?: (stream: MediaStream | null, source: 'camera' | 'screen') => void
 }
 
 declare global {
@@ -42,6 +43,9 @@ const IVS_BROADCAST_SDK_URLS = [
   'https://cdn.jsdelivr.net/npm/amazon-ivs-web-broadcast@latest/dist/amazon-ivs-web-broadcast.js',
 ].filter(Boolean) as string[]
 
+const PRIMARY_VIDEO_INPUT_NAME = 'primary-video'
+const PRIMARY_AUDIO_INPUT_NAME = 'primary-audio'
+
 function isSecureBrowserContext(): boolean {
   if (typeof window === 'undefined') return false
   const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -54,6 +58,41 @@ function resolveStreamConfig(IVSBroadcastClient: any, channelType?: string | nul
     return IVSBroadcastClient.STANDARD_LANDSCAPE || IVSBroadcastClient.BASIC_LANDSCAPE
   }
   return IVSBroadcastClient.BASIC_LANDSCAPE || IVSBroadcastClient.STANDARD_LANDSCAPE
+}
+
+function normalizeIvsIngestEndpoint(input: unknown): string {
+  const raw = String(input || '').trim()
+  if (!raw) return ''
+
+  const withoutScheme = raw.replace(/^[a-z]+:\/\//i, '')
+  const [hostPort = ''] = withoutScheme.split('/')
+  const host = hostPort.split(':')[0]?.trim()
+  return host || ''
+}
+
+function extractErrorMessage(error: any): string {
+  if (!error) return ''
+  if (typeof error === 'string') return error
+  if (typeof error?.message === 'string' && error.message.trim()) return error.message.trim()
+  if (typeof error?.error === 'string' && error.error.trim()) return error.error.trim()
+  return ''
+}
+
+function formatStartError(error: any): string {
+  if (error?.name === 'NotAllowedError') {
+    return 'Camera/mic permission denied. Allow access and try again.'
+  }
+  if (error?.name === 'NotFoundError') {
+    return 'No camera or microphone found on this device.'
+  }
+  if (error?.name === 'NotReadableError') {
+    return 'Camera or microphone is already in use by another app.'
+  }
+  if (error?.name === 'OverconstrainedError') {
+    return 'Your current camera/mic settings are not supported on this device.'
+  }
+
+  return extractErrorMessage(error) || 'Something went wrong while starting livestream'
 }
 
 async function loadIvsBroadcastSdk(): Promise<any> {
@@ -116,6 +155,7 @@ export default function TokenLiveStreamControls({
   tokenCreator,
   onStreamStart,
   onStreamStop,
+  onLocalPreviewChange,
 }: TokenLiveStreamControlsProps) {
   const { address: userAddress, isConnected } = useAccount()
   const { user, accessToken, refreshAuth } = useAuth()
@@ -127,10 +167,22 @@ export default function TokenLiveStreamControls({
   const [startedAt, setStartedAt] = useState<Date | null>(null)
   const [elapsed, setElapsed] = useState<string>('00:00')
   const [copied, setCopied] = useState<{ [key: string]: boolean }>({})
+  const [isSharingScreen, setIsSharingScreen] = useState(false)
+  const [isSwitchingVideoSource, setIsSwitchingVideoSource] = useState(false)
+  const [videoSource, setVideoSource] = useState<'camera' | 'screen'>('camera')
 
-  const previewContainerRef = useRef<HTMLDivElement | null>(null)
+  const previewVideoRef = useRef<HTMLVideoElement | null>(null)
+  const previewStreamRef = useRef<MediaStream | null>(null)
   const broadcastClientRef = useRef<any>(null)
   const mediaStreamRef = useRef<MediaStream | null>(null)
+  const screenStreamRef = useRef<MediaStream | null>(null)
+  const videoCompositionRef = useRef<{ index: number; x: number; y: number; width: number; height: number }>({
+    index: 0,
+    x: 0,
+    y: 0,
+    width: 1280,
+    height: 720,
+  })
 
   const creatorByRole = user?.role === 'CREATOR'
   const creatorWalletMatches = !tokenCreator || !userAddress || userAddress.toLowerCase() === tokenCreator.toLowerCase()
@@ -139,6 +191,26 @@ export default function TokenLiveStreamControls({
   const getAccessTokenFromStorage = () => {
     if (typeof window === 'undefined') return null
     return window.localStorage.getItem('polpump_access_token')
+  }
+
+  const parseResponseData = async (response: Response) => {
+    const contentType = response.headers.get('content-type') || ''
+    if (contentType.toLowerCase().includes('application/json')) {
+      return (await response.json().catch(() => ({}))) as Record<string, any>
+    }
+
+    const text = await response.text().catch(() => '')
+    const trimmed = text.trim()
+    if (!trimmed) return {}
+
+    try {
+      return JSON.parse(trimmed)
+    } catch {
+      if (trimmed.startsWith('<!DOCTYPE') || trimmed.startsWith('<html')) {
+        return { error: 'Server returned a non-JSON response. Check API server logs.' }
+      }
+      return { error: trimmed.slice(0, 240) }
+    }
   }
 
   const postWithAuthRetry = async (url: string, payload: Record<string, any>) => {
@@ -153,19 +225,16 @@ export default function TokenLiveStreamControls({
       })
 
     let response = await makeRequest(accessToken)
-    let data = await response.json().catch(() => ({}))
+    let data = await parseResponseData(response)
 
-    const tokenError =
-      response.status === 401 &&
-      typeof data?.error === 'string' &&
-      data.error.toLowerCase().includes('token')
+    const tokenError = response.status === 401
 
     if (tokenError) {
       try {
         await refreshAuth()
         const refreshedToken = getAccessTokenFromStorage()
         response = await makeRequest(refreshedToken)
-        data = await response.json().catch(() => ({}))
+        data = await parseResponseData(response)
       } catch {
         // Keep original 401 response payload path below.
       }
@@ -194,6 +263,110 @@ export default function TokenLiveStreamControls({
     }
   }, [isLive, startedAt])
 
+  const clearLocalPreview = (source: 'camera' | 'screen' = videoSource) => {
+    if (previewStreamRef.current) {
+      previewStreamRef.current.getTracks().forEach((track) => track.stop())
+      previewStreamRef.current = null
+    }
+
+    if (previewVideoRef.current) {
+      previewVideoRef.current.srcObject = null
+    }
+
+    onLocalPreviewChange?.(null, source)
+  }
+
+  const attachLocalPreviewTrack = async (track: MediaStreamTrack, source: 'camera' | 'screen') => {
+    if (!previewVideoRef.current) return
+    clearLocalPreview(source)
+
+    const previewStream = new MediaStream([track.clone()])
+    previewStreamRef.current = previewStream
+    previewVideoRef.current.srcObject = previewStream
+    previewVideoRef.current.muted = true
+    previewVideoRef.current.playsInline = true
+    await previewVideoRef.current.play().catch(() => undefined)
+    onLocalPreviewChange?.(previewStream, source)
+  }
+
+  const updateBroadcastVideoInput = async (track: MediaStreamTrack, source: 'camera' | 'screen') => {
+    const client = broadcastClientRef.current
+    if (!client) {
+      throw new Error('Broadcast client is not initialized')
+    }
+
+    if (typeof client.removeVideoInputDevice === 'function') {
+      try {
+        await client.removeVideoInputDevice(PRIMARY_VIDEO_INPUT_NAME)
+      } catch {
+        // Ignore if device was not added yet.
+      }
+    }
+
+    await client.addVideoInputDevice(
+      new MediaStream([track]),
+      PRIMARY_VIDEO_INPUT_NAME,
+      videoCompositionRef.current
+    )
+
+    await attachLocalPreviewTrack(track, source)
+  }
+
+  const stopScreenShare = async () => {
+    if (!screenStreamRef.current) return
+
+    setIsSwitchingVideoSource(true)
+
+    try {
+      const cameraTrack = mediaStreamRef.current?.getVideoTracks?.()[0]
+      if (!cameraTrack) {
+        throw new Error('Camera stream unavailable. Restart livestream to restore camera.')
+      }
+
+      await updateBroadcastVideoInput(cameraTrack, 'camera')
+      setIsSharingScreen(false)
+      setVideoSource('camera')
+    } finally {
+      screenStreamRef.current?.getTracks().forEach((track) => track.stop())
+      screenStreamRef.current = null
+      setIsSwitchingVideoSource(false)
+    }
+  }
+
+  const startScreenShare = async () => {
+    if (!isLive || isSwitchingVideoSource) return
+
+    setError(null)
+    setIsSwitchingVideoSource(true)
+
+    try {
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          frameRate: { ideal: 30, max: 30 },
+        },
+        audio: false,
+      })
+
+      const screenTrack = screenStream.getVideoTracks?.()[0]
+      if (!screenTrack) {
+        throw new Error('Screen sharing did not provide a video track')
+      }
+
+      screenTrack.addEventListener('ended', () => {
+        stopScreenShare().catch(() => undefined)
+      })
+
+      screenStreamRef.current = screenStream
+      await updateBroadcastVideoInput(screenTrack, 'screen')
+      setIsSharingScreen(true)
+      setVideoSource('screen')
+    } catch (e: any) {
+      setError(e?.message || 'Failed to share screen')
+    } finally {
+      setIsSwitchingVideoSource(false)
+    }
+  }
+
   const stopLocalBroadcast = async () => {
     try {
       if (broadcastClientRef.current) {
@@ -210,9 +383,12 @@ export default function TokenLiveStreamControls({
       mediaStreamRef.current = null
     }
 
-    if (previewContainerRef.current) {
-      previewContainerRef.current.innerHTML = ''
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach((track) => track.stop())
+      screenStreamRef.current = null
     }
+
+    clearLocalPreview()
   }
 
   // Check stream status periodically.
@@ -306,10 +482,12 @@ export default function TokenLiveStreamControls({
       })
 
       if (!startRes.ok || !startData.success) {
-        throw new Error(startData.error || 'Failed to start livestream')
+        throw new Error(startData.error || `Failed to start livestream (HTTP ${startRes.status})`)
       }
 
-      const ingestEndpoint = String(startData.ingestEndpoint || '').trim()
+      const ingestEndpoint = normalizeIvsIngestEndpoint(
+        startData.ingestEndpoint || startData.ingestUrl || startData.ingestUrlFull
+      )
       const streamKey = String(startData.streamKey || '').trim()
       const playbackUrl = String(startData.playbackUrl || '').trim()
 
@@ -320,6 +498,14 @@ export default function TokenLiveStreamControls({
       serverStreamStarted = true
 
       const IVSBroadcastClient = await loadIvsBroadcastSdk()
+      if (
+        typeof IVSBroadcastClient?.isSupported === 'function' &&
+        !IVSBroadcastClient.isSupported()
+      ) {
+        throw new Error(
+          'This browser does not support IVS browser livestreaming. Use latest Chrome or Edge.'
+        )
+      }
       const streamConfig = resolveStreamConfig(IVSBroadcastClient, startData.channelType)
 
       const media = await navigator.mediaDevices.getUserMedia({
@@ -342,37 +528,23 @@ export default function TokenLiveStreamControls({
 
       const videoWidth = streamConfig?.maxResolution?.width ?? 1280
       const videoHeight = streamConfig?.maxResolution?.height ?? 720
-      const videoComposition = {
+      const videoCompositionRefValue = {
         index: 0,
         x: 0,
         y: 0,
         width: videoWidth,
         height: videoHeight,
       }
+      videoCompositionRef.current = videoCompositionRefValue
 
       const videoStream = new MediaStream(media.getVideoTracks())
       const audioStream = new MediaStream(media.getAudioTracks())
-      await client.addVideoInputDevice(videoStream, 'camera', videoComposition)
-      await client.addAudioInputDevice(audioStream, 'microphone')
+      await client.addVideoInputDevice(videoStream, PRIMARY_VIDEO_INPUT_NAME, videoCompositionRefValue)
+      await client.addAudioInputDevice(audioStream, PRIMARY_AUDIO_INPUT_NAME)
 
-      if (previewContainerRef.current) {
-        previewContainerRef.current.innerHTML = ''
-
-        // Newer IVS SDK versions require passing a preview element.
-        const previewCanvas = document.createElement('canvas')
-        previewCanvas.className = 'w-full h-full rounded-xl object-cover'
-        previewCanvas.width = videoWidth
-        previewCanvas.height = videoHeight
-        previewContainerRef.current.appendChild(previewCanvas)
-
-        const previewResult = client.attachPreview(previewCanvas)
-
-        // Backward compatibility for SDKs returning an element.
-        if (previewResult instanceof HTMLElement && previewResult !== previewCanvas) {
-          previewResult.className = 'w-full h-full rounded-xl object-cover'
-          previewContainerRef.current.innerHTML = ''
-          previewContainerRef.current.appendChild(previewResult)
-        }
+      const cameraTrack = media.getVideoTracks()[0]
+      if (cameraTrack) {
+        await attachLocalPreviewTrack(cameraTrack, 'camera')
       }
 
       await client.startBroadcast(streamKey)
@@ -381,7 +553,7 @@ export default function TokenLiveStreamControls({
       mediaStreamRef.current = media
 
       const info: TokenStreamInfo = {
-        tokenAddress: startData.tokenAddress,
+        tokenAddress: startData.tokenAddress || tokenAddress,
         streamKey,
         ingestUrl: startData.ingestUrl || '',
         ingestEndpoint,
@@ -393,6 +565,8 @@ export default function TokenLiveStreamControls({
       setStreamInfo(info)
       setIsLive(true)
       setStartedAt(new Date())
+      setIsSharingScreen(false)
+      setVideoSource('camera')
       onStreamStart?.(info)
     } catch (e: any) {
       await stopLocalBroadcast()
@@ -407,10 +581,12 @@ export default function TokenLiveStreamControls({
         }
       }
 
-      setError(e?.message || 'Something went wrong while starting livestream')
+      setError(formatStartError(e))
       setIsLive(false)
       setStreamInfo(null)
       setStartedAt(null)
+      setIsSharingScreen(false)
+      setVideoSource('camera')
     } finally {
       setIsLoading(false)
     }
@@ -437,6 +613,8 @@ export default function TokenLiveStreamControls({
       setIsLive(false)
       setStreamInfo(null)
       setStartedAt(null)
+      setIsSharingScreen(false)
+      setVideoSource('camera')
       onStreamStop?.()
     } catch (e: any) {
       setError(e?.message || 'Something went wrong while stopping livestream')
@@ -505,7 +683,43 @@ export default function TokenLiveStreamControls({
           <div className="rounded-xl border border-white/10 bg-black/35 p-3">
             <p className="text-xs text-gray-300 mb-2">Local broadcast preview</p>
             <div className="aspect-video rounded-xl bg-black/60 overflow-hidden">
-              <div ref={previewContainerRef} className="w-full h-full" />
+              <video
+                ref={previewVideoRef}
+                className="w-full h-full object-cover"
+                autoPlay
+                muted
+                playsInline
+                style={{
+                  transform: videoSource === 'camera' ? 'scaleX(-1)' : 'none',
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <p className="text-sm font-semibold text-white">
+                  {isSharingScreen ? 'Screen share is live' : 'Camera is live'}
+                </p>
+                <p className="text-xs text-gray-400">
+                  {isSharingScreen
+                    ? 'Viewers are watching your shared screen'
+                    : 'Switch to screen share anytime during livestream'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={isSharingScreen ? () => stopScreenShare() : () => startScreenShare()}
+                disabled={isLoading || isSwitchingVideoSource}
+                className="px-4 py-2 rounded-lg border border-cyan-300/40 text-cyan-200 hover:bg-cyan-500/10 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold"
+              >
+                {isSwitchingVideoSource
+                  ? 'Switching...'
+                  : isSharingScreen
+                  ? 'Stop Screen Share'
+                  : 'Share Screen'}
+              </button>
             </div>
           </div>
 

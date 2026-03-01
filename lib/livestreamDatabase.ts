@@ -198,7 +198,11 @@ export async function getTokenCreator(tokenAddress: string): Promise<string | nu
     const rpcUrl =
       process.env.NEXT_PUBLIC_EVM_RPC ||
       process.env.RPC_URL ||
-      'https://polygon-amoy.infura.io/v3/b4f237515b084d4bad4e5de070b0452f'
+      process.env.POLYGON_AMOY_RPC ||
+      (process.env.NODE_ENV === 'production' ? '' : 'https://polygon-amoy.publicnode.com')
+    if (!rpcUrl) {
+      throw new Error('RPC URL is not configured')
+    }
     const provider = new ethers.JsonRpcProvider(rpcUrl)
 
     const optionalAbi = ['function creator() view returns (address)']

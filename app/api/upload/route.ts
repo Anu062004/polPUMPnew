@@ -1,5 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pinataService } from '../../../lib/pinataService'
+import { withAuth } from '../../../lib/roleMiddleware'
+
+const RATE_LIMIT_WINDOW_MS = 60_000
+const RATE_LIMIT_MAX = 20
+const rateBuckets = new Map<string, { count: number; reset: number }>()
+
+function enforceRateLimit(request: NextRequest, wallet: string): NextResponse | null {
+  const ip =
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    request.ip ||
+    'unknown'
+  const key = `upload:${wallet.toLowerCase()}:${ip}`
+  const now = Date.now()
+  const bucket = rateBuckets.get(key) || { count: 0, reset: now + RATE_LIMIT_WINDOW_MS }
+  if (bucket.reset < now) {
+    bucket.count = 0
+    bucket.reset = now + RATE_LIMIT_WINDOW_MS
+  }
+  bucket.count += 1
+  rateBuckets.set(key, bucket)
+  if (bucket.count > RATE_LIMIT_MAX) {
+    return NextResponse.json(
+      { success: false, error: 'Rate limit exceeded' },
+      { status: 429 }
+    )
+  }
+  return null
+}
 
 function isServerlessRuntime() {
   return process.env.VERCEL === '1' || !!process.env.AWS_LAMBDA_FUNCTION_NAME
@@ -15,8 +43,13 @@ function shouldUseRemoteBackend(backendBase: string) {
 }
 
 // Handle image uploads to Pinata IPFS
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: NextRequest, user) => {
   try {
+    const rateLimited = enforceRateLimit(request, user.wallet)
+    if (rateLimited) {
+      return rateLimited
+    }
+
     const formData = await request.formData()
     const file = formData.get('file') as File
 
@@ -154,4 +187,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
-}
+})

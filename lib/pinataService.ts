@@ -26,20 +26,15 @@ export class PinataService {
     // Support common env variants to reduce deployment misconfiguration issues.
     this.apiKey = cleanEnv(
       process.env.PINATA_API_KEY ||
-        process.env.NEXT_PUBLIC_PINATA_API_KEY ||
         process.env.PINATA_KEY
     )
     this.apiSecret = cleanEnv(
       process.env.PINATA_API_SECRET ||
-        process.env.PINATA_SECRET_API_KEY ||
-        process.env.NEXT_PUBLIC_PINATA_API_SECRET ||
-        process.env.NEXT_PUBLIC_PINATA_SECRET_API_KEY
+        process.env.PINATA_SECRET_API_KEY
     )
     this.jwt = cleanEnv(
       process.env.PINATA_JWT ||
-        process.env.PINATA_JWT_TOKEN ||
-        process.env.NEXT_PUBLIC_PINATA_JWT ||
-        process.env.NEXT_PUBLIC_PINATA_JWT_TOKEN
+        process.env.PINATA_JWT_TOKEN
     )
   }
 
