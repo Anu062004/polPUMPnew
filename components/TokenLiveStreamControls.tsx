@@ -631,13 +631,11 @@ export default function TokenLiveStreamControls({
     try {
       await stopLocalBroadcast()
 
-      if (accessToken) {
-        const { response: res, data } = await postWithAuthRetry('/api/stream/stop', {
-          tokenAddress,
-        })
-        if (!res.ok || !data.success) {
-          throw new Error(data.error || 'Failed to stop livestream')
-        }
+      const { response: res, data } = await postWithAuthRetry('/api/stream/stop', {
+        tokenAddress,
+      })
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to stop livestream')
       }
 
       setIsLive(false)

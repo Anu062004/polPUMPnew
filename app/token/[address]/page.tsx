@@ -186,7 +186,9 @@ export default function TokenDetailPage() {
     if (!address) return // address is the token address from URL params
 
     try {
-      const res = await fetch(`/api/stream/status?tokenAddress=${encodeURIComponent(address)}`)
+      const res = await fetch(`/api/stream/status?tokenAddress=${encodeURIComponent(address)}`, {
+        cache: 'no-store',
+      })
       const data = await res.json()
 
       if (data.success) {

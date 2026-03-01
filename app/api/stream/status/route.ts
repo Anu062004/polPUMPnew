@@ -43,8 +43,9 @@ export async function GET(request: NextRequest) {
     let isLive = livestream.status === 'live'
 
     // If this stream is backed by AWS IVS, verify live status from IVS
-    // to avoid stale "live" state after browser or network disconnects.
-    if (livestream.channelArn && isIvsConfigured()) {
+    // only when DB currently marks it live.
+    // If creator explicitly stopped (DB offline), respect offline immediately.
+    if (livestream.status === 'live' && livestream.channelArn && isIvsConfigured()) {
       const ivsStream = await getIvsLiveStream(livestream.channelArn)
       if (ivsStream) {
         isLive = true
@@ -100,4 +101,3 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-
